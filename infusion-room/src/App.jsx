@@ -1147,6 +1147,7 @@ function App() {
   const [editPatientModal, setEditPatientModal] = useState(false)
   const [editPatientName, setEditPatientName] = useState('')
   const [editChartNumber, setEditChartNumber] = useState('')
+  const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
   const hasInProgressBeds = beds.some((bed) => bed.status === 'in-progress')
@@ -1286,6 +1287,18 @@ function App() {
       ),
     )
     setEndEarlyConfirm(null)
+  }
+
+  function handleRemovePatientConfirm() {
+    if (!selectedBed) return
+    // 베드만 초기화, history에는 저장하지 않음
+    setBeds((prev) =>
+      prev.map((bed) =>
+        bed.id === selectedBed.id ? resetBedToVacant(bed) : bed,
+      ),
+    )
+    setRemovePatientConfirm(false)
+    closeModal()
   }
 
   function openEditPatientModal() {
@@ -1608,11 +1621,54 @@ function App() {
                     환자 정보 수정
                   </button>
                 )}
+
+                {isInProgress && (
+                  <button
+                    type="button"
+                    className="btn-remove-patient"
+                    onClick={() => setRemovePatientConfirm(true)}
+                  >
+                    환자 등록 취소
+                  </button>
+                )}
               </div>
             )}
           </div>
         </div>
       )}
+      {removePatientConfirm && currentBed && (
+        <div className="modal-overlay modal-overlay--top" onClick={() => setRemovePatientConfirm(false)}>
+          <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__body modal__body--confirm">
+              <p className="confirm__message">
+                등록 취소는 수액이 취소된 경우에만 눌러주세요.
+                <br />
+                <span className="confirm__sub">수액이 조기 종료된 경우, 이용시간을 차감하여 완료 처리해주세요.</span>
+              </p>
+              <p className="confirm__patient-info">
+                {currentBed.patientName} ({currentBed.chartNumber})
+              </p>
+              <div className="confirm__actions">
+                <button
+                  type="button"
+                  className="btn-confirm btn-confirm--yes btn-confirm--danger"
+                  onClick={handleRemovePatientConfirm}
+                >
+                  등록 취소
+                </button>
+                <button
+                  type="button"
+                  className="btn-confirm btn-confirm--no"
+                  onClick={() => setRemovePatientConfirm(false)}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editPatientModal && currentBed && (
         <div className="modal-overlay" onClick={closeEditPatientModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
