@@ -1,47 +1,90 @@
+/* ─── 전역 배경 ──────────────────────────────────────────────── */
 .app {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 32px 24px 48px;
+  padding: 28px 24px 56px;
   text-align: left;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #e8f4ff 0%, #efe8ff 50%, #e8f4ff 100%);
+}
+
+/* ─── 헤더 ───────────────────────────────────────────────────── */
+.header-wrap {
+  position: relative;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 20px rgba(93, 158, 210, 0.15);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, #eaf4ff 0%, #ede8ff 100%);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .header {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .header__logo {
-  height: 48px;
-  width: 48px;
+  height: 52px;
+  width: 52px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(61, 143, 168, 0.2));
 }
 
 .header__text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .header__clinic {
-  font-size: 12px;
-  font-weight: 600;
-  color: #3d8fa8;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c9fd4;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .header__title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e3a5f;
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #3d8fa8 0%, #6c7fd8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 
+.header__cat {
+  height: 86px;
+  width: auto;
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+  transform: scaleX(-1);
+}
+
+/* ─── 탭 ─────────────────────────────────────────────────────── */
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -49,116 +92,185 @@
 }
 
 .tab {
-  padding: 10px 20px;
-  font-size: 15px;
+  padding: 9px 18px;
+  font-size: 14px;
   font-family: inherit;
-  color: #4a6278;
-  background: #f8fafb;
-  border: 1px solid #d0dce6;
-  border-radius: 8px;
+  font-weight: 500;
+  color: #6b85a8;
+  background: #ffffff;
+  border: 1.5px solid #dce8f5;
+  border-radius: 999px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 6px rgba(93, 158, 210, 0.08);
 }
 
 .tab:hover {
-  border-color: #7eb8c9;
-  color: #1e3a5f;
+  border-color: #9bc5e8;
+  color: #3d7ab5;
+  box-shadow: 0 3px 10px rgba(93, 158, 210, 0.18);
 }
 
 .tab--active {
   color: #ffffff;
-  background: #3d8fa8;
-  border-color: #3d8fa8;
-  font-weight: 600;
+  background: linear-gradient(135deg, #5ba8d4 0%, #7c8fdc 100%);
+  border-color: transparent;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(91, 168, 212, 0.38);
 }
 
 .tab:focus-visible {
-  outline: 2px solid #3d8fa8;
+  outline: 2px solid #5ba8d4;
   outline-offset: 2px;
 }
 
+/* ─── 베드 그리드 ────────────────────────────────────────────── */
 .bed-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
 }
 
+/* ─── 베드 카드 공통 ─────────────────────────────────────────── */
 .bed-card {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: 20px 16px;
-  border: 1px solid #e8ecef;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(30, 58, 95, 0.04);
+  padding: 18px 16px;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgba(93, 158, 210, 0.1);
   cursor: pointer;
-  transition: box-shadow 0.2s, transform 0.15s, background 0.3s, border-color 0.3s;
+  transition: box-shadow 0.2s, transform 0.18s, background 0.3s, border-color 0.3s;
 }
 
 .bed-card:hover {
-  box-shadow: 0 4px 12px rgba(30, 58, 95, 0.1);
-  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(93, 158, 210, 0.22);
+  transform: translateY(-3px);
 }
 
 .bed-card:focus-visible {
-  outline: 2px solid #3d8fa8;
+  outline: 2px solid #5ba8d4;
   outline-offset: 2px;
 }
 
+/* 빈 베드 */
 .bed-card--vacant {
   background: #ffffff;
-  border-color: #e8ecef;
+  border: 2px dashed #b8d8f0;
   align-items: center;
   justify-content: center;
   text-align: center;
   gap: 8px;
   min-height: 100px;
+  opacity: 0.85;
 }
 
+.bed-card--vacant:hover {
+  opacity: 1;
+  border-color: #7ab8e8;
+  background: #f4faff;
+}
+
+/* 진행중 */
 .bed-card--occupied {
-  background: #e8f7f4;
-  border-color: #c8e8df;
+  background: linear-gradient(160deg, #ffffff 0%, #eef7ff 100%);
+  border-color: #a8d8f0;
   min-height: 160px;
+  position: relative;
+  overflow: hidden;
 }
 
+.bed-card--occupied::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #5ba8d4, #8c9fea);
+  border-radius: 20px 20px 0 0;
+}
+
+/* 경고 (30분 이하) */
 .bed-card--warning {
-  background: #fff8e6;
-  border-color: #f5e6b8;
+  background: linear-gradient(160deg, #ffffff 0%, #fff8ec 100%);
+  border-color: #fcd88a;
   min-height: 160px;
+  position: relative;
+  overflow: hidden;
 }
 
+.bed-card--warning::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #f5a623, #fcd88a);
+  border-radius: 20px 20px 0 0;
+}
+
+/* 완료 */
 .bed-card--completed {
-  background: #ffcccc;
-  border-color: #f87171;
+  background: linear-gradient(160deg, #fff0f0 0%, #ffe4e4 100%);
+  border-color: #f8a8a8;
   min-height: 160px;
+  position: relative;
+  overflow: hidden;
 }
 
+.bed-card--completed::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #f87171, #fca5a5);
+  border-radius: 20px 20px 0 0;
+}
+
+/* ─── 베드 카드 내부 요소 ────────────────────────────────────── */
 .bed-card__number {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e3a5f;
+  font-size: 14px;
+  font-weight: 800;
+  color: #2d5a8e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  height: 30px;
+  width: auto;
+  white-space: nowrap;
+  background: linear-gradient(135deg, #e8f4ff, #ede8ff);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(93, 158, 210, 0.18);
+  align-self: flex-start;
+}
+
+.bed-card--vacant .bed-card__number {
+  background: linear-gradient(135deg, #deeeff, #e8e4ff);
+  color: #5a7ab0;
+  align-self: auto;
 }
 
 .bed-card__status {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #3d8fa8;
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8ab4d8;
 }
 
 .bed-card__patient {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: #1e3a5f;
 }
 
 .bed-card__chart {
   margin: 0;
-  font-size: 13px;
-  color: #5a7a8f;
+  font-size: 12px;
+  color: #7a98b8;
+  font-weight: 500;
 }
 
 .bed-card__progress {
@@ -170,55 +282,57 @@
 
 .bed-card__progress-text {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #4a6278;
+  color: #7a98b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .progress-bar {
   width: 100%;
-  height: 12px;
+  height: 10px;
   border-radius: 999px;
-  background: #e5e7eb;
+  background: rgba(93, 158, 210, 0.15);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #22c55e;
+  background: linear-gradient(90deg, #5ba8d4, #8c9fea);
   border-radius: 999px;
   transition: width 1s linear;
 }
 
 .bed-card--warning .progress-fill {
-  background: #eab308;
+  background: linear-gradient(90deg, #f5a623, #fcd88a);
 }
 
 .bed-card--completed .progress-fill {
-  background: #ef4444;
+  background: linear-gradient(90deg, #f87171, #fca5a5);
 }
 
 .bed-card--warning .bed-card__remaining {
-  color: #c9a03a;
+  color: #c9831a;
 }
 
 .bed-card--completed .bed-card__remaining {
-  color: #d47878;
+  color: #e05050;
 }
 
 .bed-card__completed-label {
   margin: 8px 0 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #dc2626;
+  color: #e05050;
   text-align: center;
 }
 
 .bed-card__remaining {
-  margin: 6px 0 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #5aab96;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a94c8;
   text-align: right;
 }
 
@@ -228,12 +342,8 @@
 }
 
 @keyframes time-text-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .modal-overlay {
@@ -547,8 +657,13 @@
 
 @media (max-width: 640px) {
   .app {
-    padding: 20px 16px 32px;
-    gap: 20px;
+    padding: 16px 12px 32px;
+    gap: 16px;
+  }
+
+  .header-wrap {
+    padding: 12px 16px;
+    border-radius: 18px;
   }
 
   .header__logo {
@@ -557,13 +672,18 @@
   }
 
   .header__title {
-    font-size: 20px;
+    font-size: 18px;
+  }
+
+  .header__cat {
+    height: 64px;
   }
 
   .tab {
     flex: 1 1 calc(50% - 4px);
     text-align: center;
-    padding: 10px 12px;
+    padding: 8px 10px;
+    font-size: 13px;
   }
 
   .bed-grid {
@@ -572,11 +692,14 @@
   }
 
   .bed-card {
-    padding: 16px 12px;
+    padding: 14px 12px;
+    border-radius: 16px;
   }
 
   .bed-card__number {
-    font-size: 18px;
+    font-size: 13px;
+    padding: 3px 10px;
+    height: 26px;
   }
 
   .duration__display {
@@ -590,12 +713,11 @@
   }
 }
 
-/* ─── 이용기록 탭 구분 스타일 ─────────────────────────────────── */
-.tab--history {
-  border-style: dashed;
-}
-
-.tab--patient {
+/* ─── 이용기록/환자조회/통계/데이터관리 탭 ──────────────────── */
+.tab--history,
+.tab--patient,
+.tab--stats,
+.tab--datamanage {
   border-style: dashed;
 }
 
@@ -1011,11 +1133,6 @@
   }
 }
 
-/* ─── 통계 탭 ───────────────────────────────────────────────── */
-.tab--stats {
-  border-style: dashed;
-}
-
 /* ─── 통계 화면 ─────────────────────────────────────────────── */
 .stats-section {
   display: flex;
@@ -1326,11 +1443,6 @@
   .stats-room-item {
     grid-template-columns: 70px 1fr 44px;
   }
-}
-
-/* ─── 데이터관리 탭 ─────────────────────────────────────────── */
-.tab--datamanage {
-  border-style: dashed;
 }
 
 /* ─── 데이터관리 화면 ───────────────────────────────────────── */
@@ -1753,4 +1865,180 @@
 
 .btn-confirm--danger:hover {
   background: #c93c3c !important;
+}
+
+/* ─── 베드이동 pill 버튼 ─────────────────────────────────────── */
+.info-list__dd--flex {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-move-bed {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #3d8fa8;
+  background: #daeef5;
+  border: 1px solid #b8d8e8;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1.6;
+}
+
+.btn-move-bed:hover {
+  background: #c0e4f0;
+  border-color: #7eb8c9;
+}
+
+/* ─── 자리이동 안내 바 ───────────────────────────────────────── */
+.move-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: #1e3a5f;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(30,58,95,0.18);
+}
+
+.move-banner__text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.move-banner__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7eb8c9;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.move-banner__desc {
+  font-size: 14px;
+  color: #daeef5;
+}
+
+.move-banner__desc strong {
+  color: #ffffff;
+}
+
+.move-banner__cancel {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #1e3a5f;
+  background: #ffffff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.move-banner__cancel:hover {
+  background: #e8f4f8;
+}
+
+/* ─── 자리이동 알림 메시지 ──────────────────────────────────── */
+.move-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: #fff8e8;
+  border: 1px solid #f5d87a;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #7a5800;
+}
+
+.move-alert__close {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #7a5800;
+  background: #ffedb0;
+  border: 1px solid #f5d87a;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.move-alert__close:hover {
+  background: #fde27a;
+}
+
+/* ─── 이동 모드 베드 카드 강조 ──────────────────────────────── */
+.bed-card--movable {
+  outline: 2px dashed #3d8fa8;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(61,143,168,0.12);
+}
+
+.bed-card--movable:hover {
+  outline-color: #1e7a9a;
+  background: #eef6fa !important;
+}
+
+.bed-card--dimmed {
+  opacity: 0.45;
+  pointer-events: auto;
+}
+
+.bed-card--moving {
+  outline: 2px solid #f5a623;
+  outline-offset: 2px;
+  opacity: 0.7;
+}
+
+/* ─── 남은 시간 만료 표시 ────────────────────────────────────── */
+.duration__display--expired {
+  color: #e05050;
+}
+
+/* ─── 물방울 애니메이션 ──────────────────────────────────────── */
+.bed-card__droplet {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+  animation: droplet-fall 1.8s ease-in-out infinite;
+  transform-origin: center top;
+}
+
+@keyframes droplet-fall {
+  0% {
+    transform: translateY(0px);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(7px);
+    opacity: 0.3;
+  }
+  61% {
+    transform: translateY(0px);
+    opacity: 0;
+  }
+  80% {
+    transform: translateY(0px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0px);
+    opacity: 1;
+  }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon.png'
+import catThumbsup from './assets/cat-thumbsup.png'
 
 const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
@@ -136,11 +137,23 @@ function formatDurationClock(minutes) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-function DurationControls({ minutes, onAdjust }) {
+function DurationControls({ minutes, onAdjust, remainingMs }) {
+  // remainingMs가 전달되면 남은 시간 표시, 아니면 총 시간 표시
+  const displayLabel = remainingMs !== undefined ? '남은 시간' : '예상 소요시간'
+  const remaining = remainingMs !== undefined
+    ? Math.max(0, Math.ceil(remainingMs / 60000))
+    : null
+  const displayClock = remaining !== null
+    ? formatDurationClock(remaining)
+    : formatDurationClock(minutes)
+  const isExpired = remaining !== null && remaining <= 0
+
   return (
     <div className="duration">
-      <span className="duration__label">예상 소요시간</span>
-      <p className="duration__display">{formatDurationClock(minutes)}</p>
+      <span className="duration__label">{displayLabel}</span>
+      <p className={`duration__display${isExpired ? ' duration__display--expired' : ''}`}>
+        {displayClock}
+      </p>
       <div className="duration__controls">
         <div className="duration__row duration__row--plus">
           <button
@@ -1148,6 +1161,8 @@ function App() {
   const [editPatientName, setEditPatientName] = useState('')
   const [editChartNumber, setEditChartNumber] = useState('')
   const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
+  const [movingBed, setMovingBed] = useState(null)
+  const [moveBedAlert, setMoveBedAlert] = useState('')
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
   const hasInProgressBeds = beds.some((bed) => bed.status === 'in-progress')
@@ -1213,6 +1228,11 @@ function App() {
   }
 
   function handleBedClick(bed) {
+    // 이동 모드일 때 우선 처리
+    if (movingBed) {
+      handleMoveToBed(bed)
+      return
+    }
     if (bed.status === 'completed') {
       setCleanupBed(bed)
       return
@@ -1289,6 +1309,58 @@ function App() {
     setEndEarlyConfirm(null)
   }
 
+  function handleStartMoveBed() {
+    if (!currentBed) return
+    setMovingBed(currentBed)
+    closeModal()
+  }
+
+  function handleCancelMoveBed() {
+    setMovingBed(null)
+    setMoveBedAlert('')
+  }
+
+  function handleMoveToBed(targetBed) {
+    if (!movingBed) return
+
+    // 자기 자신 클릭
+    if (targetBed.id === movingBed.id) {
+      setMoveBedAlert('현재 이용 중인 베드입니다.\n다른 빈 베드를 선택해주세요.')
+      return
+    }
+
+    // 사용 중인 베드 클릭
+    if (targetBed.status !== 'vacant') {
+      setMoveBedAlert('사용 중인 베드로는 이동할 수 없습니다.\n빈 베드를 선택해주세요.')
+      return
+    }
+
+    // 이동 실행: 환자 데이터 그대로 새 베드에 복사, 기존 베드 초기화
+    setBeds((prev) =>
+      prev.map((bed) => {
+        if (bed.id === targetBed.id) {
+          return {
+            ...bed,
+            status: movingBed.status,
+            patientName: movingBed.patientName,
+            chartNumber: movingBed.chartNumber,
+            startTime: movingBed.startTime,
+            durationMinutes: movingBed.durationMinutes,
+          }
+        }
+        if (bed.id === movingBed.id) {
+          return resetBedToVacant(bed)
+        }
+        return bed
+      }),
+    )
+
+    // 이동한 수액실 탭으로 전환
+    setActiveTab(targetBed.room)
+    setMovingBed(null)
+    setMoveBedAlert('')
+  }
+
   function handleRemovePatientConfirm() {
     if (!selectedBed) return
     // 베드만 초기화, history에는 저장하지 않음
@@ -1350,13 +1422,16 @@ function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <img src={logoIcon} alt="벗이비인후과 로고" className="header__logo" />
-        <div className="header__text">
-          <span className="header__clinic">벗이비인후과</span>
-          <h1 className="header__title">수액실 관리</h1>
-        </div>
-      </header>
+      <div className="header-wrap">
+        <header className="header">
+          <img src={logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+          <div className="header__text">
+            <span className="header__clinic">벗이비인후과</span>
+            <h1 className="header__title">수액실 관리</h1>
+          </div>
+        </header>
+        <img src={catThumbsup} alt="" className="header__cat" aria-hidden="true" />
+      </div>
 
       <nav className="tabs">
         {TABS.map((tab) => (
@@ -1370,6 +1445,41 @@ function App() {
           </button>
         ))}
       </nav>
+
+      {/* ── 자리이동 모드 안내 바 ── */}
+      {movingBed && (
+        <div className="move-banner">
+          <div className="move-banner__text">
+            <span className="move-banner__label">자리이동 중</span>
+            <span className="move-banner__desc">
+              <strong>{movingBed.patientName}</strong> 환자를 이동할 빈 베드를 선택해주세요.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="move-banner__cancel"
+            onClick={handleCancelMoveBed}
+          >
+            취소
+          </button>
+        </div>
+      )}
+
+      {/* ── 자리이동 알림 메시지 ── */}
+      {moveBedAlert && (
+        <div className="move-alert">
+          {moveBedAlert.split('\n').map((line, i) => (
+            <span key={i}>{line}{i === 0 && <br />}</span>
+          ))}
+          <button
+            type="button"
+            className="move-alert__close"
+            onClick={() => setMoveBedAlert('')}
+          >
+            확인
+          </button>
+        </div>
+      )}
 
       {activeTab === 'history' ? (
         <HistoryView history={activeHistory} />
@@ -1386,7 +1496,7 @@ function App() {
               return (
                 <article
                   key={bed.id}
-                  className="bed-card bed-card--vacant"
+                  className={`bed-card bed-card--vacant${movingBed ? ' bed-card--movable' : ''}`}
                   onClick={() => handleBedClick(bed)}
                   role="button"
                   tabIndex={0}
@@ -1405,10 +1515,7 @@ function App() {
             return (
               <article
                 key={bed.id}
-                className={getCardClassName(bed, {
-                  isCompleted: completed,
-                  isWarning,
-                })}
+                className={`${getCardClassName(bed, { isCompleted: completed, isWarning, })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
                 onClick={() => handleBedClick(bed)}
                 role="button"
                 tabIndex={0}
@@ -1420,6 +1527,7 @@ function App() {
                 <div className="bed-card__progress">
                   <p className="bed-card__progress-text">
                     진행률 {displayProgress}%
+                    {!completed && <span className="bed-card__droplet">💧</span>}
                   </p>
                   <div className="progress-bar">
                     <div
@@ -1576,7 +1684,18 @@ function App() {
                   </div>
                   <div className="info-list__row">
                     <dt>베드번호</dt>
-                    <dd>{currentBed.number}</dd>
+                    <dd className="info-list__dd--flex">
+                      {currentBed.number}
+                      {isInProgress && (
+                        <button
+                          type="button"
+                          className="btn-move-bed"
+                          onClick={handleStartMoveBed}
+                        >
+                          베드이동
+                        </button>
+                      )}
+                    </dd>
                   </div>
                   <div className="info-list__row">
                     <dt>환자명</dt>
@@ -1609,6 +1728,11 @@ function App() {
                   <DurationControls
                     minutes={currentBed.durationMinutes}
                     onAdjust={adjustBedDuration}
+                    remainingMs={
+                      currentBed.startTime && currentBed.durationMinutes
+                        ? currentBed.startTime + currentBed.durationMinutes * 60000 - now
+                        : undefined
+                    }
                   />
                 )}
 
