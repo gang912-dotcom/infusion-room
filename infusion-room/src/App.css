@@ -6,7 +6,7 @@
   padding: 28px 24px 56px;
   text-align: left;
   min-height: 100vh;
-  background: linear-gradient(160deg, #e8f4ff 0%, #efe8ff 50%, #e8f4ff 100%);
+  background: linear-gradient(160deg, #f1f5f7 0%, #f7fafc 50%, #eef3f6 100%);
 }
 
 /* ─── 헤더 ───────────────────────────────────────────────────── */
@@ -15,7 +15,7 @@
   background: #ffffff;
   border-radius: 24px;
   padding: 16px 20px;
-  box-shadow: 0 4px 20px rgba(93, 158, 210, 0.15);
+  box-shadow: 0 4px 20px rgba(93, 140, 170, 0.13);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -26,8 +26,8 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, #eaf4ff 0%, #ede8ff 100%);
-  opacity: 0.55;
+  background: linear-gradient(120deg, #eaf4fb 0%, #f0f7fa 100%);
+  opacity: 0.6;
   pointer-events: none;
 }
 
@@ -73,15 +73,15 @@
   line-height: 1.1;
 }
 
-.header__cat {
-  height: 86px;
+.header__dog {
+  height: 100px;
   width: auto;
   object-fit: contain;
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
-  transform: scaleX(-1);
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  filter: drop-shadow(-2px 0px 6px rgba(0,0,0,0.08));
 }
 
 /* ─── 탭 ─────────────────────────────────────────────────────── */
@@ -113,10 +113,10 @@
 
 .tab--active {
   color: #ffffff;
-  background: linear-gradient(135deg, #5ba8d4 0%, #7c8fdc 100%);
+  background: linear-gradient(135deg, #4fa8cc 0%, #5b8fd4 100%);
   border-color: transparent;
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(91, 168, 212, 0.38);
+  box-shadow: 0 4px 14px rgba(79, 168, 204, 0.35);
 }
 
 .tab:focus-visible {
@@ -232,7 +232,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 800;
-  color: #2d5a8e;
+  color: #1a4a7a;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -240,15 +240,15 @@
   height: 30px;
   width: auto;
   white-space: nowrap;
-  background: linear-gradient(135deg, #e8f4ff, #ede8ff);
+  background: linear-gradient(135deg, #d6eaf8, #dce8f5);
   border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(93, 158, 210, 0.18);
+  box-shadow: 0 2px 6px rgba(50, 120, 180, 0.2);
   align-self: flex-start;
 }
 
 .bed-card--vacant .bed-card__number {
-  background: linear-gradient(135deg, #deeeff, #e8e4ff);
-  color: #5a7ab0;
+  background: linear-gradient(135deg, #cfe8f5, #d8e8f8);
+  color: #2d6a9a;
   align-self: auto;
 }
 
@@ -299,7 +299,7 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #5ba8d4, #8c9fea);
+  background: linear-gradient(90deg, #4fa8cc, #5b8fd4);
   border-radius: 999px;
   transition: width 1s linear;
 }
@@ -675,8 +675,8 @@
     font-size: 18px;
   }
 
-  .header__cat {
-    height: 64px;
+  .header__dog {
+    height: 72px;
   }
 
   .tab {

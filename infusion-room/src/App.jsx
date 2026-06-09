@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon.png'
-import catThumbsup from './assets/cat-thumbsup.png'
+import dogImage from './assets/dog.png'
 
 const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
@@ -1430,7 +1430,7 @@ function App() {
             <h1 className="header__title">수액실 관리</h1>
           </div>
         </header>
-        <img src={catThumbsup} alt="" className="header__cat" aria-hidden="true" />
+        <img src={dogImage} alt="" className="header__dog" aria-hidden="true" />
       </div>
 
       <nav className="tabs">
