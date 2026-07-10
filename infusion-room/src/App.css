@@ -2213,6 +2213,235 @@
   text-align: right;
 }
 
+/* ─── 베드 상세: 라운딩/특이사항 액션 행 ─────────────────────── */
+.bed-detail-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+}
+
+.btn-round-entry {
+  padding: 14px 18px;
+  font-size: 16px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--status-occupied);
+  background: var(--status-occupied-bg);
+  border: 1px solid rgba(91, 157, 255, 0.4);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-round-entry:hover {
+  background: rgba(91, 157, 255, 0.24);
+  border-color: rgba(91, 157, 255, 0.6);
+}
+
+/* ─── 라운딩 모달 ─────────────────────────────────────────────── */
+.round-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.round-header__sub {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.round-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-history__title,
+.round-input__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.round-input__title {
+  color: var(--status-occupied);
+}
+
+.round-input__hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.round-history__empty {
+  margin: 0;
+  padding: 14px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.round-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.round-history__item {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 10px 2px;
+  font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.round-history__item:last-child {
+  border-bottom: none;
+}
+
+.round-history__time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.round-history__detail {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.round-history__sep {
+  color: var(--text-muted);
+}
+
+.round-temp {
+  font-weight: 600;
+}
+
+.round-temp--none {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.round-temp--mild {
+  color: var(--status-warning);
+}
+
+.round-temp--high {
+  color: var(--status-completed);
+}
+
+.round-input {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--card-border);
+}
+
+.round-temp-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.round-temp-input:focus-within {
+  border-color: var(--status-occupied);
+}
+
+.round-temp-input__icon {
+  font-size: 16px;
+}
+
+.round-temp-input__field {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+}
+
+.round-temp-input__field:focus {
+  outline: none;
+}
+
+.round-temp-input__field::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.round-temp-input__unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.round-temp-input__warn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-warning);
+}
+
+.round-actions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-round-cancel {
+  padding: 14px 22px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-round-cancel:hover {
+  background: var(--hover-tint);
+  border-color: var(--text-muted);
+}
+
+.btn-round-complete {
+  margin: 0;
+}
+
+.round-actions__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.round-actions__hint strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
 /* ─── 특이사항 칩 그룹 ───────────────────────────────────────── */
 .chip-group {
   display: flex;

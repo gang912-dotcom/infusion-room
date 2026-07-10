@@ -74,8 +74,6 @@ const NOTE_SOURCE_OPTIONS = [
 ]
 
 // ─── 라운딩(정기 순회 체크) 표준 어휘 · 설정 상수 ──────────────────
-// A-2~A-4(라운딩 모달·카드 표시)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
-// eslint-disable-next-line no-unused-vars
 const ROUND_STATE_OPTIONS = [
   { code: 'good', label: '양호' },
   { code: 'sleeping', label: '수면 중' },
@@ -83,14 +81,13 @@ const ROUND_STATE_OPTIONS = [
   { code: 'fever', label: '발열' },
 ]
 
+// ROUND_INTERVAL_MIN/ROUND_SOON_LEAD_MIN은 A-3(카드 타이머)·A-4(몰아보기 힌트)에서 사용 예정.
 // eslint-disable-next-line no-unused-vars
 const ROUND_INTERVAL_MIN = 30 // 라운딩 간격(분)
 // eslint-disable-next-line no-unused-vars
 const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
 
-// eslint-disable-next-line no-unused-vars
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
-// eslint-disable-next-line no-unused-vars
 const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
 
 function generateNoteId(prefix) {
@@ -205,8 +202,6 @@ function loadRoundsFromStorage() {
 
 // 최소 유효 라운딩 = occurredAt만 있으면 성립("확인 도장").
 // temperature/state/memo는 모두 선택이며 비어도 레코드가 생기고 타이머가 리셋된다.
-// A-2(라운딩 입력 모달)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
-// eslint-disable-next-line no-unused-vars
 function createRoundRecord({ sessionId, chartNumber, occurredAt, temperature = null, state = null, memo = '' }) {
   return {
     id: generateNoteId('rnd'),
@@ -220,6 +215,29 @@ function createRoundRecord({ sessionId, chartNumber, occurredAt, temperature = n
     createdBy: null,
     deleted: false,
   }
+}
+
+// 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
+function getRoundsByChartNumber(rounds, chartNumber) {
+  return rounds
+    .filter((r) => r.chartNumber === chartNumber && !r.deleted)
+    .sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))
+}
+
+// 체온 색 톤: 고열(≥FEVER_HIGH_MIN) → 'high', 미열(≥FEVER_MILD_MIN) → 'mild', 그 외/null → null
+function getRoundTempTone(temp) {
+  if (temp == null) return null
+  if (temp >= FEVER_HIGH_MIN) return 'high'
+  if (temp >= FEVER_MILD_MIN) return 'mild'
+  return null
+}
+
+// 체온 입력 문자열 → number | null. 빈값/공백/숫자아님은 null.
+function parseTemperature(raw) {
+  const trimmed = String(raw).trim()
+  if (!trimmed) return null
+  const n = parseFloat(trimmed)
+  return Number.isNaN(n) ? null : n
 }
 
 function createHistoryEntry(bed, endTime) {
@@ -1681,8 +1699,6 @@ function App() {
   const [history, setHistory] = useState(() => loadHistoryFromStorage())
   const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotesFromStorage())
   const [patientNotes, setPatientNotes] = useState(() => loadPatientNotesFromStorage())
-  // setRounds는 A-2(라운딩 입력 모달)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
-  // eslint-disable-next-line no-unused-vars
   const [rounds, setRounds] = useState(() => loadRoundsFromStorage())
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
@@ -1708,6 +1724,11 @@ function App() {
   const [noteCategory, setNoteCategory] = useState('caution')
   const [noteContent, setNoteContent] = useState('')
   const [noteSource, setNoteSource] = useState('patient_report')
+  const [roundModalOpen, setRoundModalOpen] = useState(false)
+  const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
+  const [roundTemp, setRoundTemp] = useState('')
+  const [roundState, setRoundState] = useState(null)
+  const [roundMemo, setRoundMemo] = useState('')
   const [briefingOpen, setBriefingOpen] = useState(false)
   const [patientViewSeed, setPatientViewSeed] = useState(null)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
@@ -1995,6 +2016,33 @@ function App() {
 
   function closeNoteModal() {
     setNoteModalOpen(false)
+  }
+
+  function openRoundModal() {
+    if (!currentBed) return
+    setRoundOccurredAt(Date.now())
+    setRoundTemp('')
+    setRoundState(null)
+    setRoundMemo('')
+    setRoundModalOpen(true)
+  }
+
+  function closeRoundModal() {
+    setRoundModalOpen(false)
+  }
+
+  function handleSaveRound() {
+    if (!currentBed) return
+    const newRound = createRoundRecord({
+      sessionId: currentBed.sessionId,
+      chartNumber: currentBed.chartNumber,
+      occurredAt: new Date(roundOccurredAt).toISOString(),
+      temperature: parseTemperature(roundTemp),
+      state: roundState,
+      memo: roundMemo.trim(),
+    })
+    setRounds((prev) => [newRound, ...prev])
+    closeRoundModal()
   }
 
   function toggleChip(list, value) {
@@ -2519,13 +2567,22 @@ function App() {
                 )}
 
                 {isInProgress && (
-                  <button
-                    type="button"
-                    className="btn-register"
-                    onClick={() => openNoteModal('session')}
-                  >
-                    특이사항 기록
-                  </button>
+                  <div className="bed-detail-actions">
+                    <button
+                      type="button"
+                      className="btn-round-entry"
+                      onClick={openRoundModal}
+                    >
+                      라운딩
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-register"
+                      onClick={() => openNoteModal('session')}
+                    >
+                      특이사항 기록
+                    </button>
+                  </div>
                 )}
 
                 {isInProgress && (
@@ -2792,6 +2849,155 @@ function App() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {roundModalOpen && currentBed && (
+        <div className="modal-overlay modal-overlay--top" onClick={closeRoundModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="round-header">
+                <h2>라운딩</h2>
+                <p className="round-header__sub">
+                  {currentBed.number}번 · {currentBed.patientName}
+                  {currentBed.startTime
+                    ? ` · 시작 후 ${Math.max(0, Math.round((now - currentBed.startTime) / 60000))}분`
+                    : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal__close"
+                onClick={closeRoundModal}
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <div className="round-history">
+                <h3 className="round-history__title">지난 라운딩 이력</h3>
+                {(() => {
+                  const list = getRoundsByChartNumber(rounds, currentBed.chartNumber)
+                  if (list.length === 0) {
+                    return <p className="round-history__empty">아직 라운딩 기록이 없습니다</p>
+                  }
+                  return (
+                    <ul className="round-history__list">
+                      {list.map((r) => {
+                        const stateLabel = ROUND_STATE_OPTIONS.find((o) => o.code === r.state)?.label
+                        const tone = getRoundTempTone(r.temperature)
+                        const isEmpty = !r.state && r.temperature == null && !r.memo
+                        return (
+                          <li key={r.id} className="round-history__item">
+                            <span className="round-history__time">{formatHour24(r.occurredAt)}</span>
+                            <span className="round-history__detail">
+                              {isEmpty ? (
+                                '확인함'
+                              ) : (
+                                <>
+                                  {stateLabel && <span>{stateLabel}</span>}
+                                  {stateLabel && <span className="round-history__sep"> · </span>}
+                                  {r.temperature != null ? (
+                                    <span className={`round-temp${tone ? ` round-temp--${tone}` : ''}`}>
+                                      {r.temperature}°C{tone ? ' ↑' : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="round-temp round-temp--none">체온 ---</span>
+                                  )}
+                                  {r.memo && <span className="round-history__sep"> · </span>}
+                                  {r.memo && <span>{r.memo}</span>}
+                                </>
+                              )}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )
+                })()}
+              </div>
+
+              <div className="round-input">
+                <h3 className="round-input__title">
+                  새 라운딩 기록{' '}
+                  <span className="round-input__hint">(안 해도 됨 · 조회만 가능)</span>
+                </h3>
+
+                <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} />
+
+                <label className="field">
+                  <span className="field__label">체온 (선택 · 안 재면 비움 ---)</span>
+                  <div className="round-temp-input">
+                    <span className="round-temp-input__icon" aria-hidden="true">🌡</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      inputMode="decimal"
+                      className="round-temp-input__field"
+                      value={roundTemp}
+                      onChange={(e) => setRoundTemp(e.target.value)}
+                      placeholder="--.-"
+                    />
+                    <span className="round-temp-input__unit">°C</span>
+                  </div>
+                  {(() => {
+                    const n = parseTemperature(roundTemp)
+                    if (n != null && (n < 30 || n > 45)) {
+                      return <span className="round-temp-input__warn">체온 범위를 확인하세요</span>
+                    }
+                    return null
+                  })()}
+                </label>
+
+                <div className="field">
+                  <span className="field__label">환자 상태 (선택)</span>
+                  <div className="chip-group">
+                    {ROUND_STATE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip${roundState === opt.code ? ' chip--active' : ''}`}
+                        onClick={() =>
+                          setRoundState((prev) => (prev === opt.code ? null : opt.code))
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="field">
+                  <span className="field__label">메모 (선택)</span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={roundMemo}
+                    onChange={(e) => setRoundMemo(e.target.value)}
+                    placeholder="특이사항 있으면 한 줄로"
+                  />
+                </label>
+
+                <div className="round-actions">
+                  <button type="button" className="btn-round-cancel" onClick={closeRoundModal}>
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-register btn-round-complete"
+                    onClick={handleSaveRound}
+                  >
+                    ✓ 라운딩 완료
+                  </button>
+                </div>
+                <p className="round-actions__hint">
+                  <strong>취소</strong>는 기록 없이 닫기(타이머 유지) · <strong>완료</strong>는 확인 기록 + 타이머 리셋
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
