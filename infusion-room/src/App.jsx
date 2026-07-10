@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import logoIcon from './assets/logo-icon.png'
-import dogImage from './assets/dog.png'
+import logoIcon from './assets/logo-icon-white.png'
+import headerPortrait from './assets/header-portrait.png'
 
 const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
+const SESSION_NOTES_STORAGE_KEY = 'infusion-room-session-notes'
+const PATIENT_NOTES_STORAGE_KEY = 'infusion-room-patient-notes'
 
 const TABS = [
   { id: 'all', label: '전체' },
@@ -25,8 +27,54 @@ const ROOM_TABS = TABS.filter(
     t.id !== 'datamanage',
 )
 
+// 전체보기에서 방별로 묶을 때 쓰는 순서 (전체 탭 자체는 제외)
+const ROOM_ORDER = ROOM_TABS.filter((t) => t.id !== 'all')
+
 const DEFAULT_DURATION = 120
 const MIN_DURATION = 10
+
+// ─── 환자 특이사항 표준 어휘 (코드로 저장, 라벨로 표시) ──────────────
+const SYMPTOM_OPTIONS = [
+  { code: 'vein_pain', label: '혈관통' },
+  { code: 'palpitation', label: '두근거림' },
+  { code: 'chest_tightness', label: '답답함' },
+  { code: 'nausea', label: '매스꺼움' },
+  { code: 'vomiting', label: '구토' },
+  { code: 'dizziness', label: '어지럼' },
+  { code: 'feverish', label: '발열감' },
+  { code: 'swelling', label: '붓기' },
+  { code: 'leakage', label: '누출' },
+]
+
+const ACTION_OPTIONS = [
+  { code: 'warm_pack', label: '찜질팩' },
+  { code: 'rate_adjust', label: '속도조절' },
+  { code: 'stop', label: '중단' },
+  { code: 'improved', label: '호전' },
+  { code: 'observe', label: '경과관찰' },
+]
+
+const SEVERITY_OPTIONS = [
+  { code: 'mild', label: '경미' },
+  { code: 'moderate', label: '보통' },
+  { code: 'severe', label: '심함' },
+]
+
+const NOTE_CATEGORY_OPTIONS = [
+  { code: 'warning', label: '경고' },
+  { code: 'caution', label: '주의' },
+  { code: 'info', label: '참고' },
+]
+
+const NOTE_SOURCE_OPTIONS = [
+  { code: 'patient_report', label: '환자 진술' },
+  { code: 'clinic_relay', label: '진료실 전달' },
+  { code: 'direct_obs', label: '직접 관찰' },
+]
+
+function generateNoteId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
 
 function createDefaultBeds() {
   return [
@@ -39,6 +87,7 @@ function createDefaultBeds() {
       chartNumber: '',
       startTime: null,
       durationMinutes: null,
+      sessionId: null,
     })),
     ...Array.from({ length: 13 }, (_, i) => ({
       id: `room3-${1 + i}`,
@@ -49,6 +98,7 @@ function createDefaultBeds() {
       chartNumber: '',
       startTime: null,
       durationMinutes: null,
+      sessionId: null,
     })),
     ...Array.from({ length: 11 }, (_, i) => ({
       id: `floor2-${i + 1}`,
@@ -59,8 +109,14 @@ function createDefaultBeds() {
       chartNumber: '',
       startTime: null,
       durationMinutes: null,
+      sessionId: null,
     })),
   ]
+}
+
+// 수액 세션 고유 ID 생성 ("금일 특이사항"이 세션 진행 중에 붙는 연결 키)
+function generateSessionId() {
+  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 function loadBedsFromStorage() {
@@ -93,6 +149,28 @@ function loadHistoryFromStorage() {
   }
 }
 
+function loadSessionNotesFromStorage() {
+  try {
+    const raw = localStorage.getItem(SESSION_NOTES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function loadPatientNotesFromStorage() {
+  try {
+    const raw = localStorage.getItem(PATIENT_NOTES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function createHistoryEntry(bed, endTime) {
   const startTime = bed.startTime ?? endTime
   const usedMinutes = Math.round((endTime - startTime) / 60000)
@@ -106,6 +184,7 @@ function createHistoryEntry(bed, endTime) {
 
   return {
     id: `${bed.id}-${endTime}`,
+    sessionId: bed.sessionId ?? null,
     date: dateStr,
     room: roomLabel,
     bedNumber: bed.number,
@@ -206,12 +285,9 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
   )
 }
 
-function formatElapsedTime(ms) {
-  const totalSeconds = Math.floor(ms / 1000)
-  const h = Math.floor(totalSeconds / 3600)
-  const m = Math.floor((totalSeconds % 3600) / 60)
-  const s = totalSeconds % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+function formatHour24(timestamp) {
+  const d = new Date(timestamp)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function getBedProgress(bed, now) {
@@ -246,21 +322,31 @@ function markCompletedIfNeeded(bed, now) {
   return bed
 }
 
-function getTimeDisplay(bed, now, showRemaining) {
-  const { remainingMs, elapsedMs, isCompleted } = getBedProgress(bed, now)
-  if (isCompleted) return '이용 완료'
-  if (showRemaining) {
-    return `남은 시간 ${formatDuration(Math.ceil(remainingMs / 60000))}`
-  }
-  return `진행 시간 ${formatElapsedTime(elapsedMs)}`
-}
-
 function getCardClassName(bed, { isCompleted, isWarning }) {
   if (bed.status === 'completed' || isCompleted) {
     return 'bed-card bed-card--completed'
   }
   if (isWarning) return 'bed-card bed-card--warning'
   return 'bed-card bed-card--occupied'
+}
+
+// 베드 번호 문자열 끝의 숫자를 추출 ("2F-11" → 11, "22" → 22)
+function parseBedNumber(bed) {
+  const match = bed.number.match(/(\d+)$/)
+  return match ? Number(match[1]) : 0
+}
+
+function sortBedsByNumber(bedList) {
+  return [...bedList].sort((a, b) => parseBedNumber(a) - parseBedNumber(b))
+}
+
+// 전체보기 상단 요약 바 집계용 상태 분류
+function getBedStatusCategory(bed, now) {
+  if (bed.status === 'vacant') return 'vacant'
+  const { isCompleted, isWarning } = getBedProgress(bed, now)
+  if (bed.status === 'completed' || isCompleted) return 'completed'
+  if (isWarning) return 'warning'
+  return 'occupied'
 }
 
 function getStatusLabel(bed, now) {
@@ -279,6 +365,7 @@ function resetBedToVacant(bed) {
     chartNumber: '',
     startTime: null,
     durationMinutes: null,
+    sessionId: null,
   }
 }
 
@@ -314,6 +401,94 @@ function inRange(entry, from, to) {
     if (d > t) return false
   }
   return true
+}
+
+// ─── 브리핑 팝업 데이터 헬퍼 ─────────────────────────────────────
+const NOTE_CATEGORY_RANK = { warning: 0, caution: 1, info: 2 }
+
+function getActivePatientNotes(patientNotes, chartNumber) {
+  return patientNotes
+    .filter((n) => n.chartNumber === chartNumber && n.active && !n.deleted)
+    .sort((a, b) => (NOTE_CATEGORY_RANK[a.category] ?? 3) - (NOTE_CATEGORY_RANK[b.category] ?? 3))
+}
+
+// 베드 카드용 주의사항 배지 요약 (info는 제외 — 카드에는 warning/caution만)
+function getCardCautionBadge(patientNotes, chartNumber) {
+  const relevant = patientNotes.filter(
+    (n) =>
+      n.chartNumber === chartNumber &&
+      n.active &&
+      !n.deleted &&
+      (n.category === 'warning' || n.category === 'caution'),
+  )
+  if (relevant.length === 0) return null
+
+  const hasWarning = relevant.some((n) => n.category === 'warning')
+  const label = relevant.length === 1 ? relevant[0].content : `주의사항 ${relevant.length}`
+  return { label, tone: hasWarning ? 'danger' : 'caution' }
+}
+
+function getRecentSessionNotes(sessionNotes, chartNumber, limit = 5) {
+  return sessionNotes
+    .filter((n) => n.chartNumber === chartNumber && !n.deleted)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit)
+}
+
+function formatSessionNoteLine(note) {
+  const symptomLabels = note.symptoms
+    .map((code) => SYMPTOM_OPTIONS.find((o) => o.code === code)?.label)
+    .filter(Boolean)
+  const actionLabels = note.actions
+    .map((code) => ACTION_OPTIONS.find((o) => o.code === code)?.label)
+    .filter(Boolean)
+  const dateStr = new Date(note.createdAt).toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = []
+  if (symptomLabels.length) parts.push(symptomLabels.join('·'))
+  if (actionLabels.length) parts.push(actionLabels.join('·'))
+  const summary = parts.length ? parts.join(' → ') : note.memo || '기록'
+  return `${dateStr} | 시작 ${note.elapsedMin}분 · ${summary}`
+}
+
+function getSessionNotesBySessionId(sessionNotes, sessionId) {
+  if (!sessionId) return []
+  return sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
+}
+
+// history 항목 삭제/복구 시 같은 sessionId를 가진 session_note에도 대칭으로 반영
+function cascadeSessionNoteDeleted(historyEntries, sessionNotes, deletedValue) {
+  const sessionIds = new Set(historyEntries.map((e) => e.sessionId).filter(Boolean))
+  if (sessionIds.size === 0) return sessionNotes
+  return sessionNotes.map((n) =>
+    sessionIds.has(n.sessionId) ? { ...n, deleted: deletedValue } : n,
+  )
+}
+
+function summarizeSessionNotesForTable(notes) {
+  if (notes.length === 0) return '-'
+  return notes
+    .map((n) => {
+      const symptomLabels = n.symptoms
+        .map((code) => SYMPTOM_OPTIONS.find((o) => o.code === code)?.label)
+        .filter(Boolean)
+      const actionLabels = n.actions
+        .map((code) => ACTION_OPTIONS.find((o) => o.code === code)?.label)
+        .filter(Boolean)
+      const parts = [...symptomLabels, ...actionLabels]
+      return parts.length ? parts.join('·') : n.memo || '메모'
+    })
+    .join(', ')
+}
+
+function getPatientVisitInfo(history, chartNumber) {
+  const visits = history
+    .filter((h) => h.chartNumber === chartNumber && !h.deleted)
+    .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date))
+  return { count: visits.length, lastVisitDate: visits[0]?.date ?? null }
 }
 
 // ─── 통계 화면 ──────────────────────────────────────────────────
@@ -501,9 +676,23 @@ function StatsView({ history }) {
 }
 
 // ─── 환자 조회 화면 ─────────────────────────────────────────────
-function PatientView({ history }) {
-  const [query, setQuery] = useState('')
-  const [selectedKey, setSelectedKey] = useState(null) // "chartNumber"
+function PatientView({
+  history,
+  patientNotes,
+  sessionNotes,
+  initialChartNumber,
+  onInitialChartConsumed,
+}) {
+  const [query, setQuery] = useState(() => {
+    if (!initialChartNumber) return ''
+    return history.find((h) => h.chartNumber === initialChartNumber)?.patientName ?? ''
+  })
+  const [selectedKey, setSelectedKey] = useState(initialChartNumber ?? null) // "chartNumber"
+
+  useEffect(() => {
+    if (initialChartNumber) onInitialChartConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 차트번호 기준으로 환자 목록 구성
   const patientMap = {}
@@ -565,6 +754,10 @@ function PatientView({ history }) {
   // 이용이력 최신순 정렬 (id에 타임스탬프 포함되어 있으므로 역순)
   const patientHistory = selectedPatient
     ? [...selectedPatient.entries].sort((a, b) => b.id.localeCompare(a.id))
+    : []
+
+  const selectedPatientNotes = selectedPatient
+    ? getActivePatientNotes(patientNotes, selectedPatient.chartNumber)
     : []
 
   return (
@@ -653,6 +846,28 @@ function PatientView({ history }) {
             </div>
           </div>
 
+          {/* 환자 주의사항 */}
+          {selectedPatientNotes.length > 0 && (
+            <div className="patient-notes">
+              <h3 className="patient-history__title">환자 주의사항</h3>
+              <ul className="briefing__note-list">
+                {selectedPatientNotes.map((n) => (
+                  <li key={n.id} className="briefing__note">
+                    <div className="briefing__note-head">
+                      <span className={`badge badge--${n.category}`}>
+                        {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
+                      </span>
+                      <span className="briefing__note-content">{n.content}</span>
+                    </div>
+                    <p className="briefing__note-source">
+                      근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* 이용 이력 테이블 */}
           <div className="patient-history">
             <h3 className="patient-history__title">전체 이용 이력</h3>
@@ -666,6 +881,7 @@ function PatientView({ history }) {
                     <th>시작시간</th>
                     <th>종료시간</th>
                     <th>이용시간</th>
+                    <th>특이사항</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -677,6 +893,11 @@ function PatientView({ history }) {
                       <td>{entry.startTime}</td>
                       <td>{entry.endTime}</td>
                       <td>{formatDuration(entry.usedMinutes)}</td>
+                      <td>
+                        {summarizeSessionNotesForTable(
+                          getSessionNotesBySessionId(sessionNotes, entry.sessionId),
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -690,7 +911,14 @@ function PatientView({ history }) {
 }
 
 // ─── 데이터관리 화면 ─────────────────────────────────────────────
-function DataManageView({ allHistory, onUpdateHistory }) {
+function DataManageView({
+  allHistory,
+  onUpdateHistory,
+  sessionNotes,
+  onUpdateSessionNotes,
+  patientNotes,
+  onUpdatePatientNotes,
+}) {
   // 검색 조건
   const [searchName, setSearchName] = useState('')
   const [searchChart, setSearchChart] = useState('')
@@ -704,6 +932,11 @@ function DataManageView({ allHistory, onUpdateHistory }) {
 
   // 휴지통 모드
   const [trashMode, setTrashMode] = useState(false)
+
+  // 특이사항 데이터 관리
+  const [noteSearchChart, setNoteSearchChart] = useState('')
+  const [sessionNoteTrash, setSessionNoteTrash] = useState(false)
+  const [patientNoteTrash, setPatientNoteTrash] = useState(false)
 
   // ── 데이터 현황 ──
   const totalAll = allHistory.length
@@ -775,9 +1008,11 @@ function DataManageView({ allHistory, onUpdateHistory }) {
   }
 
   function handleDeleteConfirm() {
+    const targets = allHistory.filter((e) => checkedIds.has(e.id))
     onUpdateHistory((prev) =>
       prev.map((e) => (checkedIds.has(e.id) ? { ...e, deleted: true } : e)),
     )
+    onUpdateSessionNotes((prev) => cascadeSessionNoteDeleted(targets, prev, true))
     setCheckedIds(new Set())
     setDeleteConfirm(false)
   }
@@ -785,9 +1020,11 @@ function DataManageView({ allHistory, onUpdateHistory }) {
   // ── 선택 복구 (deleted: false) ──
   function handleRestore() {
     if (checkedIds.size === 0) return
+    const targets = allHistory.filter((e) => checkedIds.has(e.id))
     onUpdateHistory((prev) =>
       prev.map((e) => (checkedIds.has(e.id) ? { ...e, deleted: false } : e)),
     )
+    onUpdateSessionNotes((prev) => cascadeSessionNoteDeleted(targets, prev, false))
     setCheckedIds(new Set())
   }
 
@@ -799,6 +1036,39 @@ function DataManageView({ allHistory, onUpdateHistory }) {
 
   const hasFilter = searchName.trim() || searchChart.trim() || searchDate
   const checkedCount = filtered.filter((e) => checkedIds.has(e.id)).size
+
+  // ── 특이사항 데이터 관리 ──
+  function findPatientNameByChart(chartNumber) {
+    return (
+      allHistory.find((h) => h.chartNumber === chartNumber)?.patientName ??
+      patientNotes.find((n) => n.chartNumber === chartNumber)?.patientName ??
+      ''
+    )
+  }
+
+  const trimmedNoteSearch = noteSearchChart.trim()
+
+  const sessionNoteList = sessionNotes
+    .filter((n) => (sessionNoteTrash ? n.deleted : !n.deleted))
+    .filter((n) => !trimmedNoteSearch || n.chartNumber.includes(trimmedNoteSearch))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+  const patientNoteList = patientNotes
+    .filter((n) => (patientNoteTrash ? n.deleted : !n.deleted))
+    .filter((n) => !trimmedNoteSearch || n.chartNumber.includes(trimmedNoteSearch))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+  function handleToggleSessionNoteDeleted(id, deletedValue) {
+    onUpdateSessionNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, deleted: deletedValue } : n)),
+    )
+  }
+
+  function handleTogglePatientNoteDeleted(id, deletedValue) {
+    onUpdatePatientNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, deleted: deletedValue } : n)),
+    )
+  }
 
   return (
     <div className="dm-section">
@@ -972,6 +1242,138 @@ function DataManageView({ allHistory, onUpdateHistory }) {
           </table>
         </div>
       )}
+
+      {/* ── 특이사항 데이터 관리 ── */}
+      <div className="dm-note-manage">
+        <h3 className="dm-note-manage__title">특이사항 데이터 관리</h3>
+
+        <label className="dm-search__field dm-note-manage__search">
+          <span className="dm-search__label">차트번호로 검색</span>
+          <input
+            type="text"
+            className="dm-search__input"
+            value={noteSearchChart}
+            onChange={(e) => setNoteSearchChart(e.target.value)}
+            placeholder="차트번호 검색"
+          />
+        </label>
+
+        {/* 금일 특이사항 관리 */}
+        <div className="dm-note-section">
+          <div className="dm-note-section__header">
+            <h4>금일 특이사항 ({sessionNoteList.length})</h4>
+            <button
+              type="button"
+              className={`dm-mode-btn dm-mode-btn--trash${sessionNoteTrash ? ' dm-mode-btn--active' : ''}`}
+              onClick={() => setSessionNoteTrash((prev) => !prev)}
+            >
+              🗑 {sessionNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
+            </button>
+          </div>
+
+          {sessionNoteList.length === 0 ? (
+            <div className="dm-empty">
+              {sessionNoteTrash ? '삭제된 금일 특이사항이 없습니다.' : '금일 특이사항이 없습니다.'}
+            </div>
+          ) : (
+            <div className="dm-table-wrap">
+              <table className="dm-table">
+                <thead>
+                  <tr>
+                    <th>등록일</th>
+                    <th>차트번호</th>
+                    <th>환자명</th>
+                    <th>내용</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessionNoteList.map((n) => (
+                    <tr key={n.id}>
+                      <td>{new Date(n.createdAt).toLocaleDateString('ko-KR')}</td>
+                      <td>{n.chartNumber}</td>
+                      <td>{findPatientNameByChart(n.chartNumber)}</td>
+                      <td>{summarizeSessionNotesForTable([n])}</td>
+                      <td className="dm-note-manage__action">
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() =>
+                            handleToggleSessionNoteDeleted(n.id, !sessionNoteTrash)
+                          }
+                        >
+                          {sessionNoteTrash ? '복구' : '삭제'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* 환자 주의사항 관리 */}
+        <div className="dm-note-section">
+          <div className="dm-note-section__header">
+            <h4>환자 주의사항 ({patientNoteList.length})</h4>
+            <button
+              type="button"
+              className={`dm-mode-btn dm-mode-btn--trash${patientNoteTrash ? ' dm-mode-btn--active' : ''}`}
+              onClick={() => setPatientNoteTrash((prev) => !prev)}
+            >
+              🗑 {patientNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
+            </button>
+          </div>
+
+          {patientNoteList.length === 0 ? (
+            <div className="dm-empty">
+              {patientNoteTrash ? '삭제된 환자 주의사항이 없습니다.' : '환자 주의사항이 없습니다.'}
+            </div>
+          ) : (
+            <div className="dm-table-wrap">
+              <table className="dm-table">
+                <thead>
+                  <tr>
+                    <th>등록일</th>
+                    <th>차트번호</th>
+                    <th>환자명</th>
+                    <th>분류</th>
+                    <th>내용</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patientNoteList.map((n) => (
+                    <tr key={n.id}>
+                      <td>{new Date(n.createdAt).toLocaleDateString('ko-KR')}</td>
+                      <td>{n.chartNumber}</td>
+                      <td>{n.patientName}</td>
+                      <td>
+                        <span className={`badge badge--${n.category}`}>
+                          {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
+                        </span>
+                      </td>
+                      <td>{n.content}</td>
+                      <td className="dm-note-manage__action">
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() =>
+                            handleTogglePatientNoteDeleted(n.id, !patientNoteTrash)
+                          }
+                        >
+                          {patientNoteTrash ? '복구' : '삭제'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── 삭제 확인 팝업 ── */}
       {deleteConfirm && (
@@ -1148,6 +1550,8 @@ function HistoryView({ history }) {
 function App() {
   const [beds, setBeds] = useState(() => loadBedsFromStorage())
   const [history, setHistory] = useState(() => loadHistoryFromStorage())
+  const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotesFromStorage())
+  const [patientNotes, setPatientNotes] = useState(() => loadPatientNotesFromStorage())
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
@@ -1156,16 +1560,26 @@ function App() {
   const [chartNumber, setChartNumber] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
   const [now, setNow] = useState(Date.now())
-  const [showRemaining, setShowRemaining] = useState(true)
   const [editPatientModal, setEditPatientModal] = useState(false)
   const [editPatientName, setEditPatientName] = useState('')
   const [editChartNumber, setEditChartNumber] = useState('')
   const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
   const [movingBed, setMovingBed] = useState(null)
   const [moveBedAlert, setMoveBedAlert] = useState('')
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const [noteTab, setNoteTab] = useState('session')
+  const [noteSymptoms, setNoteSymptoms] = useState([])
+  const [noteActions, setNoteActions] = useState([])
+  const [noteSeverity, setNoteSeverity] = useState(null)
+  const [noteMemo, setNoteMemo] = useState('')
+  const [noteCategory, setNoteCategory] = useState('caution')
+  const [noteContent, setNoteContent] = useState('')
+  const [noteSource, setNoteSource] = useState('patient_report')
+  const [briefingOpen, setBriefingOpen] = useState(false)
+  const [patientViewSeed, setPatientViewSeed] = useState(null)
+  const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
-  const hasInProgressBeds = beds.some((bed) => bed.status === 'in-progress')
 
   // deleted: true 항목은 이용기록·통계·환자조회에서 제외
   const activeHistory = history.filter((e) => !e.deleted)
@@ -1179,21 +1593,18 @@ function App() {
   }, [history])
 
   useEffect(() => {
+    localStorage.setItem(SESSION_NOTES_STORAGE_KEY, JSON.stringify(sessionNotes))
+  }, [sessionNotes])
+
+  useEffect(() => {
+    localStorage.setItem(PATIENT_NOTES_STORAGE_KEY, JSON.stringify(patientNotes))
+  }, [patientNotes])
+
+  useEffect(() => {
     if (!hasActiveSessions) return
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [hasActiveSessions])
-
-  useEffect(() => {
-    if (!hasInProgressBeds) {
-      setShowRemaining(true)
-      return
-    }
-    const toggleTimer = setInterval(() => {
-      setShowRemaining((prev) => !prev)
-    }, 3000)
-    return () => clearInterval(toggleTimer)
-  }, [hasInProgressBeds])
 
   useEffect(() => {
     setBeds((prev) => {
@@ -1210,13 +1621,40 @@ function App() {
   const filteredBeds =
     activeTab === 'all'
       ? beds
-      : beds.filter((bed) => bed.room === activeTab)
+      : sortBedsByNumber(beds.filter((bed) => bed.room === activeTab))
+
+  const bedSummaryCounts = filteredBeds.reduce(
+    (acc, bed) => {
+      acc[getBedStatusCategory(bed, now)] += 1
+      return acc
+    },
+    { occupied: 0, warning: 0, completed: 0, vacant: 0 },
+  )
+
+  const roomGroups =
+    activeTab === 'all'
+      ? ROOM_ORDER.map((room) => ({
+          room,
+          roomBeds: sortBedsByNumber(beds.filter((bed) => bed.room === room.id)),
+        }))
+      : null
 
   const currentBed = selectedBed
     ? beds.find((bed) => bed.id === selectedBed.id) ?? selectedBed
     : null
   const isVacant = currentBed?.status === 'vacant'
   const isInProgress = currentBed?.status === 'in-progress'
+  const currentBedActiveNotes = currentBed
+    ? getActivePatientNotes(patientNotes, currentBed.chartNumber)
+    : []
+
+  function toggleRoomCollapse(roomId) {
+    setCollapsedRooms((prev) => {
+      const next = new Set(prev)
+      next.has(roomId) ? next.delete(roomId) : next.add(roomId)
+      return next
+    })
+  }
 
   function openModal(bed) {
     setSelectedBed(bed)
@@ -1346,6 +1784,7 @@ function App() {
             chartNumber: movingBed.chartNumber,
             startTime: movingBed.startTime,
             durationMinutes: movingBed.durationMinutes,
+            sessionId: movingBed.sessionId,
           }
         }
         if (bed.id === movingBed.id) {
@@ -1400,6 +1839,73 @@ function App() {
     setEditPatientModal(false)
   }
 
+  function openNoteModal(tab) {
+    if (!currentBed) return
+    setNoteTab(tab)
+    setNoteSymptoms([])
+    setNoteActions([])
+    setNoteSeverity(null)
+    setNoteMemo('')
+    setNoteCategory('caution')
+    setNoteContent('')
+    setNoteSource('patient_report')
+    setNoteModalOpen(true)
+  }
+
+  function closeNoteModal() {
+    setNoteModalOpen(false)
+  }
+
+  function toggleChip(list, value) {
+    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
+  }
+
+  function handleSaveSessionNote() {
+    if (!currentBed) return
+    if (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()) return
+
+    const elapsedMin = currentBed.startTime
+      ? Math.max(0, Math.round((now - currentBed.startTime) / 60000))
+      : 0
+
+    const newNote = {
+      id: generateNoteId('sn'),
+      sessionId: currentBed.sessionId,
+      chartNumber: currentBed.chartNumber,
+      elapsedMin,
+      symptoms: noteSymptoms,
+      actions: noteActions,
+      severity: noteSeverity,
+      memo: noteMemo.trim(),
+      createdAt: new Date().toISOString(),
+      createdBy: null,
+      deleted: false,
+    }
+    setSessionNotes((prev) => [newNote, ...prev])
+    closeNoteModal()
+  }
+
+  function handleSavePatientNote() {
+    if (!currentBed || !noteContent.trim()) return
+
+    const nowIso = new Date().toISOString()
+    const newNote = {
+      id: generateNoteId('pn'),
+      chartNumber: currentBed.chartNumber,
+      patientName: currentBed.patientName,
+      category: noteCategory,
+      content: noteContent.trim(),
+      source: noteSource,
+      active: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdBy: null,
+      deleted: false,
+    }
+    setPatientNotes((prev) => [newNote, ...prev])
+    closeNoteModal()
+  }
+
   function handleRegister() {
     if (!patientName.trim() || !chartNumber.trim() || !selectedBed) return
 
@@ -1413,11 +1919,104 @@ function App() {
               chartNumber: chartNumber.trim(),
               startTime: Date.now(),
               durationMinutes,
+              sessionId: generateSessionId(),
             }
           : bed,
       ),
     )
+    setBriefingOpen(true)
+  }
+
+  function handleBriefingDismiss() {
+    setBriefingOpen(false)
     closeModal()
+  }
+
+  function handleAddNoteFromBriefing() {
+    setBriefingOpen(false)
+    openNoteModal('patient')
+  }
+
+  function handleGoFullHistory() {
+    if (!currentBed) return
+    setBriefingOpen(false)
+    closeModal()
+    setPatientViewSeed(currentBed.chartNumber)
+    setActiveTab('patient')
+  }
+
+  function renderBedCard(bed) {
+    if (bed.status === 'vacant') {
+      return (
+        <article
+          key={bed.id}
+          className={`bed-card bed-card--vacant${movingBed ? ' bed-card--movable' : ''}`}
+          onClick={() => handleBedClick(bed)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+        >
+          <p className="bed-card__number">{bed.number}</p>
+          <div className="bed-card__add-slot">
+            <span className="bed-card__add-icon">＋</span>
+            <span className="bed-card__add-label">환자 등록</span>
+          </div>
+        </article>
+      )
+    }
+
+    const { progress, isCompleted, isWarning, elapsedMs, remainingMs } = getBedProgress(bed, now)
+    const completed = bed.status === 'completed' || isCompleted
+    const displayProgress = completed ? 100 : progress
+    const category = completed ? 'completed' : isWarning ? 'warning' : 'occupied'
+    const chipLabel = completed ? '완료' : isWarning ? '곧 완료' : '진행중'
+    const cautionBadge = getCardCautionBadge(patientNotes, bed.chartNumber)
+
+    return (
+      <article
+        key={bed.id}
+        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
+        onClick={() => handleBedClick(bed)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+      >
+        <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
+        <p className="bed-card__number">{bed.number}</p>
+        <p className="bed-card__patient">{bed.patientName}</p>
+        <p className="bed-card__chart">{bed.chartNumber}</p>
+        {cautionBadge && (
+          <p className={`bed-card__caution bed-card__caution--${cautionBadge.tone}`}>
+            <span className="bed-card__caution-icon">⚠</span>
+            {cautionBadge.label}
+          </p>
+        )}
+        <div className="bed-card__progress">
+          <p className="bed-card__progress-text">
+            진행률 {displayProgress}%
+            {!completed && <span className="bed-card__droplet">💧</span>}
+          </p>
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{ width: `${displayProgress}%` }}
+            />
+          </div>
+        </div>
+        {completed ? (
+          <p className="bed-card__completed-label">정리 필요</p>
+        ) : (
+          <div className="bed-card__footer">
+            <span className="bed-card__meta">
+              {formatHour24(bed.startTime)} · {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
+            </span>
+            <span className="bed-card__remaining">
+              남은 {formatDuration(Math.ceil(remainingMs / 60000))}
+            </span>
+          </div>
+        )}
+      </article>
+    )
   }
 
   return (
@@ -1430,7 +2029,7 @@ function App() {
             <h1 className="header__title">수액실 관리</h1>
           </div>
         </header>
-        <img src={dogImage} alt="" className="header__dog" aria-hidden="true" />
+        <img src={headerPortrait} alt="" className="header__dog" aria-hidden="true" />
       </div>
 
       <nav className="tabs">
@@ -1484,72 +2083,92 @@ function App() {
       {activeTab === 'history' ? (
         <HistoryView history={activeHistory} />
       ) : activeTab === 'patient' ? (
-        <PatientView history={activeHistory} />
+        <PatientView
+          history={activeHistory}
+          patientNotes={patientNotes}
+          sessionNotes={sessionNotes}
+          initialChartNumber={patientViewSeed}
+          onInitialChartConsumed={() => setPatientViewSeed(null)}
+        />
       ) : activeTab === 'stats' ? (
         <StatsView history={activeHistory} />
       ) : activeTab === 'datamanage' ? (
-        <DataManageView allHistory={history} onUpdateHistory={setHistory} />
+        <DataManageView
+          allHistory={history}
+          onUpdateHistory={setHistory}
+          sessionNotes={sessionNotes}
+          onUpdateSessionNotes={setSessionNotes}
+          patientNotes={patientNotes}
+          onUpdatePatientNotes={setPatientNotes}
+        />
       ) : (
-        <main className="bed-grid">
-          {filteredBeds.map((bed) => {
-            if (bed.status === 'vacant') {
+        <>
+          <div className="bed-summary">
+            <div className="bed-summary__card">
+              <span className="bed-summary__label">진행중</span>
+              <span className="bed-summary__value bed-summary__value--occupied">
+                {bedSummaryCounts.occupied}
+              </span>
+            </div>
+            <div className="bed-summary__card">
+              <span className="bed-summary__label">곧 완료</span>
+              <span className="bed-summary__value bed-summary__value--warning">
+                {bedSummaryCounts.warning}
+              </span>
+            </div>
+            <div className="bed-summary__card">
+              <span className="bed-summary__label">완료 · 정리</span>
+              <span className="bed-summary__value bed-summary__value--completed">
+                {bedSummaryCounts.completed}
+              </span>
+            </div>
+            <div className="bed-summary__card">
+              <span className="bed-summary__label">빈 베드</span>
+              <span className="bed-summary__value bed-summary__value--vacant">
+                {bedSummaryCounts.vacant}
+              </span>
+            </div>
+          </div>
+
+          {roomGroups ? (
+            roomGroups.map(({ room, roomBeds }) => {
+              const isCollapsed = collapsedRooms.has(room.id)
+              const occupiedCount = roomBeds.filter((b) => b.status !== 'vacant').length
+              const firstNumber = roomBeds[0]?.number
+              const lastNumber = roomBeds[roomBeds.length - 1]?.number
+
               return (
-                <article
-                  key={bed.id}
-                  className={`bed-card bed-card--vacant${movingBed ? ' bed-card--movable' : ''}`}
-                  onClick={() => handleBedClick(bed)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
-                >
-                  <p className="bed-card__number">{bed.number}</p>
-                  <p className="bed-card__status">이용 가능</p>
-                </article>
-              )
-            }
-
-            const { progress, isCompleted, isWarning } = getBedProgress(bed, now)
-            const completed = bed.status === 'completed' || isCompleted
-            const displayProgress = completed ? 100 : progress
-
-            return (
-              <article
-                key={bed.id}
-                className={`${getCardClassName(bed, { isCompleted: completed, isWarning, })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
-                onClick={() => handleBedClick(bed)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
-              >
-                <p className="bed-card__number">{bed.number}</p>
-                <p className="bed-card__patient">{bed.patientName}</p>
-                <p className="bed-card__chart">{bed.chartNumber}</p>
-                <div className="bed-card__progress">
-                  <p className="bed-card__progress-text">
-                    진행률 {displayProgress}%
-                    {!completed && <span className="bed-card__droplet">💧</span>}
-                  </p>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${displayProgress}%` }}
-                    />
-                  </div>
-                </div>
-                {completed ? (
-                  <p className="bed-card__completed-label">이용 완료</p>
-                ) : (
-                  <p
-                    key={showRemaining ? 'remaining' : 'elapsed'}
-                    className="bed-card__remaining bed-card__time-display"
+                <section key={room.id} className="room-section">
+                  <button
+                    type="button"
+                    className="room-section__header"
+                    onClick={() => toggleRoomCollapse(room.id)}
+                    aria-expanded={!isCollapsed}
                   >
-                    {getTimeDisplay(bed, now, showRemaining)}
-                  </p>
-                )}
-              </article>
-            )
-          })}
-        </main>
+                    <span
+                      className={`room-section__chevron${isCollapsed ? ' room-section__chevron--collapsed' : ''}`}
+                    >
+                      ⌄
+                    </span>
+                    <span className="room-section__name">{room.label}</span>
+                    <span className="room-section__meta">
+                      {firstNumber}–{lastNumber}번 · {occupiedCount} 사용중
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <main className="bed-grid">
+                      {roomBeds.map((bed) => renderBedCard(bed))}
+                    </main>
+                  )}
+                </section>
+              )
+            })
+          ) : (
+            <main className="bed-grid">
+              {filteredBeds.map((bed) => renderBedCard(bed))}
+            </main>
+          )}
+        </>
       )}
 
       {endEarlyConfirm && (
@@ -1724,6 +2343,27 @@ function App() {
                   </div>
                 </dl>
 
+                {currentBedActiveNotes.length > 0 && (
+                  <div className="bed-detail-notes">
+                    <h3 className="bed-detail-notes__title">환자 주의사항</h3>
+                    <ul className="briefing__note-list">
+                      {currentBedActiveNotes.map((n) => (
+                        <li key={n.id} className="briefing__note">
+                          <div className="briefing__note-head">
+                            <span className={`badge badge--${n.category}`}>
+                              {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
+                            </span>
+                            <span className="briefing__note-content">{n.content}</span>
+                          </div>
+                          <p className="briefing__note-source">
+                            근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {isInProgress && (
                   <DurationControls
                     minutes={currentBed.durationMinutes}
@@ -1743,6 +2383,16 @@ function App() {
                     onClick={openEditPatientModal}
                   >
                     환자 정보 수정
+                  </button>
+                )}
+
+                {isInProgress && (
+                  <button
+                    type="button"
+                    className="btn-add-note"
+                    onClick={() => openNoteModal('session')}
+                  >
+                    특이사항 기록
                   </button>
                 )}
 
@@ -1841,6 +2491,292 @@ function App() {
           </div>
         </div>
       )}
+
+      {noteModalOpen && currentBed && (
+        <div className="modal-overlay modal-overlay--top" onClick={closeNoteModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <h2>특이사항 기록</h2>
+              <button
+                type="button"
+                className="modal__close"
+                onClick={closeNoteModal}
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="note-segment">
+              <button
+                type="button"
+                className={`note-segment__btn${noteTab === 'session' ? ' note-segment__btn--active' : ''}`}
+                onClick={() => setNoteTab('session')}
+              >
+                금일 특이사항
+              </button>
+              <button
+                type="button"
+                className={`note-segment__btn${noteTab === 'patient' ? ' note-segment__btn--active' : ''}`}
+                onClick={() => setNoteTab('patient')}
+              >
+                환자 주의사항
+              </button>
+            </div>
+
+            {noteTab === 'session' ? (
+              <div className="modal__body">
+                <p className="note-elapsed">
+                  시작 후{' '}
+                  {currentBed.startTime
+                    ? Math.max(0, Math.round((now - currentBed.startTime) / 60000))
+                    : 0}
+                  분 · 자동
+                </p>
+
+                <div className="field">
+                  <span className="field__label">증상</span>
+                  <div className="chip-group">
+                    {SYMPTOM_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip chip--symptom${noteSymptoms.includes(opt.code) ? ' chip--active' : ''}`}
+                        onClick={() => setNoteSymptoms((prev) => toggleChip(prev, opt.code))}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="field">
+                  <span className="field__label">조치</span>
+                  <div className="chip-group">
+                    {ACTION_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip chip--action${noteActions.includes(opt.code) ? ' chip--active' : ''}`}
+                        onClick={() => setNoteActions((prev) => toggleChip(prev, opt.code))}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="field">
+                  <span className="field__label">심각도 (선택)</span>
+                  <div className="chip-group">
+                    {SEVERITY_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip${noteSeverity === opt.code ? ' chip--active' : ''}`}
+                        onClick={() =>
+                          setNoteSeverity((prev) => (prev === opt.code ? null : opt.code))
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="field">
+                  <span className="field__label">메모 (선택)</span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={noteMemo}
+                    onChange={(e) => setNoteMemo(e.target.value)}
+                    placeholder="자유서술 한 줄"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className="btn-register"
+                  onClick={handleSaveSessionNote}
+                  disabled={noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()}
+                >
+                  저장
+                </button>
+              </div>
+            ) : (
+              <div className="modal__body">
+                <div className="field">
+                  <span className="field__label">분류</span>
+                  <div className="chip-group">
+                    {NOTE_CATEGORY_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip chip--category-${opt.code}${noteCategory === opt.code ? ' chip--active' : ''}`}
+                        onClick={() => setNoteCategory(opt.code)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="field">
+                  <span className="field__label">내용</span>
+                  <input
+                    type="text"
+                    className="field__input"
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    placeholder="예: 특정 항생제 부작용 이력"
+                  />
+                </label>
+
+                <div className="field">
+                  <span className="field__label">출처</span>
+                  <div className="chip-group">
+                    {NOTE_SOURCE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        className={`chip${noteSource === opt.code ? ' chip--active' : ''}`}
+                        onClick={() => setNoteSource(opt.code)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-register"
+                  onClick={handleSavePatientNote}
+                  disabled={!noteContent.trim()}
+                >
+                  저장
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {briefingOpen && currentBed && (() => {
+        const chartNumber = currentBed.chartNumber
+        const activeNotes = getActivePatientNotes(patientNotes, chartNumber)
+        const recentSessionNotes = getRecentSessionNotes(sessionNotes, chartNumber, 5)
+        const { count: pastVisitCount, lastVisitDate } = getPatientVisitInfo(
+          activeHistory,
+          chartNumber,
+        )
+        const isFirstVisit =
+          pastVisitCount === 0 && activeNotes.length === 0 && recentSessionNotes.length === 0
+
+        return (
+          <div className="modal-overlay modal-overlay--top" onClick={handleBriefingDismiss}>
+            <div className="modal modal--briefing" onClick={(e) => e.stopPropagation()}>
+              <div className="modal__header">
+                <div className="briefing__identity">
+                  <h2>{currentBed.patientName}</h2>
+                  <p className="briefing__sub">
+                    {chartNumber}
+                    {!isFirstVisit && ` · ${pastVisitCount + 1}번째 방문`}
+                    {!isFirstVisit && lastVisitDate && ` · 최근 방문 ${lastVisitDate}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="modal__close"
+                  onClick={handleBriefingDismiss}
+                  aria-label="닫기"
+                >
+                  ×
+                </button>
+              </div>
+
+              {isFirstVisit ? (
+                <div className="modal__body briefing__empty">
+                  <p className="briefing__empty-message">
+                    첫 방문입니다.
+                    <br />
+                    특이사항이 있으면 지금 등록하세요.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-add-note"
+                    onClick={handleAddNoteFromBriefing}
+                  >
+                    주의사항 등록
+                  </button>
+                </div>
+              ) : (
+                <div className="modal__body">
+                  {activeNotes.length > 0 && (
+                    <div className="briefing__section">
+                      <h3 className="briefing__section-title">환자 주의사항</h3>
+                      <ul className="briefing__note-list">
+                        {activeNotes.map((n) => (
+                          <li key={n.id} className="briefing__note">
+                            <div className="briefing__note-head">
+                              <span className={`badge badge--${n.category}`}>
+                                {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
+                              </span>
+                              <span className="briefing__note-content">{n.content}</span>
+                            </div>
+                            <p className="briefing__note-source">
+                              근거:{' '}
+                              {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {recentSessionNotes.length > 0 && (
+                    <div className="briefing__section">
+                      <h3 className="briefing__section-title">최근 이용 이력</h3>
+                      <ul className="briefing__history-list">
+                        {recentSessionNotes.map((n) => (
+                          <li key={n.id}>{formatSessionNoteLine(n)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="briefing__actions">
+                    <div className="briefing__actions-left">
+                      <button
+                        type="button"
+                        className="btn-briefing-secondary"
+                        onClick={handleAddNoteFromBriefing}
+                      >
+                        주의사항 추가
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-briefing-secondary"
+                        onClick={handleGoFullHistory}
+                      >
+                        전체 기록
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-register briefing__confirm"
+                      onClick={handleBriefingDismiss}
+                    >
+                      확인하고 수액 시작
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
