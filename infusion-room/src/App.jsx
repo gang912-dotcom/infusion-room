@@ -349,14 +349,6 @@ function getBedStatusCategory(bed, now) {
   return 'occupied'
 }
 
-function getStatusLabel(bed, now) {
-  if (bed.status === 'vacant') return '이용 가능'
-  if (bed.status === 'completed' || getBedProgress(bed, now).isCompleted) {
-    return '이용 완료'
-  }
-  return '진행중'
-}
-
 function resetBedToVacant(bed) {
   return {
     ...bed,
@@ -1647,6 +1639,9 @@ function App() {
   const currentBedActiveNotes = currentBed
     ? getActivePatientNotes(patientNotes, currentBed.chartNumber)
     : []
+  const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
+  const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
+  const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
 
   function toggleRoomCollapse(roomId) {
     setCollapsedRooms((prev) => {
@@ -2243,7 +2238,14 @@ function App() {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <h2>베드 {selectedBed.number}</h2>
+              <div className="modal__header-title">
+                <h2>베드 {selectedBed.number}</h2>
+                {isInProgress && (
+                  <span className={`modal-chip modal-chip--${currentBedChipCategory}`}>
+                    {currentBedChipLabel}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 className="modal__close"
@@ -2294,54 +2296,37 @@ function App() {
               </div>
             ) : (
               <div className="modal__body">
-                <dl className="info-list">
-                  <div className="info-list__row">
-                    <dt>수액실</dt>
-                    <dd>
-                      {TABS.find((tab) => tab.id === currentBed.room)?.label}
-                    </dd>
+                <div className="bed-detail-summary">
+                  <div className="bed-detail-summary__patient">
+                    <span className="bed-detail-summary__name">{currentBed.patientName}</span>
+                    <span className="bed-detail-summary__chart">차트 {currentBed.chartNumber}</span>
+                    {isInProgress && (
+                      <button
+                        type="button"
+                        className="btn-edit-patient"
+                        onClick={openEditPatientModal}
+                      >
+                        정보 수정
+                      </button>
+                    )}
                   </div>
-                  <div className="info-list__row">
-                    <dt>베드번호</dt>
-                    <dd className="info-list__dd--flex">
-                      {currentBed.number}
-                      {isInProgress && (
-                        <button
-                          type="button"
-                          className="btn-move-bed"
-                          onClick={handleStartMoveBed}
-                        >
-                          베드이동
-                        </button>
-                      )}
-                    </dd>
+                  <div className="bed-detail-summary__meta">
+                    <span className="bed-detail-summary__meta-text">
+                      {TABS.find((tab) => tab.id === currentBed.room)?.label} · 시작{' '}
+                      {formatHour24(currentBed.startTime)} · 진행{' '}
+                      {getBedProgress(currentBed, now).progress}%
+                    </span>
+                    {isInProgress && (
+                      <button
+                        type="button"
+                        className="btn-move-bed"
+                        onClick={handleStartMoveBed}
+                      >
+                        베드이동
+                      </button>
+                    )}
                   </div>
-                  <div className="info-list__row">
-                    <dt>환자명</dt>
-                    <dd>{currentBed.patientName}</dd>
-                  </div>
-                  <div className="info-list__row">
-                    <dt>차트번호</dt>
-                    <dd>{currentBed.chartNumber}</dd>
-                  </div>
-                  <div className="info-list__row">
-                    <dt>시작시간</dt>
-                    <dd>
-                      {new Date(currentBed.startTime).toLocaleTimeString(
-                        'ko-KR',
-                        { hour: '2-digit', minute: '2-digit' },
-                      )}
-                    </dd>
-                  </div>
-                  <div className="info-list__row">
-                    <dt>진행률</dt>
-                    <dd>{getBedProgress(currentBed, now).progress}%</dd>
-                  </div>
-                  <div className="info-list__row">
-                    <dt>상태</dt>
-                    <dd>{getStatusLabel(currentBed, now)}</dd>
-                  </div>
-                </dl>
+                </div>
 
                 {currentBedActiveNotes.length > 0 && (
                   <div className="bed-detail-notes">
@@ -2379,17 +2364,7 @@ function App() {
                 {isInProgress && (
                   <button
                     type="button"
-                    className="btn-edit-patient"
-                    onClick={openEditPatientModal}
-                  >
-                    환자 정보 수정
-                  </button>
-                )}
-
-                {isInProgress && (
-                  <button
-                    type="button"
-                    className="btn-add-note"
+                    className="btn-register"
                     onClick={() => openNoteModal('session')}
                   >
                     특이사항 기록
@@ -2399,7 +2374,7 @@ function App() {
                 {isInProgress && (
                   <button
                     type="button"
-                    className="btn-remove-patient"
+                    className="btn-remove-patient-link"
                     onClick={() => setRemovePatientConfirm(true)}
                   >
                     환자 등록 취소

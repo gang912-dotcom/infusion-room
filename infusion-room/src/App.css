@@ -493,6 +493,9 @@
 .modal {
   width: 100%;
   max-width: 420px;
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
   background: var(--panel-bg);
   border-radius: 16px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
@@ -503,6 +506,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
   padding: 20px 24px;
   background: var(--card-bg);
   border-bottom: 1px solid var(--card-border);
@@ -513,6 +517,32 @@
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.modal__header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.modal-chip--occupied {
+  color: var(--status-occupied);
+  background: var(--status-occupied-bg);
+}
+
+.modal-chip--warning {
+  color: var(--status-warning);
+  background: var(--status-warning-bg);
 }
 
 .modal__close {
@@ -540,8 +570,11 @@
 .modal__body {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   padding: 24px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .modal--confirm {
@@ -651,8 +684,8 @@
 
 .duration__display {
   margin: 0;
-  padding: 20px 16px;
-  font-size: 40px;
+  padding: 14px 16px;
+  font-size: 32px;
   font-weight: 700;
   font-family: var(--mono, ui-monospace, Consolas, monospace);
   color: var(--text-primary);
@@ -751,37 +784,48 @@
   outline-offset: 2px;
 }
 
-.modal__body--info {
-  gap: 0;
-}
-
-.info-list {
-  margin: 0;
-}
-
-.info-list__row {
+/* ─── 베드 상세: 압축 요약 (환자명/차트/메타) ─────────────────── */
+.bed-detail-summary {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--card-border);
+  flex-direction: column;
+  gap: 10px;
 }
 
-.info-list__row:last-child {
-  border-bottom: none;
+.bed-detail-summary__patient {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.info-list__row dt {
-  font-size: 14px;
-  font-weight: 500;
+.bed-detail-summary__name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bed-detail-summary__chart {
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
-.info-list__row dd {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
+.bed-detail-summary__patient .btn-edit-patient {
+  margin-left: auto;
+}
+
+.bed-detail-summary__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+
+.bed-detail-summary__meta-text {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* ─── 베드 상세: 환자 주의사항 ────────────────────────────────── */
@@ -1949,17 +1993,17 @@
 
 /* ─── 환자 정보 수정 버튼 ───────────────────────────────────── */
 .btn-edit-patient {
-  margin-top: 10px;
-  padding: 11px 14px;
-  width: 100%;
-  font-size: 14px;
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
   font-family: inherit;
   font-weight: 600;
   color: var(--status-occupied);
   background: var(--status-occupied-bg);
   border: 1px solid rgba(91, 157, 255, 0.4);
-  border-radius: 10px;
+  border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.2s, border-color 0.2s;
 }
 
@@ -1969,24 +2013,23 @@
 }
 
 /* ─── 환자 제거 버튼 ─────────────────────────────────────────── */
-.btn-remove-patient {
-  margin-top: 6px;
-  padding: 11px 14px;
-  width: 100%;
-  font-size: 14px;
+.btn-remove-patient-link {
+  align-self: center;
+  margin-top: 2px;
+  padding: 4px 8px;
+  font-size: 12px;
   font-family: inherit;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--status-completed);
-  background: var(--status-completed-bg);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 10px;
+  background: none;
+  border: none;
+  text-decoration: underline;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: filter 0.2s;
 }
 
-.btn-remove-patient:hover {
-  background: rgba(239, 68, 68, 0.26);
-  border-color: rgba(239, 68, 68, 0.6);
+.btn-remove-patient-link:hover {
+  filter: brightness(1.3);
 }
 
 /* 환자 제거 확인 팝업 */
@@ -2303,11 +2346,6 @@
 }
 
 /* ─── 베드이동 pill 버튼 ─────────────────────────────────────── */
-.info-list__dd--flex {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .btn-move-bed {
   padding: 3px 10px;
