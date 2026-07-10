@@ -372,6 +372,76 @@
   font-weight: 500;
 }
 
+/* ─── 카드 라운딩 줄 (상태별 알약, 클릭 시 라운딩 모달) ────────── */
+.bed-card__round {
+  align-self: flex-start;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: keep-all; /* 한국어: 어절(공백) 단위로만 줄바꿈, 낱글자 분리 방지 */
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: filter 0.15s, background 0.2s;
+}
+
+.bed-card__round:hover {
+  filter: brightness(1.15);
+}
+
+.bed-card__round-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* 문구+체온을 하나의 인라인 텍스트로 흘려 좁을 때 어절 단위로만 줄바꿈 */
+.bed-card__round-body {
+  min-width: 0;
+}
+
+.bed-card__round--ok {
+  color: var(--text-secondary);
+  background: var(--track-bg);
+}
+
+.bed-card__round--soon {
+  color: var(--status-occupied);
+  background: var(--status-occupied-bg);
+  border-color: rgba(91, 157, 255, 0.35);
+}
+
+.bed-card__round--due {
+  color: var(--status-completed);
+  background: var(--status-completed-bg);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.bed-card__round-temp {
+  font-weight: 700;
+}
+
+.bed-card__round-temp--mild {
+  color: var(--status-warning);
+}
+
+.bed-card__round-temp--high {
+  color: var(--status-completed);
+}
+
+/* 밀림(due) 카드 테두리 강조 */
+.bed-card--round-due {
+  border-color: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
+
 /* ─── 환자 주의사항 배지 (표시 전용) ──────────────────────────── */
 .bed-card__notes {
   display: flex;
@@ -2270,11 +2340,6 @@
   color: var(--status-occupied);
 }
 
-.round-input__hint {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
 
 .round-history__empty {
   margin: 0;

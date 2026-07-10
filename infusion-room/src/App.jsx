@@ -81,10 +81,7 @@ const ROUND_STATE_OPTIONS = [
   { code: 'fever', label: '발열' },
 ]
 
-// ROUND_INTERVAL_MIN/ROUND_SOON_LEAD_MIN은 A-3(카드 타이머)·A-4(몰아보기 힌트)에서 사용 예정.
-// eslint-disable-next-line no-unused-vars
 const ROUND_INTERVAL_MIN = 30 // 라운딩 간격(분)
-// eslint-disable-next-line no-unused-vars
 const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
 
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
@@ -238,6 +235,42 @@ function parseTemperature(raw) {
   if (!trimmed) return null
   const n = parseFloat(trimmed)
   return Number.isNaN(n) ? null : n
+}
+
+// 해당 세션의 마지막 라운딩(!deleted, occurredAt 최신 1건). 없으면 null.
+function getLatestSessionRound(rounds, sessionId) {
+  if (!sessionId) return null
+  let latest = null
+  for (const r of rounds) {
+    if (r.sessionId !== sessionId || r.deleted) continue
+    if (!latest || new Date(r.occurredAt) > new Date(latest.occurredAt)) latest = r
+  }
+  return latest
+}
+
+// 카드 라운딩 상태: anchor = 마지막 라운딩 occurredAt(없으면 수액 시작시각).
+// 경과 < 20분 → ok(남은 30−경과), 20~30분 → soon(남은 30−경과), ≥30분 → due(경과−30).
+// A-3의 soon은 순수 로컬 타이머 기준(같은 수액실 묶음 필터는 A-4에서).
+function getRoundStatus(bed, latestRound, now) {
+  const anchor = latestRound ? new Date(latestRound.occurredAt).getTime() : bed.startTime
+  if (!anchor) return null
+  const elapsedMin = Math.max(0, Math.floor((now - anchor) / 60000))
+  const soonAt = ROUND_INTERVAL_MIN - ROUND_SOON_LEAD_MIN // 20
+  if (elapsedMin < soonAt) {
+    return { status: 'ok', minutes: ROUND_INTERVAL_MIN - elapsedMin }
+  }
+  if (elapsedMin < ROUND_INTERVAL_MIN) {
+    return { status: 'soon', minutes: ROUND_INTERVAL_MIN - elapsedMin }
+  }
+  return { status: 'due', minutes: elapsedMin - ROUND_INTERVAL_MIN }
+}
+
+// 카드에 얹을 체온: 마지막 라운딩 체온이 mild/high면 { temp, tone }, 정상·미측정이면 null.
+function getCardRoundTemp(latestRound) {
+  if (!latestRound) return null
+  const tone = getRoundTempTone(latestRound.temperature)
+  if (!tone) return null
+  return { temp: latestRound.temperature, tone }
 }
 
 function createHistoryEntry(bed, endTime) {
@@ -2018,9 +2051,13 @@ function App() {
     setNoteModalOpen(false)
   }
 
-  function openRoundModal() {
-    if (!currentBed) return
-    setRoundOccurredAt(Date.now())
+  function openRoundModal(bed) {
+    // 카드에서 열 때는 대상 베드를 넘김 → currentBed가 그 베드로 해석되도록 selectedBed 세팅.
+    // 베드 상세 모달의 버튼에서 열 때는 인자 없이(이미 selectedBed 설정됨) currentBed 사용.
+    const target = bed ?? currentBed
+    if (!target) return
+    if (bed) setSelectedBed(bed)
+    setRoundOccurredAt(now) // 기본 발생시각 = 현재(매초 갱신되는 now state)
     setRoundTemp('')
     setRoundState(null)
     setRoundMemo('')
@@ -2162,10 +2199,25 @@ function App() {
     const chipLabel = completed ? '완료' : isWarning ? '곧 완료' : '진행중'
     const noteLines = getCardNoteLines(patientNotes, sessionNotes, bed)
 
+    // 라운딩 줄 (완료/정리 상태 카드에는 표시 안 함)
+    const latestRound = completed ? null : getLatestSessionRound(rounds, bed.sessionId)
+    const roundStatus = completed ? null : getRoundStatus(bed, latestRound, now)
+    const roundTemp = completed ? null : getCardRoundTemp(latestRound)
+    const roundText =
+      roundStatus?.status === 'ok'
+        ? `라운딩 ${roundStatus.minutes}분 후`
+        : roundStatus?.status === 'soon'
+          ? `곧 라운딩 · ${roundStatus.minutes}분 후`
+          : roundStatus?.status === 'due'
+            ? `라운딩 필요 · ${roundStatus.minutes}분 경과`
+            : ''
+    const roundIcon =
+      roundStatus?.status === 'due' ? '⚠' : roundStatus?.status === 'soon' ? '🔔' : '🕐'
+
     return (
       <article
         key={bed.id}
-        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
+        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${roundStatus?.status === 'due' ? ' bed-card--round-due' : ''}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
         onClick={() => handleBedClick(bed)}
         role="button"
         tabIndex={0}
@@ -2175,6 +2227,26 @@ function App() {
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient">{bed.patientName}</p>
         <p className="bed-card__chart">{bed.chartNumber}</p>
+        {roundStatus && (
+          <button
+            type="button"
+            className={`bed-card__round bed-card__round--${roundStatus.status}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openRoundModal(bed)
+            }}
+          >
+            <span className="bed-card__round-icon" aria-hidden="true">{roundIcon}</span>
+            <span className="bed-card__round-body">
+              {roundText}
+              {roundTemp && (
+                <span className={`bed-card__round-temp bed-card__round-temp--${roundTemp.tone}`}>
+                  {' · '}{roundTemp.temp}℃
+                </span>
+              )}
+            </span>
+          </button>
+        )}
         {noteLines.lines.length > 0 && (
           <div className="bed-card__notes">
             {noteLines.lines.map((line, i) => (
@@ -2571,7 +2643,7 @@ function App() {
                     <button
                       type="button"
                       className="btn-round-entry"
-                      onClick={openRoundModal}
+                      onClick={() => openRoundModal()}
                     >
                       라운딩
                     </button>
@@ -2921,10 +2993,7 @@ function App() {
               </div>
 
               <div className="round-input">
-                <h3 className="round-input__title">
-                  새 라운딩 기록{' '}
-                  <span className="round-input__hint">(안 해도 됨 · 조회만 가능)</span>
-                </h3>
+                <h3 className="round-input__title">새 라운딩 기록</h3>
 
                 <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} />
 
