@@ -250,7 +250,7 @@
   justify-content: center;
   text-align: center;
   gap: 8px;
-  min-height: 100px;
+  min-height: 260px;
   box-shadow: none;
 }
 
@@ -264,7 +264,7 @@
 .bed-card--occupied,
 .bed-card--warning,
 .bed-card--completed {
-  min-height: 160px;
+  min-height: 260px;
 }
 
 .bed-card--warning {
@@ -373,11 +373,18 @@
 }
 
 /* ─── 환자 주의사항 배지 (표시 전용) ──────────────────────────── */
+.bed-card__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
 .bed-card__caution {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -396,6 +403,21 @@
 
 .bed-card__caution--caution {
   color: var(--status-warning);
+}
+
+.bed-card__caution--neutral {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.bed-card__caution--more {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.bed-card__spacer {
+  flex: 1 1 auto;
 }
 
 .bed-card__progress {
@@ -667,6 +689,87 @@
 
 .field__input::placeholder {
   color: var(--text-muted);
+}
+
+.occurred-at {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.occurred-at__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.occurred-at__row .field__label {
+  flex-shrink: 0;
+}
+
+.occurred-at__input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color-scheme: dark;
+}
+
+.occurred-at__input:focus {
+  outline: none;
+  border-color: var(--status-occupied);
+}
+
+.occurred-at__now {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--status-occupied);
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.occurred-at__now:hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.occurred-at__pulls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.occurred-at__pull {
+  min-height: 36px;
+  padding: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+}
+
+.occurred-at__pull:active {
+  transform: scale(0.98);
+}
+
+.occurred-at__pull:hover {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.6);
 }
 
 .duration {

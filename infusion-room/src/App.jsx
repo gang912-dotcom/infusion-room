@@ -7,6 +7,7 @@ const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
 const SESSION_NOTES_STORAGE_KEY = 'infusion-room-session-notes'
 const PATIENT_NOTES_STORAGE_KEY = 'infusion-room-patient-notes'
+const ROUNDS_STORAGE_KEY = 'infusion-room-rounds'
 
 const TABS = [
   { id: 'all', label: '전체' },
@@ -71,6 +72,26 @@ const NOTE_SOURCE_OPTIONS = [
   { code: 'clinic_relay', label: '진료실 전달' },
   { code: 'direct_obs', label: '직접 관찰' },
 ]
+
+// ─── 라운딩(정기 순회 체크) 표준 어휘 · 설정 상수 ──────────────────
+// A-2~A-4(라운딩 모달·카드 표시)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
+// eslint-disable-next-line no-unused-vars
+const ROUND_STATE_OPTIONS = [
+  { code: 'good', label: '양호' },
+  { code: 'sleeping', label: '수면 중' },
+  { code: 'discomfort', label: '불편감 호소' },
+  { code: 'fever', label: '발열' },
+]
+
+// eslint-disable-next-line no-unused-vars
+const ROUND_INTERVAL_MIN = 30 // 라운딩 간격(분)
+// eslint-disable-next-line no-unused-vars
+const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
+
+// eslint-disable-next-line no-unused-vars
+const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
+// eslint-disable-next-line no-unused-vars
+const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
 
 function generateNoteId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -168,6 +189,36 @@ function loadPatientNotesFromStorage() {
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
+  }
+}
+
+function loadRoundsFromStorage() {
+  try {
+    const raw = localStorage.getItem(ROUNDS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+// 최소 유효 라운딩 = occurredAt만 있으면 성립("확인 도장").
+// temperature/state/memo는 모두 선택이며 비어도 레코드가 생기고 타이머가 리셋된다.
+// A-2(라운딩 입력 모달)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
+// eslint-disable-next-line no-unused-vars
+function createRoundRecord({ sessionId, chartNumber, occurredAt, temperature = null, state = null, memo = '' }) {
+  return {
+    id: generateNoteId('rnd'),
+    sessionId,
+    chartNumber,
+    occurredAt,
+    temperature,
+    state,
+    memo,
+    createdAt: new Date().toISOString(),
+    createdBy: null,
+    deleted: false,
   }
 }
 
@@ -290,6 +341,53 @@ function formatHour24(timestamp) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// 공용 발생시각 선택 컴포넌트: 기본값 지금, 당김 버튼(-5/-15/-30분), 시:분 직접입력.
+// 특이사항 기록 폼과 라운딩 모달(A-2) 양쪽에서 재사용한다.
+function OccurredAtPicker({ valueMs, onChange }) {
+  const d = new Date(valueMs)
+  const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+
+  function adjust(deltaMin) {
+    onChange(valueMs + deltaMin * 60000)
+  }
+
+  function handleTimeInput(e) {
+    const [h, m] = e.target.value.split(':').map(Number)
+    if (Number.isNaN(h) || Number.isNaN(m)) return
+    const next = new Date(valueMs)
+    next.setHours(h, m, 0, 0)
+    onChange(next.getTime())
+  }
+
+  return (
+    <div className="occurred-at">
+      <div className="occurred-at__row">
+        <span className="field__label">발생 시각</span>
+        <input
+          type="time"
+          className="occurred-at__input"
+          value={timeStr}
+          onChange={handleTimeInput}
+        />
+        <button type="button" className="occurred-at__now" onClick={() => onChange(Date.now())}>
+          지금
+        </button>
+      </div>
+      <div className="occurred-at__pulls">
+        <button type="button" className="occurred-at__pull" onClick={() => adjust(-5)}>
+          -5분
+        </button>
+        <button type="button" className="occurred-at__pull" onClick={() => adjust(-15)}>
+          -15분
+        </button>
+        <button type="button" className="occurred-at__pull" onClick={() => adjust(-30)}>
+          -30분
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function getBedProgress(bed, now) {
   if (!bed.startTime || !bed.durationMinutes) {
     return {
@@ -398,32 +496,55 @@ function inRange(entry, from, to) {
 // ─── 브리핑 팝업 데이터 헬퍼 ─────────────────────────────────────
 const NOTE_CATEGORY_RANK = { warning: 0, caution: 1, info: 2 }
 
+// occurredAt이 없는 기존(레거시) session_note는 createdAt으로 대체
+function getNoteOccurredAt(note) {
+  return note.occurredAt ?? note.createdAt
+}
+
 function getActivePatientNotes(patientNotes, chartNumber) {
   return patientNotes
     .filter((n) => n.chartNumber === chartNumber && n.active && !n.deleted)
     .sort((a, b) => (NOTE_CATEGORY_RANK[a.category] ?? 3) - (NOTE_CATEGORY_RANK[b.category] ?? 3))
 }
 
-// 베드 카드용 주의사항 배지 요약 (info는 제외 — 카드에는 warning/caution만)
-function getCardCautionBadge(patientNotes, chartNumber) {
-  const relevant = patientNotes.filter(
+// 베드 카드용 특이사항 다줄 요약: 경고(patient_note) → 주의(patient_note) → 금일(session_note) 순,
+// 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로 (info는 카드에서 계속 제외)
+function getCardNoteLines(patientNotes, sessionNotes, bed) {
+  const relevantPatientNotes = patientNotes.filter(
     (n) =>
-      n.chartNumber === chartNumber &&
+      n.chartNumber === bed.chartNumber &&
       n.active &&
       !n.deleted &&
       (n.category === 'warning' || n.category === 'caution'),
   )
-  if (relevant.length === 0) return null
+  const warnings = relevantPatientNotes.filter((n) => n.category === 'warning')
+  const cautions = relevantPatientNotes.filter((n) => n.category === 'caution')
+  const todayNotes = getSessionNotesBySessionId(sessionNotes, bed.sessionId).sort(
+    (a, b) => new Date(getNoteOccurredAt(b)) - new Date(getNoteOccurredAt(a)),
+  )
 
-  const hasWarning = relevant.some((n) => n.category === 'warning')
-  const label = relevant.length === 1 ? relevant[0].content : `주의사항 ${relevant.length}`
-  return { label, tone: hasWarning ? 'danger' : 'caution' }
+  const allLines = [
+    ...warnings.map((n) => ({ tone: 'danger', icon: '⚠', text: n.content })),
+    ...cautions.map((n) => ({ tone: 'caution', icon: '⚠', text: n.content })),
+    ...todayNotes.map((n) => ({
+      tone: 'neutral',
+      icon: '🕐',
+      text: `${formatHour24(getNoteOccurredAt(n))} ${summarizeSessionNotesForTable([n])}`,
+    })),
+  ]
+
+  const MAX_LINES = 4
+  if (allLines.length <= MAX_LINES) {
+    return { lines: allLines, moreCount: 0 }
+  }
+  const shown = allLines.slice(0, MAX_LINES - 1)
+  return { lines: shown, moreCount: allLines.length - shown.length }
 }
 
 function getRecentSessionNotes(sessionNotes, chartNumber, limit = 5) {
   return sessionNotes
     .filter((n) => n.chartNumber === chartNumber && !n.deleted)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .sort((a, b) => new Date(getNoteOccurredAt(b)) - new Date(getNoteOccurredAt(a)))
     .slice(0, limit)
 }
 
@@ -434,7 +555,7 @@ function formatSessionNoteLine(note) {
   const actionLabels = note.actions
     .map((code) => ACTION_OPTIONS.find((o) => o.code === code)?.label)
     .filter(Boolean)
-  const dateStr = new Date(note.createdAt).toLocaleDateString('ko-KR', {
+  const dateStr = new Date(getNoteOccurredAt(note)).toLocaleDateString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -752,6 +873,10 @@ function PatientView({
     ? getActivePatientNotes(patientNotes, selectedPatient.chartNumber)
     : []
 
+  const selectedPatientRecentNotes = selectedPatient
+    ? getRecentSessionNotes(sessionNotes, selectedPatient.chartNumber, 5)
+    : []
+
   return (
     <div className="patient-section">
       {/* 검색창 */}
@@ -855,6 +980,18 @@ function PatientView({
                       근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
                     </p>
                   </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 최근 방문 타임라인 (금일 특이사항) */}
+          {selectedPatientRecentNotes.length > 0 && (
+            <div className="patient-notes">
+              <h3 className="patient-history__title">최근 방문 특이사항</h3>
+              <ul className="briefing__history-list">
+                {selectedPatientRecentNotes.map((n) => (
+                  <li key={n.id}>{formatSessionNoteLine(n)}</li>
                 ))}
               </ul>
             </div>
@@ -1544,6 +1681,9 @@ function App() {
   const [history, setHistory] = useState(() => loadHistoryFromStorage())
   const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotesFromStorage())
   const [patientNotes, setPatientNotes] = useState(() => loadPatientNotesFromStorage())
+  // setRounds는 A-2(라운딩 입력 모달)에서 사용 예정. A-1은 데이터 배관만 두는 단계라 아직 미사용.
+  // eslint-disable-next-line no-unused-vars
+  const [rounds, setRounds] = useState(() => loadRoundsFromStorage())
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
@@ -1560,6 +1700,7 @@ function App() {
   const [moveBedAlert, setMoveBedAlert] = useState('')
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [noteTab, setNoteTab] = useState('session')
+  const [noteOccurredAt, setNoteOccurredAt] = useState(() => Date.now())
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
   const [noteSeverity, setNoteSeverity] = useState(null)
@@ -1591,6 +1732,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem(PATIENT_NOTES_STORAGE_KEY, JSON.stringify(patientNotes))
   }, [patientNotes])
+
+  useEffect(() => {
+    localStorage.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds))
+  }, [rounds])
 
   useEffect(() => {
     if (!hasActiveSessions) return
@@ -1837,6 +1982,7 @@ function App() {
   function openNoteModal(tab) {
     if (!currentBed) return
     setNoteTab(tab)
+    setNoteOccurredAt(Date.now())
     setNoteSymptoms([])
     setNoteActions([])
     setNoteSeverity(null)
@@ -1860,13 +2006,14 @@ function App() {
     if (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()) return
 
     const elapsedMin = currentBed.startTime
-      ? Math.max(0, Math.round((now - currentBed.startTime) / 60000))
+      ? Math.max(0, Math.round((noteOccurredAt - currentBed.startTime) / 60000))
       : 0
 
     const newNote = {
       id: generateNoteId('sn'),
       sessionId: currentBed.sessionId,
       chartNumber: currentBed.chartNumber,
+      occurredAt: new Date(noteOccurredAt).toISOString(),
       elapsedMin,
       symptoms: noteSymptoms,
       actions: noteActions,
@@ -1965,7 +2112,7 @@ function App() {
     const displayProgress = completed ? 100 : progress
     const category = completed ? 'completed' : isWarning ? 'warning' : 'occupied'
     const chipLabel = completed ? '완료' : isWarning ? '곧 완료' : '진행중'
-    const cautionBadge = getCardCautionBadge(patientNotes, bed.chartNumber)
+    const noteLines = getCardNoteLines(patientNotes, sessionNotes, bed)
 
     return (
       <article
@@ -1980,12 +2127,22 @@ function App() {
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient">{bed.patientName}</p>
         <p className="bed-card__chart">{bed.chartNumber}</p>
-        {cautionBadge && (
-          <p className={`bed-card__caution bed-card__caution--${cautionBadge.tone}`}>
-            <span className="bed-card__caution-icon">⚠</span>
-            {cautionBadge.label}
-          </p>
+        {noteLines.lines.length > 0 && (
+          <div className="bed-card__notes">
+            {noteLines.lines.map((line, i) => (
+              <p key={i} className={`bed-card__caution bed-card__caution--${line.tone}`}>
+                <span className="bed-card__caution-icon">{line.icon}</span>
+                {line.text}
+              </p>
+            ))}
+            {noteLines.moreCount > 0 && (
+              <p className="bed-card__caution bed-card__caution--more">
+                +{noteLines.moreCount}건 더
+              </p>
+            )}
+          </div>
         )}
+        <div className="bed-card__spacer" />
         <div className="bed-card__progress">
           <p className="bed-card__progress-text">
             진행률 {displayProgress}%
@@ -2501,12 +2658,13 @@ function App() {
 
             {noteTab === 'session' ? (
               <div className="modal__body">
+                <OccurredAtPicker valueMs={noteOccurredAt} onChange={setNoteOccurredAt} />
                 <p className="note-elapsed">
                   시작 후{' '}
                   {currentBed.startTime
-                    ? Math.max(0, Math.round((now - currentBed.startTime) / 60000))
+                    ? Math.max(0, Math.round((noteOccurredAt - currentBed.startTime) / 60000))
                     : 0}
-                  분 · 자동
+                  분
                 </p>
 
                 <div className="field">
