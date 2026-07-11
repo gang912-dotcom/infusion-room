@@ -273,6 +273,17 @@ function getCardRoundTemp(latestRound) {
   return { temp: latestRound.temperature, tone }
 }
 
+// 몰아보기 힌트(A-4): 그 방(진행중·미완료 베드만) 안에 라운딩 밀림(due)이 하나라도 있는지.
+// soon 힌트를 보여줄지 게이팅하는 데만 쓰임 — ok/due 판정 자체는 바꾸지 않음.
+function getRoomHasDue(roomBeds, rounds, now) {
+  return roomBeds.some((bed) => {
+    if (bed.status !== 'in-progress') return false
+    if (getBedProgress(bed, now).isCompleted) return false
+    const latestRound = getLatestSessionRound(rounds, bed.sessionId)
+    return getRoundStatus(bed, latestRound, now)?.status === 'due'
+  })
+}
+
 function createHistoryEntry(bed, endTime) {
   const startTime = bed.startTime ?? endTime
   const usedMinutes = Math.round((endTime - startTime) / 60000)
@@ -1830,6 +1841,16 @@ function App() {
         }))
       : null
 
+  // 몰아보기 힌트(A-4): 방 id → 그 방에 due(밀림)가 있는지. 탭과 무관하게 항상 beds 전체 기준.
+  const roomDueMap = {}
+  for (const room of ROOM_ORDER) {
+    roomDueMap[room.id] = getRoomHasDue(
+      beds.filter((bed) => bed.room === room.id),
+      rounds,
+      now,
+    )
+  }
+
   const currentBed = selectedBed
     ? beds.find((bed) => bed.id === selectedBed.id) ?? selectedBed
     : null
@@ -2201,7 +2222,13 @@ function App() {
 
     // 라운딩 줄 (완료/정리 상태 카드에는 표시 안 함)
     const latestRound = completed ? null : getLatestSessionRound(rounds, bed.sessionId)
-    const roundStatus = completed ? null : getRoundStatus(bed, latestRound, now)
+    const rawRoundStatus = completed ? null : getRoundStatus(bed, latestRound, now)
+    // 몰아보기 힌트(A-4): soon은 같은 방에 due가 있을 때만 노출, 없으면 ok처럼 조용히 표시.
+    // ok·due 판정 자체와 minutes 공식은 그대로(둘 다 30−경과) — 상태 라벨만 강등.
+    const roundStatus =
+      rawRoundStatus?.status === 'soon' && !roomDueMap[bed.room]
+        ? { ...rawRoundStatus, status: 'ok' }
+        : rawRoundStatus
     const roundTemp = completed ? null : getCardRoundTemp(latestRound)
     const roundText =
       roundStatus?.status === 'ok'
