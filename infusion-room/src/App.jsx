@@ -2283,7 +2283,7 @@ function App() {
               {formatHour24(bed.startTime)} · {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
             </span>
             <span className="bed-card__remaining">
-              남은 {formatDuration(Math.ceil(remainingMs / 60000))}
+              {formatDuration(Math.ceil(remainingMs / 60000))} 남음
             </span>
           </div>
         )}
