@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
-import headerPortrait from './assets/header-portrait.png'
+import headerPortrait from './assets/header-portrait-cutout.png'
 
 const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
