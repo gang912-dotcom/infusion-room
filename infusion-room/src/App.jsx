@@ -1568,7 +1568,7 @@ function DataManageView({
 
       {/* ── 삭제 확인 팝업 ── */}
       {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(false)}>
+        <div className="modal-overlay">
           <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal__body modal__body--confirm">
               <p className="confirm__message">
@@ -2477,7 +2477,7 @@ function App() {
       )}
 
       {endEarlyConfirm && (
-        <div className="modal-overlay modal-overlay--top" onClick={closeEndEarlyConfirm}>
+        <div className="modal-overlay modal-overlay--top">
           <div
             className="modal modal--confirm"
             onClick={(e) => e.stopPropagation()}
@@ -2512,7 +2512,7 @@ function App() {
       )}
 
       {cleanupBed && (
-        <div className="modal-overlay" onClick={closeCleanupConfirm}>
+        <div className="modal-overlay">
           <div
             className="modal modal--confirm"
             onClick={(e) => e.stopPropagation()}
@@ -2545,7 +2545,7 @@ function App() {
       )}
 
       {selectedBed && (
-        <div className="modal-overlay" onClick={closeModal}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
@@ -2699,13 +2699,17 @@ function App() {
                     환자 등록 취소
                   </button>
                 )}
+
+                <button type="button" className="btn-detail-confirm" onClick={closeModal}>
+                  확인
+                </button>
               </div>
             )}
           </div>
         </div>
       )}
       {removePatientConfirm && currentBed && (
-        <div className="modal-overlay modal-overlay--top" onClick={() => setRemovePatientConfirm(false)}>
+        <div className="modal-overlay modal-overlay--top">
           <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal__body modal__body--confirm">
               <p className="confirm__message">
@@ -2738,7 +2742,7 @@ function App() {
       )}
 
       {editPatientModal && currentBed && (
-        <div className="modal-overlay" onClick={closeEditPatientModal}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>환자 정보 수정</h2>
@@ -2787,7 +2791,7 @@ function App() {
       )}
 
       {noteModalOpen && currentBed && (
-        <div className="modal-overlay modal-overlay--top" onClick={closeNoteModal}>
+        <div className="modal-overlay modal-overlay--top">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>특이사항 기록</h2>
@@ -2959,7 +2963,7 @@ function App() {
       )}
 
       {roundModalOpen && roundModalBed && (
-        <div className="modal-overlay modal-overlay--top" onClick={closeRoundModal}>
+        <div className="modal-overlay modal-overlay--top">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="round-header">
@@ -3116,7 +3120,7 @@ function App() {
           pastVisitCount === 0 && activeNotes.length === 0 && recentSessionNotes.length === 0
 
         return (
-          <div className="modal-overlay modal-overlay--top" onClick={handleBriefingDismiss}>
+          <div className="modal-overlay modal-overlay--top">
             <div className="modal modal--briefing" onClick={(e) => e.stopPropagation()}>
               <div className="modal__header">
                 <div className="briefing__identity">
