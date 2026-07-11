@@ -2298,8 +2298,15 @@ function App() {
         <div className="bed-card__spacer" />
         <div className="bed-card__progress">
           <p className="bed-card__progress-text">
-            진행률 {displayProgress}%
-            {!completed && <span className="bed-card__droplet">💧</span>}
+            <span>
+              진행률 {displayProgress}%
+              {!completed && <span className="bed-card__droplet">💧</span>}
+            </span>
+            {!completed && (
+              <span className="bed-card__progress-elapsed">
+                {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
+              </span>
+            )}
           </p>
           <div className="progress-bar">
             <div
@@ -2312,9 +2319,7 @@ function App() {
           <p className="bed-card__completed-label">정리 필요</p>
         ) : (
           <div className="bed-card__footer">
-            <span className="bed-card__meta">
-              {formatHour24(bed.startTime)} · {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
-            </span>
+            <span className="bed-card__meta">시작 - {formatHour24(bed.startTime)}</span>
             <span className="bed-card__remaining">
               {formatDuration(Math.ceil(remainingMs / 60000))} 남음
             </span>
