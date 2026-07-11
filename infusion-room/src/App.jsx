@@ -1769,6 +1769,7 @@ function App() {
   const [noteContent, setNoteContent] = useState('')
   const [noteSource, setNoteSource] = useState('patient_report')
   const [roundModalOpen, setRoundModalOpen] = useState(false)
+  const [roundModalBedId, setRoundModalBedId] = useState(null)
   const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
   const [roundTemp, setRoundTemp] = useState('')
   const [roundState, setRoundState] = useState(null)
@@ -1853,6 +1854,10 @@ function App() {
 
   const currentBed = selectedBed
     ? beds.find((bed) => bed.id === selectedBed.id) ?? selectedBed
+    : null
+  // 라운딩 모달은 베드 상세와 별개 상태로 대상을 들고 있음(selectedBed 딸림 방지, A-5)
+  const roundModalBed = roundModalBedId
+    ? beds.find((bed) => bed.id === roundModalBedId) ?? null
     : null
   const isVacant = currentBed?.status === 'vacant'
   const isInProgress = currentBed?.status === 'in-progress'
@@ -2073,11 +2078,11 @@ function App() {
   }
 
   function openRoundModal(bed) {
-    // 카드에서 열 때는 대상 베드를 넘김 → currentBed가 그 베드로 해석되도록 selectedBed 세팅.
-    // 베드 상세 모달의 버튼에서 열 때는 인자 없이(이미 selectedBed 설정됨) currentBed 사용.
+    // 라운딩 모달은 selectedBed(베드 상세 트리거)와 별개인 roundModalBedId로 대상을 들고 있음.
+    // 카드에서 열 때는 그 베드를, 베드 상세 안 버튼에서 열 때는 인자 없이(이미 열려있는 currentBed) 대상으로 삼음.
     const target = bed ?? currentBed
     if (!target) return
-    if (bed) setSelectedBed(bed)
+    setRoundModalBedId(target.id)
     setRoundOccurredAt(now) // 기본 발생시각 = 현재(매초 갱신되는 now state)
     setRoundTemp('')
     setRoundState(null)
@@ -2087,13 +2092,14 @@ function App() {
 
   function closeRoundModal() {
     setRoundModalOpen(false)
+    setRoundModalBedId(null)
   }
 
   function handleSaveRound() {
-    if (!currentBed) return
+    if (!roundModalBed) return
     const newRound = createRoundRecord({
-      sessionId: currentBed.sessionId,
-      chartNumber: currentBed.chartNumber,
+      sessionId: roundModalBed.sessionId,
+      chartNumber: roundModalBed.chartNumber,
       occurredAt: new Date(roundOccurredAt).toISOString(),
       temperature: parseTemperature(roundTemp),
       state: roundState,
@@ -2952,16 +2958,16 @@ function App() {
         </div>
       )}
 
-      {roundModalOpen && currentBed && (
+      {roundModalOpen && roundModalBed && (
         <div className="modal-overlay modal-overlay--top" onClick={closeRoundModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="round-header">
                 <h2>라운딩</h2>
                 <p className="round-header__sub">
-                  {currentBed.number}번 · {currentBed.patientName}
-                  {currentBed.startTime
-                    ? ` · 시작 후 ${Math.max(0, Math.round((now - currentBed.startTime) / 60000))}분`
+                  {roundModalBed.number}번 · {roundModalBed.patientName}
+                  {roundModalBed.startTime
+                    ? ` · 시작 후 ${Math.max(0, Math.round((now - roundModalBed.startTime) / 60000))}분`
                     : ''}
                 </p>
               </div>
@@ -2979,7 +2985,7 @@ function App() {
               <div className="round-history">
                 <h3 className="round-history__title">지난 라운딩 이력</h3>
                 {(() => {
-                  const list = getRoundsByChartNumber(rounds, currentBed.chartNumber)
+                  const list = getRoundsByChartNumber(rounds, roundModalBed.chartNumber)
                   if (list.length === 0) {
                     return <p className="round-history__empty">아직 라운딩 기록이 없습니다</p>
                   }
