@@ -159,6 +159,16 @@ CREATE TABLE IF NOT EXISTS note_sources (
   is_active  INTEGER NOT NULL DEFAULT 1
 );
 
+-- ─── 로그인 세션 (httpOnly 쿠키 토큰) ───────────────────────────────
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  token      TEXT PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_account ON auth_tokens(account_id);
+
 CREATE TABLE IF NOT EXISTS access_logs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id  INTEGER REFERENCES accounts(id),
