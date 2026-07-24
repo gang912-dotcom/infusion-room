@@ -159,6 +159,13 @@ CREATE TABLE IF NOT EXISTS note_sources (
   is_active  INTEGER NOT NULL DEFAULT 1
 );
 
+-- ─── 보드 변경 카운터 (폴링 시 변경 여부 판정용) ─────────────────────
+CREATE TABLE IF NOT EXISTS app_revision (
+  id    INTEGER PRIMARY KEY CHECK (id = 1),
+  value INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO app_revision (id, value) VALUES (1, 0);
+
 -- ─── 로그인 세션 (httpOnly 쿠키 토큰) ───────────────────────────────
 CREATE TABLE IF NOT EXISTS auth_tokens (
   token      TEXT PRIMARY KEY,

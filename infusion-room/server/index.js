@@ -1,6 +1,8 @@
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import authRouter from './routes/auth.js'
+import boardRouter from './routes/board.js'
+import patientsRouter from './routes/patients.js'
 import { requireAuth } from './middleware/requireAuth.js'
 
 const app = express()
@@ -10,7 +12,9 @@ app.use(cookieParser())
 app.use('/api', authRouter)
 
 app.use('/api', requireAuth)
-// (이후 단계에서 board / patients / sessions / rounds·notes / admin 라우터가 여기 아래에 mount 됨)
+app.use('/api', boardRouter)
+app.use('/api', patientsRouter)
+// (이후 단계에서 sessions / rounds·notes / admin 라우터가 여기 아래에 mount 됨)
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
