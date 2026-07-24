@@ -6,7 +6,8 @@ import patientsRouter from './routes/patients.js'
 import sessionsRouter from './routes/sessions.js'
 import roundsRouter from './routes/rounds.js'
 import notesRouter from './routes/notes.js'
-import { requireAuth } from './middleware/requireAuth.js'
+import adminRouter from './routes/admin.js'
+import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 
 const app = express()
 app.use(express.json())
@@ -20,7 +21,7 @@ app.use('/api', patientsRouter)
 app.use('/api', sessionsRouter)
 app.use('/api', roundsRouter)
 app.use('/api', notesRouter)
-// (이후 단계에서 admin 라우터가 여기 아래에 mount 됨)
+app.use('/api/admin', requireAdmin, adminRouter)
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {

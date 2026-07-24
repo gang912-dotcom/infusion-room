@@ -1,0 +1,125 @@
+import { Router } from 'express'
+import bcrypt from 'bcryptjs'
+import db from '../db.js'
+import { isUniqueConstraintError } from '../lib/validation.js'
+
+const router = Router()
+
+// ─── accounts ───────────────────────────────────────────────────────
+router.get('/accounts', (req, res) => {
+  res.json(db.prepare(
+    'SELECT id, username, display_name, role, is_active, created_at, updated_at FROM accounts ORDER BY id',
+  ).all())
+})
+
+router.post('/accounts', (req, res) => {
+  const { username, display_name, password, role = 'staff' } = req.body ?? {}
+  if (!username || !display_name || !password) {
+    return res.status(400).json({ error: 'username, display_name, password가 필요합니다' })
+  }
+  if (!['staff', 'admin'].includes(role)) {
+    return res.status(400).json({ error: '유효하지 않은 role입니다' })
+  }
+
+  const now = Date.now()
+  try {
+    const info = db.prepare(
+      `INSERT INTO accounts (username, display_name, password_hash, role, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+    ).run(username, display_name, bcrypt.hashSync(password, 10), role, now, now)
+    res.status(201).json({ id: info.lastInsertRowid })
+  } catch (err) {
+    if (isUniqueConstraintError(err)) return res.status(409).json({ error: '이미 존재하는 아이디입니다' })
+    throw err
+  }
+})
+
+function countOtherActiveAdmins(excludeId) {
+  return db.prepare(
+    "SELECT COUNT(*) c FROM accounts WHERE role = 'admin' AND is_active = 1 AND id != ?",
+  ).get(excludeId).c
+}
+
+router.patch('/accounts/:id', (req, res) => {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id)
+  if (!account) return res.status(404).json({ error: '존재하지 않는 계정입니다' })
+
+  const { display_name, password, is_active, role } = req.body ?? {}
+  if (role !== undefined && !['staff', 'admin'].includes(role)) {
+    return res.status(400).json({ error: '유효하지 않은 role입니다' })
+  }
+
+  const nextRole = role ?? account.role
+  const nextIsActive = is_active !== undefined ? (is_active ? 1 : 0) : account.is_active
+  const wasActiveAdmin = account.role === 'admin' && account.is_active === 1
+  const staysActiveAdmin = nextRole === 'admin' && nextIsActive === 1
+  if (wasActiveAdmin && !staysActiveAdmin && countOtherActiveAdmins(account.id) === 0) {
+    return res.status(400).json({ error: '마지막 admin 계정은 비활성화하거나 권한을 변경할 수 없습니다' })
+  }
+
+  const fields = []
+  const params = []
+  if (display_name !== undefined) { fields.push('display_name = ?'); params.push(display_name) }
+  if (password) { fields.push('password_hash = ?'); params.push(bcrypt.hashSync(password, 10)) }
+  if (is_active !== undefined) { fields.push('is_active = ?'); params.push(nextIsActive) }
+  if (role !== undefined) { fields.push('role = ?'); params.push(role) }
+  if (fields.length === 0) return res.status(400).json({ error: '변경할 값이 없습니다' })
+
+  fields.push('updated_at = ?')
+  params.push(Date.now(), account.id)
+  db.prepare(`UPDATE accounts SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+  res.json({ ok: true })
+})
+
+// ─── staff ──────────────────────────────────────────────────────────
+router.get('/staff', (req, res) => {
+  res.json(db.prepare('SELECT id, name, is_active, sort_order FROM staff ORDER BY sort_order').all())
+})
+
+router.post('/staff', (req, res) => {
+  const { name } = req.body ?? {}
+  if (!name) return res.status(400).json({ error: 'name이 필요합니다' })
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) m FROM staff').get().m
+  const info = db.prepare(
+    'INSERT INTO staff (name, is_active, sort_order, created_at) VALUES (?, 1, ?, ?)',
+  ).run(name, maxOrder + 1, Date.now())
+  res.status(201).json({ id: info.lastInsertRowid })
+})
+
+router.patch('/staff/:id', (req, res) => {
+  const staff = db.prepare('SELECT id FROM staff WHERE id = ?').get(req.params.id)
+  if (!staff) return res.status(404).json({ error: '존재하지 않는 직원입니다' })
+
+  const { name, is_active, sort_order } = req.body ?? {}
+  const fields = []
+  const params = []
+  if (name !== undefined) { fields.push('name = ?'); params.push(name) }
+  if (is_active !== undefined) { fields.push('is_active = ?'); params.push(is_active ? 1 : 0) }
+  if (sort_order !== undefined) { fields.push('sort_order = ?'); params.push(sort_order) }
+  if (fields.length === 0) return res.status(400).json({ error: '변경할 값이 없습니다' })
+
+  params.push(staff.id)
+  db.prepare(`UPDATE staff SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+  res.json({ ok: true })
+})
+
+// ─── settings ───────────────────────────────────────────────────────
+router.get('/settings', (req, res) => {
+  res.json(db.prepare('SELECT key, value, updated_at FROM settings ORDER BY key').all())
+})
+
+router.patch('/settings/:key', (req, res) => {
+  const setting = db.prepare('SELECT key FROM settings WHERE key = ?').get(req.params.key)
+  if (!setting) return res.status(404).json({ error: '존재하지 않는 설정입니다' })
+
+  const { value } = req.body ?? {}
+  if (value === undefined || value === null) {
+    return res.status(400).json({ error: 'value가 필요합니다' })
+  }
+
+  db.prepare('UPDATE settings SET value = ?, updated_at = ? WHERE key = ?')
+    .run(String(value), Date.now(), req.params.key)
+  res.json({ ok: true })
+})
+
+export default router
