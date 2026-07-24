@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
-
-const STORAGE_KEY = 'infusion-room-beds'
-const HISTORY_STORAGE_KEY = 'infusion-room-history'
-const SESSION_NOTES_STORAGE_KEY = 'infusion-room-session-notes'
-const PATIENT_NOTES_STORAGE_KEY = 'infusion-room-patient-notes'
-const ROUNDS_STORAGE_KEY = 'infusion-room-rounds'
+import {
+  loadBeds, saveBeds,
+  loadHistory, saveHistory,
+  loadSessionNotes, saveSessionNotes,
+  loadPatientNotes, savePatientNotes,
+  loadRounds, saveRounds,
+} from './api'
 
 const TABS = [
   { id: 'all', label: '전체' },
@@ -85,77 +86,9 @@ function generateNoteId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function createDefaultBeds() {
-  return [
-    ...Array.from({ length: 6 }, (_, i) => ({
-      id: `room2-${22 + i}`,
-      number: String(22 + i),
-      room: 'room2',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-    ...Array.from({ length: 13 }, (_, i) => ({
-      id: `room3-${1 + i}`,
-      number: String(1 + i),
-      room: 'room3',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-    ...Array.from({ length: 11 }, (_, i) => ({
-      id: `floor2-${i + 1}`,
-      number: `2F-${i + 1}`,
-      room: 'floor2',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-  ]
-}
-
 // 수액 세션 고유 ID 생성 ("금일 특이사항"이 세션 진행 중에 붙는 연결 키)
 function generateSessionId() {
   return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-function loadBedsFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return createDefaultBeds()
-
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return createDefaultBeds()
-
-    const savedById = Object.fromEntries(parsed.map((bed) => [bed.id, bed]))
-    return createDefaultBeds().map((defaultBed) => {
-      const saved = savedById[defaultBed.id]
-      if (!saved) return defaultBed
-      return { ...defaultBed, ...saved }
-    })
-  } catch {
-    return createDefaultBeds()
-  }
-}
-
-function loadArrayFromStorage(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
 }
 
 // 최소 유효 라운딩 = occurredAt만 있으면 성립("확인 도장").
@@ -1700,11 +1633,11 @@ function HistoryView({ history }) {
 
 // ─── App ────────────────────────────────────────────────────────
 function App() {
-  const [beds, setBeds] = useState(() => loadBedsFromStorage())
-  const [history, setHistory] = useState(() => loadArrayFromStorage(HISTORY_STORAGE_KEY))
-  const [sessionNotes, setSessionNotes] = useState(() => loadArrayFromStorage(SESSION_NOTES_STORAGE_KEY))
-  const [patientNotes, setPatientNotes] = useState(() => loadArrayFromStorage(PATIENT_NOTES_STORAGE_KEY))
-  const [rounds, setRounds] = useState(() => loadArrayFromStorage(ROUNDS_STORAGE_KEY))
+  const [beds, setBeds] = useState(() => loadBeds())
+  const [history, setHistory] = useState(() => loadHistory())
+  const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotes())
+  const [patientNotes, setPatientNotes] = useState(() => loadPatientNotes())
+  const [rounds, setRounds] = useState(() => loadRounds())
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
@@ -1744,23 +1677,23 @@ function App() {
   const activeHistory = history.filter((e) => !e.deleted)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(beds))
+    saveBeds(beds)
   }, [beds])
 
   useEffect(() => {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history))
+    saveHistory(history)
   }, [history])
 
   useEffect(() => {
-    localStorage.setItem(SESSION_NOTES_STORAGE_KEY, JSON.stringify(sessionNotes))
+    saveSessionNotes(sessionNotes)
   }, [sessionNotes])
 
   useEffect(() => {
-    localStorage.setItem(PATIENT_NOTES_STORAGE_KEY, JSON.stringify(patientNotes))
+    savePatientNotes(patientNotes)
   }, [patientNotes])
 
   useEffect(() => {
-    localStorage.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds))
+    saveRounds(rounds)
   }, [rounds])
 
   useEffect(() => {
