@@ -1,14 +1,8 @@
 import { Router } from 'express'
 import db from '../db.js'
+import { normalizeChartNo } from '../lib/validation.js'
 
 const router = Router()
-
-// 숫자만 허용, 앞자리 0 제거("001234" -> "1234", "0" -> "0")
-function normalizeChartNo(raw) {
-  const trimmed = String(raw ?? '').trim()
-  if (!/^\d+$/.test(trimmed)) return null
-  return trimmed.replace(/^0+(?=\d)/, '')
-}
 
 router.get('/patients/lookup', (req, res) => {
   const normalized = normalizeChartNo(req.query.chart_no)
