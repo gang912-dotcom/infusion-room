@@ -55,12 +55,6 @@ const ACTION_OPTIONS = [
   { code: 'observe', label: '경과관찰' },
 ]
 
-const SEVERITY_OPTIONS = [
-  { code: 'mild', label: '경미' },
-  { code: 'moderate', label: '보통' },
-  { code: 'severe', label: '심함' },
-]
-
 const NOTE_CATEGORY_OPTIONS = [
   { code: 'warning', label: '경고' },
   { code: 'caution', label: '주의' },
@@ -153,42 +147,9 @@ function loadBedsFromStorage() {
   }
 }
 
-function loadHistoryFromStorage() {
+function loadArrayFromStorage(key) {
   try {
-    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadSessionNotesFromStorage() {
-  try {
-    const raw = localStorage.getItem(SESSION_NOTES_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadPatientNotesFromStorage() {
-  try {
-    const raw = localStorage.getItem(PATIENT_NOTES_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function loadRoundsFromStorage() {
-  try {
-    const raw = localStorage.getItem(ROUNDS_STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed : []
@@ -1740,10 +1701,10 @@ function HistoryView({ history }) {
 // ─── App ────────────────────────────────────────────────────────
 function App() {
   const [beds, setBeds] = useState(() => loadBedsFromStorage())
-  const [history, setHistory] = useState(() => loadHistoryFromStorage())
-  const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotesFromStorage())
-  const [patientNotes, setPatientNotes] = useState(() => loadPatientNotesFromStorage())
-  const [rounds, setRounds] = useState(() => loadRoundsFromStorage())
+  const [history, setHistory] = useState(() => loadArrayFromStorage(HISTORY_STORAGE_KEY))
+  const [sessionNotes, setSessionNotes] = useState(() => loadArrayFromStorage(SESSION_NOTES_STORAGE_KEY))
+  const [patientNotes, setPatientNotes] = useState(() => loadArrayFromStorage(PATIENT_NOTES_STORAGE_KEY))
+  const [rounds, setRounds] = useState(() => loadArrayFromStorage(ROUNDS_STORAGE_KEY))
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
@@ -1763,7 +1724,6 @@ function App() {
   const [noteOccurredAt, setNoteOccurredAt] = useState(() => Date.now())
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
-  const [noteSeverity, setNoteSeverity] = useState(null)
   const [noteMemo, setNoteMemo] = useState('')
   const [noteCategory, setNoteCategory] = useState('caution')
   const [noteContent, setNoteContent] = useState('')
@@ -2065,7 +2025,6 @@ function App() {
     setNoteOccurredAt(Date.now())
     setNoteSymptoms([])
     setNoteActions([])
-    setNoteSeverity(null)
     setNoteMemo('')
     setNoteCategory('caution')
     setNoteContent('')
@@ -2129,7 +2088,6 @@ function App() {
       elapsedMin,
       symptoms: noteSymptoms,
       actions: noteActions,
-      severity: noteSeverity,
       memo: noteMemo.trim(),
       createdAt: new Date().toISOString(),
       createdBy: null,
@@ -2863,24 +2821,6 @@ function App() {
                         type="button"
                         className={`chip chip--action${noteActions.includes(opt.code) ? ' chip--active' : ''}`}
                         onClick={() => setNoteActions((prev) => toggleChip(prev, opt.code))}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="field">
-                  <span className="field__label">심각도 (선택)</span>
-                  <div className="chip-group">
-                    {SEVERITY_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        className={`chip${noteSeverity === opt.code ? ' chip--active' : ''}`}
-                        onClick={() =>
-                          setNoteSeverity((prev) => (prev === opt.code ? null : opt.code))
-                        }
                       >
                         {opt.label}
                       </button>
