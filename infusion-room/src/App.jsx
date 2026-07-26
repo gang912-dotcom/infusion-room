@@ -3,11 +3,14 @@ import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
-  loadBeds, saveBeds,
+  loadBeds,
   loadHistory, saveHistory,
   loadSessionNotes, saveSessionNotes,
   loadPatientNotes, savePatientNotes,
   loadRounds, saveRounds,
+  getStaffList, lookupPatient,
+  assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  updateSessionPatient,
 } from './api'
 
 const TABS = [
@@ -84,11 +87,6 @@ const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 
 
 function generateNoteId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-// 수액 세션 고유 ID 생성 ("금일 특이사항"이 세션 진행 중에 붙는 연결 키)
-function generateSessionId() {
-  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 // 최소 유효 라운딩 = occurredAt만 있으면 성립("확인 도장").
@@ -397,22 +395,11 @@ function sortBedsByNumber(bedList) {
 // 전체보기 상단 요약 바 집계용 상태 분류
 function getBedStatusCategory(bed, now) {
   if (bed.status === 'vacant') return 'vacant'
+  if (bed.status === 'reserved') return 'reserved'
   const { isCompleted, isWarning } = getBedProgress(bed, now)
   if (bed.status === 'completed' || isCompleted) return 'completed'
   if (isWarning) return 'warning'
   return 'occupied'
-}
-
-function resetBedToVacant(bed) {
-  return {
-    ...bed,
-    status: 'vacant',
-    patientName: '',
-    chartNumber: '',
-    startTime: null,
-    durationMinutes: null,
-    sessionId: null,
-  }
 }
 
 // ─── 공통 유틸 ───────────────────────────────────────────────────
@@ -1633,7 +1620,12 @@ function HistoryView({ history }) {
 
 // ─── App ────────────────────────────────────────────────────────
 function App() {
-  const [beds, setBeds] = useState(() => loadBeds())
+  const [beds, setBeds] = useState([])
+  const [staffList, setStaffList] = useState([])
+  const [lineStaffId, setLineStaffId] = useState('')
+  const [mixStaffId, setMixStaffId] = useState('')
+  const [lookupInfo, setLookupInfo] = useState(null)
+  const [actionError, setActionError] = useState('')
   const [history, setHistory] = useState(() => loadHistory())
   const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotes())
   const [patientNotes, setPatientNotes] = useState(() => loadPatientNotes())
@@ -1677,8 +1669,9 @@ function App() {
   const activeHistory = history.filter((e) => !e.deleted)
 
   useEffect(() => {
-    saveBeds(beds)
-  }, [beds])
+    refreshBoard()
+    getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
+  }, [])
 
   useEffect(() => {
     saveHistory(history)
@@ -1724,7 +1717,7 @@ function App() {
       acc[getBedStatusCategory(bed, now)] += 1
       return acc
     },
-    { occupied: 0, warning: 0, completed: 0, vacant: 0 },
+    { occupied: 0, warning: 0, completed: 0, vacant: 0, reserved: 0 },
   )
 
   const roomGroups =
@@ -1753,6 +1746,7 @@ function App() {
     ? beds.find((bed) => bed.id === roundModalBedId) ?? null
     : null
   const isVacant = currentBed?.status === 'vacant'
+  const isReserved = currentBed?.status === 'reserved'
   const isInProgress = currentBed?.status === 'in-progress'
   const currentBedActiveNotes = currentBed
     ? getActivePatientNotes(patientNotes, currentBed.chartNumber)
@@ -1769,12 +1763,43 @@ function App() {
     })
   }
 
+  async function refreshBoard() {
+    try {
+      setBeds(await loadBeds())
+    } catch (err) {
+      console.error('보드 갱신 실패', err)
+    }
+  }
+
+  async function handleChartNumberBlur() {
+    const trimmed = chartNumber.trim()
+    if (!trimmed) {
+      setLookupInfo(null)
+      return
+    }
+    try {
+      const result = await lookupPatient(trimmed)
+      setLookupInfo(result)
+      if (result.found && !patientName.trim()) {
+        setPatientName(result.name)
+      }
+    } catch {
+      setLookupInfo(null)
+    }
+  }
+
   function openModal(bed) {
     setSelectedBed(bed)
+    setActionError('')
     if (bed.status === 'vacant') {
       setPatientName('')
       setChartNumber('')
+      setLineStaffId('')
+      setLookupInfo(null)
+    }
+    if (bed.status === 'reserved') {
       setDurationMinutes(DEFAULT_DURATION)
+      setMixStaffId('')
     }
   }
 
@@ -1799,18 +1824,18 @@ function App() {
     setCleanupBed(null)
   }
 
-  function handleCleanupYes() {
+  async function handleCleanupYes() {
     if (!cleanupBed) return
     const endTime = Date.now()
-    // 이용기록 저장
-    const entry = createHistoryEntry(cleanupBed, endTime)
-    setHistory((prev) => [entry, ...prev])
-    // 베드 초기화
-    setBeds((prev) =>
-      prev.map((bed) =>
-        bed.id === cleanupBed.id ? resetBedToVacant(bed) : bed,
-      ),
-    )
+    try {
+      await endSession(cleanupBed.sessionId, endTime)
+      // 이용기록은 아직 로컬(4단계 나머지 작업에서 서버로 옮길 예정) — 종료와 별개로 계속 저장
+      const entry = createHistoryEntry(cleanupBed, endTime)
+      setHistory((prev) => [entry, ...prev])
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
     setCleanupBed(null)
   }
 
@@ -1818,7 +1843,7 @@ function App() {
     setDurationMinutes((prev) => Math.max(MIN_DURATION, prev + delta))
   }
 
-  function adjustBedDuration(delta) {
+  async function adjustBedDuration(delta) {
     if (!selectedBed || !currentBed) return
 
     if (delta < 0) {
@@ -1832,31 +1857,33 @@ function App() {
       }
     }
 
-    setBeds((prev) =>
-      prev.map((bed) => {
-        if (bed.id !== selectedBed.id) return bed
-        const updated = {
-          ...bed,
-          durationMinutes: Math.max(MIN_DURATION, bed.durationMinutes + delta),
-        }
-        return markCompletedIfNeeded(updated, Date.now())
-      }),
-    )
+    const nextDuration = Math.max(MIN_DURATION, currentBed.durationMinutes + delta)
+    try {
+      await adjustSessionDuration(currentBed.sessionId, nextDuration)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
   }
 
   function closeEndEarlyConfirm() {
     setEndEarlyConfirm(null)
   }
 
-  function handleEndEarlyYes() {
+  // 서버엔 "완료로 표시"하는 액션이 없다(완료 여부는 저장하지 않고 시간으로 계산되므로).
+  // 조기 종료는 소요시간을 경과분까지 줄여서 같은 효과를 낸다.
+  async function handleEndEarlyYes() {
     if (!endEarlyConfirm) return
-    setBeds((prev) =>
-      prev.map((bed) =>
-        bed.id === endEarlyConfirm.bedId
-          ? { ...bed, status: 'completed' }
-          : bed,
-      ),
-    )
+    const bed = beds.find((b) => b.id === endEarlyConfirm.bedId)
+    if (bed) {
+      const elapsedMinutes = Math.max(MIN_DURATION, Math.ceil((Date.now() - bed.startTime) / 60000))
+      try {
+        await adjustSessionDuration(bed.sessionId, elapsedMinutes)
+        await refreshBoard()
+      } catch (err) {
+        setActionError(err.message)
+      }
+    }
     setEndEarlyConfirm(null)
   }
 
@@ -1871,7 +1898,7 @@ function App() {
     setMoveBedAlert('')
   }
 
-  function handleMoveToBed(targetBed) {
+  async function handleMoveToBed(targetBed) {
     if (!movingBed) return
 
     // 자기 자신 클릭
@@ -1886,26 +1913,14 @@ function App() {
       return
     }
 
-    // 이동 실행: 환자 데이터 그대로 새 베드에 복사, 기존 베드 초기화
-    setBeds((prev) =>
-      prev.map((bed) => {
-        if (bed.id === targetBed.id) {
-          return {
-            ...bed,
-            status: movingBed.status,
-            patientName: movingBed.patientName,
-            chartNumber: movingBed.chartNumber,
-            startTime: movingBed.startTime,
-            durationMinutes: movingBed.durationMinutes,
-            sessionId: movingBed.sessionId,
-          }
-        }
-        if (bed.id === movingBed.id) {
-          return resetBedToVacant(bed)
-        }
-        return bed
-      }),
-    )
+    try {
+      await moveBedSession(movingBed.sessionId, targetBed.id)
+      await refreshBoard()
+    } catch (err) {
+      // 그 사이 다른 곳에서 같은 베드를 배정했을 수 있음(409) — 이동 모드는 유지, 다른 베드 재선택 가능
+      setMoveBedAlert(err.message)
+      return
+    }
 
     // 이동한 수액실 탭으로 전환
     setActiveTab(targetBed.room)
@@ -1913,14 +1928,14 @@ function App() {
     setMoveBedAlert('')
   }
 
-  function handleRemovePatientConfirm() {
+  async function handleRemovePatientConfirm() {
     if (!selectedBed) return
-    // 베드만 초기화, history에는 저장하지 않음
-    setBeds((prev) =>
-      prev.map((bed) =>
-        bed.id === selectedBed.id ? resetBedToVacant(bed) : bed,
-      ),
-    )
+    try {
+      await cancelSession(selectedBed.sessionId)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
     setRemovePatientConfirm(false)
     closeModal()
   }
@@ -1936,19 +1951,18 @@ function App() {
     setEditPatientModal(false)
   }
 
-  function handleSavePatientEdit() {
+  async function handleSavePatientEdit() {
     if (!editPatientName.trim() || !editChartNumber.trim() || !selectedBed) return
-    setBeds((prev) =>
-      prev.map((bed) =>
-        bed.id === selectedBed.id
-          ? {
-              ...bed,
-              patientName: editPatientName.trim(),
-              chartNumber: editChartNumber.trim(),
-            }
-          : bed,
-      ),
-    )
+    try {
+      await updateSessionPatient(selectedBed.sessionId, {
+        patientName: editPatientName.trim(),
+        chartNo: editChartNumber.trim(),
+      })
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+      return
+    }
     setEditPatientModal(false)
   }
 
@@ -2051,25 +2065,38 @@ function App() {
     closeNoteModal()
   }
 
-  function handleRegister() {
-    if (!patientName.trim() || !chartNumber.trim() || !selectedBed) return
+  async function handleRegister() {
+    if (!patientName.trim() || !chartNumber.trim() || !selectedBed || !lineStaffId) return
+    setActionError('')
+    try {
+      await assignBed({
+        bedCode: selectedBed.id,
+        chartNo: chartNumber.trim(),
+        patientName: patientName.trim(),
+        lineStaffId: Number(lineStaffId),
+      })
+      await refreshBoard()
+      setDurationMinutes(DEFAULT_DURATION)
+      setMixStaffId('')
+      setBriefingOpen(true)
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
 
-    setBeds((prev) =>
-      prev.map((bed) =>
-        bed.id === selectedBed.id
-          ? {
-              ...bed,
-              status: 'in-progress',
-              patientName: patientName.trim(),
-              chartNumber: chartNumber.trim(),
-              startTime: Date.now(),
-              durationMinutes,
-              sessionId: generateSessionId(),
-            }
-          : bed,
-      ),
-    )
-    setBriefingOpen(true)
+  async function handleStartSession() {
+    if (!currentBed || !mixStaffId) return
+    setActionError('')
+    try {
+      await startSession(currentBed.sessionId, {
+        mixStaffId: Number(mixStaffId),
+        durationMinutes,
+      })
+      await refreshBoard()
+      closeModal()
+    } catch (err) {
+      setActionError(err.message)
+    }
   }
 
   function handleBriefingDismiss() {
@@ -2106,6 +2133,27 @@ function App() {
             <span className="bed-card__add-icon">＋</span>
             <span className="bed-card__add-label">환자 등록</span>
           </div>
+        </article>
+      )
+    }
+
+    if (bed.status === 'reserved') {
+      return (
+        <article
+          key={bed.id}
+          className={`bed-card bed-card--reserved${bed.overdue ? ' bed-card--reserved-overdue' : ''}`}
+          onClick={() => handleBedClick(bed)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+        >
+          <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
+          <p className="bed-card__number">{bed.number}</p>
+          <p className="bed-card__patient">{bed.patientName}</p>
+          <p className="bed-card__chart">{bed.chartNumber}</p>
+          <div className="bed-card__spacer" />
+          {bed.overdue && <p className="bed-card__overdue-label">⚠ 환자 미도착</p>}
+          <p className="bed-card__reserved-label">라인 {bed.lineStaff}</p>
         </article>
       )
     }
@@ -2306,6 +2354,12 @@ function App() {
         <>
           <div className="bed-summary">
             <div className="bed-summary__card">
+              <span className="bed-summary__label">배정됨</span>
+              <span className="bed-summary__value bed-summary__value--reserved">
+                {bedSummaryCounts.reserved}
+              </span>
+            </div>
+            <div className="bed-summary__card">
               <span className="bed-summary__label">진행중</span>
               <span className="bed-summary__value bed-summary__value--occupied">
                 {bedSummaryCounts.occupied}
@@ -2482,8 +2536,79 @@ function App() {
                     className="field__input"
                     value={chartNumber}
                     onChange={(e) => setChartNumber(e.target.value)}
+                    onBlur={handleChartNumberBlur}
                     placeholder="차트번호 입력"
                   />
+                </label>
+
+                {lookupInfo && (
+                  <p className={`field__hint ${lookupInfo.found ? 'field__hint--ok' : 'field__hint--new'}`}>
+                    {lookupInfo.found ? `등록된 환자입니다 (${lookupInfo.name})` : '신규 환자입니다'}
+                  </p>
+                )}
+                {lookupInfo?.found && lookupInfo.active_cautions?.length > 0 && (
+                  <div className="field__cautions">
+                    {lookupInfo.active_cautions.map((c, i) => (
+                      <span key={i} className={`badge badge--${c.category}`}>{c.content}</span>
+                    ))}
+                  </div>
+                )}
+
+                <label className="field">
+                  <span className="field__label">라인 담당자</span>
+                  <select
+                    className="field__input"
+                    value={lineStaffId}
+                    onChange={(e) => setLineStaffId(e.target.value)}
+                  >
+                    <option value="">선택</option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {actionError && <p className="field__error">{actionError}</p>}
+
+                <button
+                  type="button"
+                  className="btn-register"
+                  onClick={handleRegister}
+                  disabled={!patientName.trim() || !chartNumber.trim() || !lineStaffId}
+                >
+                  배정
+                </button>
+              </div>
+            ) : isReserved ? (
+              <div className="modal__body">
+                <div className="bed-detail-summary">
+                  <div className="bed-detail-summary__patient">
+                    <span className="bed-detail-summary__name">{currentBed.patientName}</span>
+                    <span className="bed-detail-summary__chart">차트 {currentBed.chartNumber}</span>
+                  </div>
+                  <div className="bed-detail-summary__meta">
+                    <span className="bed-detail-summary__meta-text">
+                      라인 담당 {currentBed.lineStaff} · 배정 {formatHour24(currentBed.assignedAt)}
+                    </span>
+                  </div>
+                </div>
+
+                {currentBed.overdue && (
+                  <p className="field__error">⚠ 환자 미도착 — 확인이 필요합니다</p>
+                )}
+
+                <label className="field">
+                  <span className="field__label">믹스 담당자</span>
+                  <select
+                    className="field__input"
+                    value={mixStaffId}
+                    onChange={(e) => setMixStaffId(e.target.value)}
+                  >
+                    <option value="">선택</option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </label>
 
                 <DurationControls
@@ -2491,13 +2616,23 @@ function App() {
                   onAdjust={adjustDuration}
                 />
 
+                {actionError && <p className="field__error">{actionError}</p>}
+
                 <button
                   type="button"
                   className="btn-register"
-                  onClick={handleRegister}
-                  disabled={!patientName.trim() || !chartNumber.trim()}
+                  onClick={handleStartSession}
+                  disabled={!mixStaffId}
                 >
-                  등록
+                  투여 시작
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-remove-patient-link"
+                  onClick={() => setRemovePatientConfirm(true)}
+                >
+                  배정 취소
                 </button>
               </div>
             ) : (

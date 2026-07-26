@@ -70,6 +70,34 @@ router.post('/sessions/assign', (req, res) => {
   res.status(201).json({ id: sessionId, bed_code, chart_no: normalizedChartNo, assigned_at: now, warning })
 })
 
+// ─── patient — 배정 후 환자명/차트번호 정정 ─────────────────────────
+router.patch('/sessions/:id/patient', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+  if (session.ended_at !== null || session.cancelled) {
+    return res.status(400).json({ error: '종료되었거나 취소된 세션입니다' })
+  }
+
+  const { patient_name, chart_no } = req.body ?? {}
+  if (!patient_name || !chart_no) {
+    return res.status(400).json({ error: 'patient_name, chart_no가 필요합니다' })
+  }
+  const normalizedChartNo = normalizeChartNo(chart_no)
+  if (normalizedChartNo === null) {
+    return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
+  }
+
+  const existing = db.prepare('SELECT id FROM patients WHERE chart_no = ?').get(normalizedChartNo)
+  if (existing && existing.id !== session.patient_id) {
+    return res.status(409).json({ error: '이미 다른 환자에게 등록된 차트번호입니다' })
+  }
+
+  db.prepare('UPDATE patients SET name = ?, chart_no = ?, updated_at = ? WHERE id = ?')
+    .run(patient_name, normalizedChartNo, Date.now(), session.patient_id)
+  bumpRevision(db)
+  res.json({ ok: true })
+})
+
 // ─── start — 수액실에서 투여 시작 ───────────────────────────────────
 router.post('/sessions/:id/start', (req, res) => {
   const session = getSessionOr404(req.params.id, res)

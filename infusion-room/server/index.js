@@ -6,6 +6,7 @@ import patientsRouter from './routes/patients.js'
 import sessionsRouter from './routes/sessions.js'
 import roundsRouter from './routes/rounds.js'
 import notesRouter from './routes/notes.js'
+import staffRouter from './routes/staff.js'
 import adminRouter from './routes/admin.js'
 import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 
@@ -21,6 +22,7 @@ app.use('/api', patientsRouter)
 app.use('/api', sessionsRouter)
 app.use('/api', roundsRouter)
 app.use('/api', notesRouter)
+app.use('/api', staffRouter)
 app.use('/api/admin', requireAdmin, adminRouter)
 
 // eslint-disable-next-line no-unused-vars

@@ -1,49 +1,11 @@
 // ─── 데이터 접근 레이어 ──────────────────────────────────────────
-// 지금은 localStorage 그대로. 서버 전환(4단계) 시 이 파일 내부만 fetch로 교체한다.
+// beds는 서버(session 액션 모델) 기준. history/session_notes/patient_notes/rounds는
+// 아직 localStorage 그대로 — 4단계 나머지 작업(폴링, server_now 전환)에서 함께 정리한다.
 
-const STORAGE_KEY = 'infusion-room-beds'
 const HISTORY_STORAGE_KEY = 'infusion-room-history'
 const SESSION_NOTES_STORAGE_KEY = 'infusion-room-session-notes'
 const PATIENT_NOTES_STORAGE_KEY = 'infusion-room-patient-notes'
 const ROUNDS_STORAGE_KEY = 'infusion-room-rounds'
-
-function createDefaultBeds() {
-  return [
-    ...Array.from({ length: 6 }, (_, i) => ({
-      id: `room2-${22 + i}`,
-      number: String(22 + i),
-      room: 'room2',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-    ...Array.from({ length: 13 }, (_, i) => ({
-      id: `room3-${1 + i}`,
-      number: String(1 + i),
-      room: 'room3',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-    ...Array.from({ length: 11 }, (_, i) => ({
-      id: `floor2-${i + 1}`,
-      number: `2F-${i + 1}`,
-      room: 'floor2',
-      status: 'vacant',
-      patientName: '',
-      chartNumber: '',
-      startTime: null,
-      durationMinutes: null,
-      sessionId: null,
-    })),
-  ]
-}
 
 function loadArrayFromStorage(key) {
   try {
@@ -56,27 +18,120 @@ function loadArrayFromStorage(key) {
   }
 }
 
-export function loadBeds() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return createDefaultBeds()
-
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return createDefaultBeds()
-
-    const savedById = Object.fromEntries(parsed.map((bed) => [bed.id, bed]))
-    return createDefaultBeds().map((defaultBed) => {
-      const saved = savedById[defaultBed.id]
-      if (!saved) return defaultBed
-      return { ...defaultBed, ...saved }
-    })
-  } catch {
-    return createDefaultBeds()
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`/api${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+    credentials: 'include',
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data.error ?? `요청 실패 (${res.status})`)
   }
+  return data
 }
 
-export function saveBeds(beds) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(beds))
+// 서버 board 응답 -> 기존 App.jsx가 쓰던 flat bed 배열 형태로 변환.
+// status는 vacant/reserved/in-progress까지만 서버 기준으로 정하고, in-progress -> completed
+// 승격은 기존처럼 App.jsx의 markCompletedIfNeeded(now 기준)가 그대로 담당한다.
+function mapBoardToBeds(board) {
+  const assignTimeoutMs = (board.settings?.assign_timeout_min ?? 15) * 60000
+  const now = Date.now()
+  return board.beds.map((b) => {
+    const s = b.session
+    if (!s) {
+      return {
+        id: b.code, number: b.number, room: b.room,
+        status: 'vacant', patientName: '', chartNumber: '',
+        startTime: null, durationMinutes: null, sessionId: null,
+      }
+    }
+    const status = s.started_at ? 'in-progress' : 'reserved'
+    return {
+      id: b.code,
+      number: b.number,
+      room: b.room,
+      status,
+      patientName: s.patient.name,
+      chartNumber: s.patient.chart_no,
+      startTime: s.started_at,
+      durationMinutes: s.duration_minutes,
+      sessionId: s.id,
+      assignedAt: s.assigned_at,
+      lineStaff: s.line_staff,
+      mixStaff: s.mix_staff,
+      overdue: status === 'reserved' && now - s.assigned_at > assignTimeoutMs,
+    }
+  })
+}
+
+export async function loadBeds() {
+  const board = await apiFetch('/board')
+  return mapBoardToBeds(board)
+}
+
+// beds를 통째로 저장하는 함수는 없다 — 서버는 세션 액션(assignBed/startSession/...)
+// 단위로만 상태를 바꾸고, 읽기는 항상 loadBeds()로 다시 받아온다.
+
+export async function getStaffList() {
+  return apiFetch('/staff')
+}
+
+export async function lookupPatient(chartNo) {
+  return apiFetch(`/patients/lookup?chart_no=${encodeURIComponent(chartNo)}`)
+}
+
+export async function assignBed({ bedCode, chartNo, patientName, lineStaffId }) {
+  return apiFetch('/sessions/assign', {
+    method: 'POST',
+    body: JSON.stringify({
+      bed_code: bedCode, chart_no: chartNo, patient_name: patientName, line_staff_id: lineStaffId,
+    }),
+  })
+}
+
+export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt }) {
+  return apiFetch(`/sessions/${sessionId}/start`, {
+    method: 'POST',
+    body: JSON.stringify({
+      mix_staff_id: mixStaffId, duration_minutes: durationMinutes, started_at: startedAt,
+    }),
+  })
+}
+
+export async function cancelSession(sessionId, reason) {
+  return apiFetch(`/sessions/${sessionId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+export async function moveBedSession(sessionId, bedCode) {
+  return apiFetch(`/sessions/${sessionId}/bed`, {
+    method: 'PATCH',
+    body: JSON.stringify({ bed_code: bedCode }),
+  })
+}
+
+export async function adjustSessionDuration(sessionId, durationMinutes) {
+  return apiFetch(`/sessions/${sessionId}/duration`, {
+    method: 'PATCH',
+    body: JSON.stringify({ duration_minutes: durationMinutes }),
+  })
+}
+
+export async function endSession(sessionId, endedAt) {
+  return apiFetch(`/sessions/${sessionId}/end`, {
+    method: 'POST',
+    body: JSON.stringify(endedAt !== undefined ? { ended_at: endedAt } : {}),
+  })
+}
+
+export async function updateSessionPatient(sessionId, { patientName, chartNo }) {
+  return apiFetch(`/sessions/${sessionId}/patient`, {
+    method: 'PATCH',
+    body: JSON.stringify({ patient_name: patientName, chart_no: chartNo }),
+  })
 }
 
 export function loadHistory() {
