@@ -2,7 +2,7 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import db from '../db.js'
-import { SESSION_COOKIE_NAME } from '../middleware/requireAuth.js'
+import { SESSION_COOKIE_NAME, requireAuth } from '../middleware/requireAuth.js'
 
 const router = Router()
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
@@ -14,7 +14,7 @@ router.post('/login', (req, res) => {
   }
 
   const account = db.prepare(
-    'SELECT id, password_hash, is_active FROM accounts WHERE username = ?',
+    'SELECT id, username, display_name, role, password_hash, is_active FROM accounts WHERE username = ?',
   ).get(username)
 
   if (!account || !account.is_active || !bcrypt.compareSync(password, account.password_hash)) {
@@ -32,7 +32,15 @@ router.post('/login', (req, res) => {
     maxAge: THIRTY_DAYS_MS,
     sameSite: 'lax',
   })
-  res.json({ ok: true })
+  res.json({
+    ok: true,
+    account: { id: account.id, username: account.username, display_name: account.display_name, role: account.role },
+  })
+})
+
+// 이미 유효한 쿠키가 있는지 확인할 때 사용(새로고침 시 재로그인 방지)
+router.get('/me', requireAuth, (req, res) => {
+  res.json({ account: req.account })
 })
 
 router.post('/logout', (req, res) => {

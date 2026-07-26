@@ -3,6 +3,7 @@ import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
+  login, logout, getCurrentAccount,
   loadBeds,
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
@@ -1566,8 +1567,71 @@ function HistoryView({ history }) {
   )
 }
 
+// ─── 로그인 화면 ────────────────────────────────────────────────
+function LoginScreen({ onLoginSuccess }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!username.trim() || !password || submitting) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const account = await login(username.trim(), password)
+      onLoginSuccess(account)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="app login-screen">
+      <div className="login-card">
+        <h1 className="login-card__title">수액실 관리</h1>
+        <form className="login-form" onSubmit={handleSubmit}>
+          <label className="field">
+            <span className="field__label">아이디</span>
+            <input
+              type="text"
+              className="field__input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">비밀번호</span>
+            <input
+              type="password"
+              className="field__input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+          {error && <p className="field__error">{error}</p>}
+          <button
+            type="submit"
+            className="btn-register"
+            disabled={submitting || !username.trim() || !password}
+          >
+            {submitting ? '로그인 중...' : '로그인'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── App ────────────────────────────────────────────────────────
 function App() {
+  const [account, setAccount] = useState(null)
+  const [authChecked, setAuthChecked] = useState(false)
   const [beds, setBeds] = useState([])
   const [staffList, setStaffList] = useState([])
   const [lineStaffId, setLineStaffId] = useState('')
@@ -1616,10 +1680,18 @@ function App() {
   const activeHistory = history.filter((e) => !e.deleted)
 
   useEffect(() => {
+    getCurrentAccount()
+      .then(setAccount)
+      .catch(() => setAccount(null))
+      .finally(() => setAuthChecked(true))
+  }, [])
+
+  useEffect(() => {
+    if (!account) return
     refreshBoard()
     refreshRecords()
     getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
-  }, [])
+  }, [account])
 
   useEffect(() => {
     if (!hasActiveSessions) return
@@ -1715,6 +1787,15 @@ function App() {
     } catch (err) {
       console.error('기록 갱신 실패', err)
     }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout()
+    } catch (err) {
+      console.error('로그아웃 실패', err)
+    }
+    setAccount(null)
   }
 
   // DataManageView는 로컬 배열을 직접 map/filter해서 새 배열을 넘긴다(선택 삭제/복구,
@@ -2227,6 +2308,14 @@ function App() {
     )
   }
 
+  if (!authChecked) {
+    return <div className="app login-screen" />
+  }
+
+  if (!account) {
+    return <LoginScreen onLoginSuccess={setAccount} />
+  }
+
   return (
     <div className="app">
       <div className="header-wrap">
@@ -2237,6 +2326,12 @@ function App() {
             <h1 className="header__title">수액실 관리</h1>
           </div>
         </header>
+        <div className="header-account">
+          <span className="header-account__name">{account.displayName}</span>
+          <button type="button" className="header-account__logout" onClick={handleLogout}>
+            로그아웃
+          </button>
+        </div>
         <img src={headerPortrait} alt="" className="header__dog" aria-hidden="true" />
       </div>
 

@@ -17,6 +17,34 @@ async function apiFetch(path, options = {}) {
   return data
 }
 
+function mapAccount(account) {
+  if (!account) return null
+  return {
+    id: account.id,
+    username: account.username,
+    displayName: account.display_name,
+    role: account.role,
+  }
+}
+
+export async function login(username, password) {
+  const result = await apiFetch('/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
+  return mapAccount(result.account)
+}
+
+export async function logout() {
+  return apiFetch('/logout', { method: 'POST' })
+}
+
+// 쿠키가 이미 유효하면 계정 정보를 반환, 아니면 401 -> apiFetch가 throw
+export async function getCurrentAccount() {
+  const result = await apiFetch('/me')
+  return mapAccount(result.account)
+}
+
 // 서버 board 응답 -> 기존 App.jsx가 쓰던 flat bed 배열 형태로 변환.
 // status는 vacant/reserved/in-progress까지만 서버 기준으로 정하고, in-progress -> completed
 // 승격은 기존처럼 App.jsx의 markCompletedIfNeeded(now 기준)가 그대로 담당한다.
