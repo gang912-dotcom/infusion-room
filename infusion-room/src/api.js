@@ -48,9 +48,10 @@ export async function getCurrentAccount() {
 // 서버 board 응답 -> 기존 App.jsx가 쓰던 flat bed 배열 형태로 변환.
 // status는 vacant/reserved/in-progress까지만 서버 기준으로 정하고, in-progress -> completed
 // 승격은 기존처럼 App.jsx의 markCompletedIfNeeded(now 기준)가 그대로 담당한다.
+// overdue 판정도 server_now 기준 — 클라이언트 시계가 틀려도 정확하다.
 function mapBoardToBeds(board) {
   const assignTimeoutMs = (board.settings?.assign_timeout_min ?? 15) * 60000
-  const now = Date.now()
+  const serverNow = board.server_now
   return board.beds.map((b) => {
     const s = b.session
     if (!s) {
@@ -75,18 +76,29 @@ function mapBoardToBeds(board) {
       assignedAt: s.assigned_at,
       lineStaff: s.line_staff,
       mixStaff: s.mix_staff,
-      overdue: status === 'reserved' && now - s.assigned_at > assignTimeoutMs,
+      overdue: status === 'reserved' && serverNow - s.assigned_at > assignTimeoutMs,
     }
   })
 }
 
-export async function loadBeds() {
-  const board = await apiFetch('/board')
-  return mapBoardToBeds(board)
+// since를 넘기면 서버가 변경 없을 때 { unchanged: true }만 응답 -> 그대로 전달해서
+// 호출 쪽(App.jsx)이 불필요한 리렌더를 건너뛸 수 있게 한다.
+export async function getBoard(sinceRevision) {
+  const query = sinceRevision != null ? `?since=${sinceRevision}` : ''
+  const board = await apiFetch(`/board${query}`)
+  if (board.unchanged) {
+    return { unchanged: true, revision: board.revision, serverNow: board.server_now }
+  }
+  return {
+    unchanged: false,
+    revision: board.revision,
+    serverNow: board.server_now,
+    beds: mapBoardToBeds(board),
+  }
 }
 
 // beds를 통째로 저장하는 함수는 없다 — 서버는 세션 액션(assignBed/startSession/...)
-// 단위로만 상태를 바꾸고, 읽기는 항상 loadBeds()로 다시 받아온다.
+// 단위로만 상태를 바꾸고, 읽기는 항상 getBoard()로 다시 받아온다.
 
 export async function getStaffList() {
   return apiFetch('/staff')

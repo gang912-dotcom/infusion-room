@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
-  loadBeds,
+  getBoard,
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
@@ -246,7 +246,7 @@ function formatHour24(timestamp) {
 
 // 공용 발생시각 선택 컴포넌트: 기본값 지금, 당김 버튼(-5/-15/-30분), 시:분 직접입력.
 // 특이사항 기록 폼과 라운딩 모달(A-2) 양쪽에서 재사용한다.
-function OccurredAtPicker({ valueMs, onChange }) {
+function OccurredAtPicker({ valueMs, onChange, nowMs }) {
   const d = new Date(valueMs)
   const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
@@ -272,7 +272,7 @@ function OccurredAtPicker({ valueMs, onChange }) {
           value={timeStr}
           onChange={handleTimeInput}
         />
-        <button type="button" className="occurred-at__now" onClick={() => onChange(Date.now())}>
+        <button type="button" className="occurred-at__now" onClick={() => onChange(nowMs)}>
           지금
         </button>
       </div>
@@ -1674,6 +1674,12 @@ function App() {
   const [patientViewSeed, setPatientViewSeed] = useState(null)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
 
+  // 서버 시각 기준 시계 — 클라이언트 시계가 틀려도 서버와 동일한 여유/곧/밀림 판정이 나오게 함.
+  // clockOffsetRef = server_now - Date.now()(마지막 동기화 시점). now = Date.now() + offset.
+  const clockOffsetRef = useRef(0)
+  const revisionRef = useRef(null)
+  const isModalBusyRef = useRef(false)
+
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
 
   // deleted: true 항목은 이용기록·통계·환자조회에서 제외
@@ -1693,9 +1699,56 @@ function App() {
     getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
   }, [account])
 
+  // 열려 있는 모달(배정/시작 폼, 라운딩, 베드이동, 정리 확인)이 있는 동안은 폴링이
+  // beds를 갈아치우지 않게 막는다 — 입력 중인 내용이나 방금 연 폼이 갱신 때문에 바뀌면 안 됨.
+  useEffect(() => {
+    isModalBusyRef.current = !!(selectedBed || roundModalOpen || movingBed || cleanupBed)
+  }, [selectedBed, roundModalOpen, movingBed, cleanupBed])
+
+  // 보드 폴링 — 화면 표시 중 3초 / 백그라운드 탭 30초, 연속 실패 시 3→6→12→30초로 늘어남.
+  useEffect(() => {
+    if (!account) return
+    let cancelled = false
+    let timeoutId = null
+    let consecutiveFailures = 0
+    const FAILURE_DELAYS_MS = [3000, 6000, 12000, 30000]
+
+    function nextDelay() {
+      if (document.visibilityState !== 'visible') return 30000
+      return FAILURE_DELAYS_MS[Math.min(consecutiveFailures, FAILURE_DELAYS_MS.length - 1)]
+    }
+
+    async function poll() {
+      if (cancelled) return
+      try {
+        const result = await getBoard(revisionRef.current)
+        if (!cancelled) {
+          clockOffsetRef.current = result.serverNow - Date.now()
+          if (!result.unchanged && !isModalBusyRef.current) {
+            setBeds(result.beds)
+            revisionRef.current = result.revision
+          }
+          consecutiveFailures = 0
+        }
+      } catch (err) {
+        console.error('보드 폴링 실패', err)
+        consecutiveFailures += 1
+      }
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, nextDelay())
+      }
+    }
+
+    timeoutId = setTimeout(poll, nextDelay())
+    return () => {
+      cancelled = true
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [account])
+
   useEffect(() => {
     if (!hasActiveSessions) return
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => setNow(Date.now() + clockOffsetRef.current), 1000)
     return () => clearInterval(timer)
   }, [hasActiveSessions])
 
@@ -1703,7 +1756,7 @@ function App() {
     setBeds((prev) => {
       let changed = false
       const next = prev.map((bed) => {
-        const updated = markCompletedIfNeeded(bed, Date.now())
+        const updated = markCompletedIfNeeded(bed, now)
         if (updated !== bed) changed = true
         return updated
       })
@@ -1767,9 +1820,17 @@ function App() {
     })
   }
 
+  // 액션(배정/시작/종료 등) 직후 호출 — 폴링과 달리 항상 즉시 반영해야 하므로
+  // isModalBusyRef를 보지 않는다(내가 방금 연 모달이 그 대상이라 오히려 반영이 필요함).
   async function refreshBoard() {
     try {
-      setBeds(await loadBeds())
+      const result = await getBoard(revisionRef.current)
+      clockOffsetRef.current = result.serverNow - Date.now()
+      setNow(result.serverNow)
+      if (!result.unchanged) {
+        setBeds(result.beds)
+        revisionRef.current = result.revision
+      }
     } catch (err) {
       console.error('보드 갱신 실패', err)
     }
@@ -1906,7 +1967,7 @@ function App() {
 
   async function handleCleanupYes() {
     if (!cleanupBed) return
-    const endTime = Date.now()
+    const endTime = now
     try {
       await endSession(cleanupBed.sessionId, endTime)
       await refreshBoard()
@@ -2016,7 +2077,7 @@ function App() {
   function openNoteModal(tab) {
     if (!currentBed) return
     setNoteTab(tab)
-    setNoteOccurredAt(Date.now())
+    setNoteOccurredAt(now)
     setNoteSymptoms([])
     setNoteActions([])
     setNoteMemo('')
@@ -2882,7 +2943,7 @@ function App() {
 
             {noteTab === 'session' ? (
               <div className="modal__body">
-                <OccurredAtPicker valueMs={noteOccurredAt} onChange={setNoteOccurredAt} />
+                <OccurredAtPicker valueMs={noteOccurredAt} onChange={setNoteOccurredAt} nowMs={now} />
                 <p className="note-elapsed">
                   시작 후{' '}
                   {currentBed.startTime
@@ -3072,7 +3133,7 @@ function App() {
               <div className="round-input">
                 <h3 className="round-input__title">새 라운딩 기록</h3>
 
-                <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} />
+                <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} nowMs={now} />
 
                 <label className="field">
                   <span className="field__label">체온 (선택 · 안 재면 비움 ---)</span>
