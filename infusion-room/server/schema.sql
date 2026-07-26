@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   ended_by         INTEGER REFERENCES accounts(id),
 
   cancelled        INTEGER NOT NULL DEFAULT 0,
-  cancel_reason    TEXT
+  cancel_reason    TEXT,
+  deleted          INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active

@@ -43,6 +43,19 @@ router.post('/sessions/:id/rounds', (req, res) => {
   res.status(201).json({ id: info.lastInsertRowid, occurred_at: occurredAt })
 })
 
+// 전체 조회(데이터관리·환자조회 화면용) — 환자별 조회는 아래 /patients/:patientId/rounds
+router.get('/rounds', (req, res) => {
+  const rows = db.prepare(`
+    SELECT r.id, r.session_id, r.occurred_at, r.temperature, r.state, r.memo, r.created_at, r.deleted,
+           p.chart_no
+    FROM rounds r
+    JOIN sessions s ON s.id = r.session_id
+    JOIN patients p ON p.id = s.patient_id
+    ORDER BY r.occurred_at DESC
+  `).all()
+  res.json(rows)
+})
+
 router.get('/patients/:patientId/rounds', (req, res) => {
   const rows = db.prepare(`
     SELECT r.id, r.session_id, r.occurred_at, r.temperature, r.state, r.memo, r.created_at

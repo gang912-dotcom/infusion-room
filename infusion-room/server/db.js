@@ -16,4 +16,10 @@ db.pragma('foreign_keys = ON')
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8')
 db.exec(schema)
 
+// schema.sql은 CREATE TABLE IF NOT EXISTS라 이미 만들어진 DB엔 새 컬럼이 안 생긴다 — 직접 보강.
+const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all().map((c) => c.name)
+if (!sessionColumns.includes('deleted')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
+}
+
 export default db

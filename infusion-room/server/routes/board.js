@@ -58,6 +58,7 @@ router.get('/board', (req, res) => {
       number: bed.number,
       session: {
         id: session.id,
+        patient_id: session.patient_id,
         patient: { chart_no: session.chart_no, name: session.patient_name },
         assigned_at: session.assigned_at,
         line_staff: session.line_staff_name,

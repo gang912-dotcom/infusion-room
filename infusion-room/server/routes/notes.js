@@ -55,6 +55,28 @@ router.post('/sessions/:id/session-notes', (req, res) => {
   res.status(201).json({ id: info.lastInsertRowid, occurred_at: occurredAt })
 })
 
+// 전체 조회(데이터관리 화면용) — 환자별 조회는 아래 /patients/:patientId/session-notes
+router.get('/session-notes', (req, res) => {
+  const rows = db.prepare(`
+    SELECT n.id, n.session_id, n.occurred_at, n.memo, n.created_at, n.deleted,
+           p.chart_no, s.started_at
+    FROM session_notes n
+    JOIN sessions s ON s.id = n.session_id
+    JOIN patients p ON p.id = s.patient_id
+    ORDER BY n.created_at DESC
+  `).all()
+
+  const symptomsStmt = db.prepare('SELECT code FROM session_note_symptoms WHERE note_id = ?')
+  const actionsStmt = db.prepare('SELECT code FROM session_note_actions WHERE note_id = ?')
+  res.json(rows.map((row) => ({
+    ...row,
+    // occurred_at은 시작 후 조정 가능하므로 음수 방지만(clamp), 저장하지 않고 매번 계산
+    elapsed_min: row.started_at ? Math.max(0, Math.round((row.occurred_at - row.started_at) / 60000)) : 0,
+    symptoms: symptomsStmt.all(row.id).map((r) => r.code),
+    actions: actionsStmt.all(row.id).map((r) => r.code),
+  })))
+})
+
 router.get('/patients/:patientId/session-notes', (req, res) => {
   const includeDeleted = req.query.include_deleted === 'true'
   const rows = db.prepare(`
@@ -112,6 +134,18 @@ router.post('/patients/:patientId/patient-notes', (req, res) => {
 
   bumpRevision(db)
   res.status(201).json({ id: info.lastInsertRowid })
+})
+
+// 전체 조회(데이터관리 화면용) — 환자별 조회는 아래 /patients/:patientId/patient-notes
+router.get('/patient-notes', (req, res) => {
+  const rows = db.prepare(`
+    SELECT pn.id, pn.category, pn.source, pn.content, pn.active, pn.created_at, pn.updated_at, pn.deleted,
+           p.chart_no, p.name AS patient_name
+    FROM patient_notes pn
+    JOIN patients p ON p.id = pn.patient_id
+    ORDER BY pn.created_at DESC
+  `).all()
+  res.json(rows)
 })
 
 router.get('/patients/:patientId/patient-notes', (req, res) => {

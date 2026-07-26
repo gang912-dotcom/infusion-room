@@ -210,4 +210,33 @@ router.post('/sessions/:id/end', (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── history — 종료된 세션 목록(이용기록) ───────────────────────────
+router.get('/history', (req, res) => {
+  const rows = db.prepare(`
+    SELECT s.id, s.started_at, s.ended_at, s.deleted,
+           b.room, b.number AS bed_number,
+           p.chart_no, p.name AS patient_name
+    FROM sessions s
+    JOIN beds b ON b.id = s.bed_id
+    JOIN patients p ON p.id = s.patient_id
+    WHERE s.ended_at IS NOT NULL
+    ORDER BY s.ended_at DESC
+  `).all()
+  res.json(rows)
+})
+
+// ─── deleted 토글 — 이용기록 선택 삭제/복구(물리 삭제 아님) ─────────
+router.patch('/sessions/:id', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+
+  const { deleted } = req.body ?? {}
+  if (typeof deleted !== 'boolean') {
+    return res.status(400).json({ error: 'deleted(boolean)가 필요합니다' })
+  }
+
+  db.prepare('UPDATE sessions SET deleted = ? WHERE id = ?').run(deleted ? 1 : 0, session.id)
+  res.json({ ok: true })
+})
+
 export default router

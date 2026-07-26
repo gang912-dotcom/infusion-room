@@ -1,22 +1,8 @@
 // ─── 데이터 접근 레이어 ──────────────────────────────────────────
-// beds는 서버(session 액션 모델) 기준. history/session_notes/patient_notes/rounds는
-// 아직 localStorage 그대로 — 4단계 나머지 작업(폴링, server_now 전환)에서 함께 정리한다.
+// beds, history, rounds, session_notes, patient_notes 전부 서버 기준.
+// localStorage는 더 이상 쓰지 않는다.
 
-const HISTORY_STORAGE_KEY = 'infusion-room-history'
-const SESSION_NOTES_STORAGE_KEY = 'infusion-room-session-notes'
-const PATIENT_NOTES_STORAGE_KEY = 'infusion-room-patient-notes'
-const ROUNDS_STORAGE_KEY = 'infusion-room-rounds'
-
-function loadArrayFromStorage(key) {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
+const ROOM_LABELS = { room2: '2수액실', room3: '3수액실', floor2: '2층수액실' }
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -54,6 +40,7 @@ function mapBoardToBeds(board) {
       status,
       patientName: s.patient.name,
       chartNumber: s.patient.chart_no,
+      patientId: s.patient_id,
       startTime: s.started_at,
       durationMinutes: s.duration_minutes,
       sessionId: s.id,
@@ -134,34 +121,127 @@ export async function updateSessionPatient(sessionId, { patientName, chartNo }) 
   })
 }
 
-export function loadHistory() {
-  return loadArrayFromStorage(HISTORY_STORAGE_KEY)
+// ─── history — 종료된 세션(이용기록). 서버가 원본, usedMinutes도 매번 계산 ──
+function mapHistoryRow(row) {
+  return {
+    id: row.id,
+    sessionId: row.id,
+    date: new Date(row.ended_at).toLocaleDateString('ko-KR', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }),
+    room: ROOM_LABELS[row.room] ?? row.room,
+    bedNumber: row.bed_number,
+    patientName: row.patient_name,
+    chartNumber: row.chart_no,
+    startTime: new Date(row.started_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    endTime: new Date(row.ended_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    usedMinutes: Math.round((row.ended_at - row.started_at) / 60000),
+    deleted: !!row.deleted,
+  }
 }
 
-export function saveHistory(history) {
-  localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history))
+export async function loadHistory() {
+  const rows = await apiFetch('/history')
+  return rows.map(mapHistoryRow)
 }
 
-export function loadSessionNotes() {
-  return loadArrayFromStorage(SESSION_NOTES_STORAGE_KEY)
+export async function toggleHistoryDeleted(sessionId, deleted) {
+  return apiFetch(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ deleted }) })
 }
 
-export function saveSessionNotes(sessionNotes) {
-  localStorage.setItem(SESSION_NOTES_STORAGE_KEY, JSON.stringify(sessionNotes))
+// ─── rounds ─────────────────────────────────────────────────────────
+function mapRoundRow(row) {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    chartNumber: row.chart_no,
+    occurredAt: new Date(row.occurred_at).toISOString(),
+    temperature: row.temperature,
+    state: row.state,
+    memo: row.memo,
+    createdAt: new Date(row.created_at).toISOString(),
+    createdBy: null,
+    deleted: !!row.deleted,
+  }
 }
 
-export function loadPatientNotes() {
-  return loadArrayFromStorage(PATIENT_NOTES_STORAGE_KEY)
+export async function loadRounds() {
+  const rows = await apiFetch('/rounds')
+  return rows.map(mapRoundRow)
 }
 
-export function savePatientNotes(patientNotes) {
-  localStorage.setItem(PATIENT_NOTES_STORAGE_KEY, JSON.stringify(patientNotes))
+export async function createRound({ sessionId, occurredAt, temperature, state, memo }) {
+  return apiFetch(`/sessions/${sessionId}/rounds`, {
+    method: 'POST',
+    body: JSON.stringify({ occurred_at: occurredAt, temperature, state, memo }),
+  })
 }
 
-export function loadRounds() {
-  return loadArrayFromStorage(ROUNDS_STORAGE_KEY)
+// ─── session_notes — 금일 특이사항 ──────────────────────────────────
+function mapSessionNoteRow(row) {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    chartNumber: row.chart_no,
+    occurredAt: new Date(row.occurred_at).toISOString(),
+    elapsedMin: row.elapsed_min,
+    symptoms: row.symptoms,
+    actions: row.actions,
+    memo: row.memo,
+    createdAt: new Date(row.created_at).toISOString(),
+    createdBy: null,
+    deleted: !!row.deleted,
+  }
 }
 
-export function saveRounds(rounds) {
-  localStorage.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds))
+export async function loadSessionNotes() {
+  const rows = await apiFetch('/session-notes')
+  return rows.map(mapSessionNoteRow)
+}
+
+export async function createSessionNote({ sessionId, occurredAt, symptoms, actions, memo }) {
+  return apiFetch(`/sessions/${sessionId}/session-notes`, {
+    method: 'POST',
+    body: JSON.stringify({ occurred_at: occurredAt, symptoms, actions, memo }),
+  })
+}
+
+export async function toggleSessionNoteDeleted(id, deleted) {
+  return apiFetch(`/session-notes/${id}`, { method: 'PATCH', body: JSON.stringify({ deleted }) })
+}
+
+// ─── patient_notes — 환자 주의사항 ──────────────────────────────────
+function mapPatientNoteRow(row) {
+  return {
+    id: row.id,
+    chartNumber: row.chart_no,
+    patientName: row.patient_name,
+    category: row.category,
+    content: row.content,
+    source: row.source,
+    active: !!row.active,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+    createdBy: null,
+    deleted: !!row.deleted,
+  }
+}
+
+export async function loadPatientNotes() {
+  const rows = await apiFetch('/patient-notes')
+  return rows.map(mapPatientNoteRow)
+}
+
+export async function createPatientNote({ patientId, category, source, content }) {
+  return apiFetch(`/patients/${patientId}/patient-notes`, {
+    method: 'POST',
+    body: JSON.stringify({ category, source, content }),
+  })
+}
+
+export async function togglePatientNoteDeleted(id, { deleted, active } = {}) {
+  const body = {}
+  if (deleted !== undefined) body.deleted = deleted
+  if (active !== undefined) body.active = active
+  return apiFetch(`/patient-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 }

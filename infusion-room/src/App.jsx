@@ -4,10 +4,10 @@ import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   loadBeds,
-  loadHistory, saveHistory,
-  loadSessionNotes, saveSessionNotes,
-  loadPatientNotes, savePatientNotes,
-  loadRounds, saveRounds,
+  loadHistory, toggleHistoryDeleted,
+  loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
+  loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
+  loadRounds, createRound,
   getStaffList, lookupPatient,
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionPatient,
@@ -85,27 +85,6 @@ const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타�
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
 const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
 
-function generateNoteId(prefix) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-// 최소 유효 라운딩 = occurredAt만 있으면 성립("확인 도장").
-// temperature/state/memo는 모두 선택이며 비어도 레코드가 생기고 타이머가 리셋된다.
-function createRoundRecord({ sessionId, chartNumber, occurredAt, temperature = null, state = null, memo = '' }) {
-  return {
-    id: generateNoteId('rnd'),
-    sessionId,
-    chartNumber,
-    occurredAt,
-    temperature,
-    state,
-    memo,
-    createdAt: new Date().toISOString(),
-    createdBy: null,
-    deleted: false,
-  }
-}
-
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
 function getRoundsByChartNumber(rounds, chartNumber) {
   return rounds
@@ -174,37 +153,6 @@ function getRoomHasDue(roomBeds, rounds, now) {
     const latestRound = getLatestSessionRound(rounds, bed.sessionId)
     return getRoundStatus(bed, latestRound, now)?.status === 'due'
   })
-}
-
-function createHistoryEntry(bed, endTime) {
-  const startTime = bed.startTime ?? endTime
-  const usedMinutes = Math.round((endTime - startTime) / 60000)
-  const dateStr = new Date(endTime).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const roomLabel =
-    ROOM_TABS.find((t) => t.id === bed.room)?.label ?? bed.room
-
-  return {
-    id: `${bed.id}-${endTime}`,
-    sessionId: bed.sessionId ?? null,
-    date: dateStr,
-    room: roomLabel,
-    bedNumber: bed.number,
-    patientName: bed.patientName,
-    chartNumber: bed.chartNumber,
-    startTime: new Date(startTime).toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    endTime: new Date(endTime).toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    usedMinutes,
-  }
 }
 
 function formatDuration(minutes) {
@@ -1626,10 +1574,10 @@ function App() {
   const [mixStaffId, setMixStaffId] = useState('')
   const [lookupInfo, setLookupInfo] = useState(null)
   const [actionError, setActionError] = useState('')
-  const [history, setHistory] = useState(() => loadHistory())
-  const [sessionNotes, setSessionNotes] = useState(() => loadSessionNotes())
-  const [patientNotes, setPatientNotes] = useState(() => loadPatientNotes())
-  const [rounds, setRounds] = useState(() => loadRounds())
+  const [history, setHistory] = useState([])
+  const [sessionNotes, setSessionNotes] = useState([])
+  const [patientNotes, setPatientNotes] = useState([])
+  const [rounds, setRounds] = useState([])
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
@@ -1669,24 +1617,9 @@ function App() {
 
   useEffect(() => {
     refreshBoard()
+    refreshRecords()
     getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
   }, [])
-
-  useEffect(() => {
-    saveHistory(history)
-  }, [history])
-
-  useEffect(() => {
-    saveSessionNotes(sessionNotes)
-  }, [sessionNotes])
-
-  useEffect(() => {
-    savePatientNotes(patientNotes)
-  }, [patientNotes])
-
-  useEffect(() => {
-    saveRounds(rounds)
-  }, [rounds])
 
   useEffect(() => {
     if (!hasActiveSessions) return
@@ -1770,6 +1703,73 @@ function App() {
     }
   }
 
+  async function refreshRecords() {
+    try {
+      const [nextHistory, nextRounds, nextSessionNotes, nextPatientNotes] = await Promise.all([
+        loadHistory(), loadRounds(), loadSessionNotes(), loadPatientNotes(),
+      ])
+      setHistory(nextHistory)
+      setRounds(nextRounds)
+      setSessionNotes(nextSessionNotes)
+      setPatientNotes(nextPatientNotes)
+    } catch (err) {
+      console.error('기록 갱신 실패', err)
+    }
+  }
+
+  // DataManageView는 로컬 배열을 직접 map/filter해서 새 배열을 넘긴다(선택 삭제/복구,
+  // deleted·active 토글). 여기서 이전 값과 비교해 실제로 바뀐 것만 서버에 반영한다 —
+  // 필드 하나짜리 boolean 토글이라 diff가 모호할 일이 없어 beds 때와 달리 안전하다.
+  async function updateHistoryWithSync(updater) {
+    const prevArr = history
+    const nextArr = typeof updater === 'function' ? updater(prevArr) : updater
+    setHistory(nextArr)
+    const prevById = new Map(prevArr.map((e) => [e.id, e]))
+    const changed = nextArr.filter((e) => {
+      const old = prevById.get(e.id)
+      return old && old.deleted !== e.deleted && e.sessionId
+    })
+    try {
+      await Promise.all(changed.map((e) => toggleHistoryDeleted(e.sessionId, e.deleted)))
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  async function updateSessionNotesWithSync(updater) {
+    const prevArr = sessionNotes
+    const nextArr = typeof updater === 'function' ? updater(prevArr) : updater
+    setSessionNotes(nextArr)
+    const prevById = new Map(prevArr.map((n) => [n.id, n]))
+    const changed = nextArr.filter((n) => {
+      const old = prevById.get(n.id)
+      return old && old.deleted !== n.deleted
+    })
+    try {
+      await Promise.all(changed.map((n) => toggleSessionNoteDeleted(n.id, n.deleted)))
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  async function updatePatientNotesWithSync(updater) {
+    const prevArr = patientNotes
+    const nextArr = typeof updater === 'function' ? updater(prevArr) : updater
+    setPatientNotes(nextArr)
+    const prevById = new Map(prevArr.map((n) => [n.id, n]))
+    const changed = nextArr.filter((n) => {
+      const old = prevById.get(n.id)
+      return old && (old.deleted !== n.deleted || old.active !== n.active)
+    })
+    try {
+      await Promise.all(
+        changed.map((n) => togglePatientNoteDeleted(n.id, { deleted: n.deleted, active: n.active })),
+      )
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   async function handleChartNumberBlur() {
     const trimmed = chartNumber.trim()
     if (!trimmed) {
@@ -1828,10 +1828,8 @@ function App() {
     const endTime = Date.now()
     try {
       await endSession(cleanupBed.sessionId, endTime)
-      // 이용기록은 아직 로컬(4단계 나머지 작업에서 서버로 옮길 예정) — 종료와 별개로 계속 저장
-      const entry = createHistoryEntry(cleanupBed, endTime)
-      setHistory((prev) => [entry, ...prev])
       await refreshBoard()
+      await refreshRecords()
       closeModal()
     } catch (err) {
       setActionError(err.message)
@@ -1969,68 +1967,61 @@ function App() {
     setRoundModalBedId(null)
   }
 
-  function handleSaveRound() {
+  async function handleSaveRound() {
     if (!roundModalBed) return
-    const newRound = createRoundRecord({
-      sessionId: roundModalBed.sessionId,
-      chartNumber: roundModalBed.chartNumber,
-      occurredAt: new Date(roundOccurredAt).toISOString(),
-      temperature: parseTemperature(roundTemp),
-      state: roundState,
-      memo: roundMemo.trim(),
-    })
-    setRounds((prev) => [newRound, ...prev])
-    closeRoundModal()
+    try {
+      await createRound({
+        sessionId: roundModalBed.sessionId,
+        occurredAt: roundOccurredAt,
+        temperature: parseTemperature(roundTemp),
+        state: roundState,
+        memo: roundMemo.trim(),
+      })
+      await refreshRecords()
+      closeRoundModal()
+    } catch (err) {
+      setActionError(err.message)
+    }
   }
 
   function toggleChip(list, value) {
     return list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
   }
 
-  function handleSaveSessionNote() {
+  async function handleSaveSessionNote() {
     if (!currentBed) return
     if (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()) return
 
-    const elapsedMin = currentBed.startTime
-      ? Math.max(0, Math.round((noteOccurredAt - currentBed.startTime) / 60000))
-      : 0
-
-    const newNote = {
-      id: generateNoteId('sn'),
-      sessionId: currentBed.sessionId,
-      chartNumber: currentBed.chartNumber,
-      occurredAt: new Date(noteOccurredAt).toISOString(),
-      elapsedMin,
-      symptoms: noteSymptoms,
-      actions: noteActions,
-      memo: noteMemo.trim(),
-      createdAt: new Date().toISOString(),
-      createdBy: null,
-      deleted: false,
+    try {
+      await createSessionNote({
+        sessionId: currentBed.sessionId,
+        occurredAt: noteOccurredAt,
+        symptoms: noteSymptoms,
+        actions: noteActions,
+        memo: noteMemo.trim(),
+      })
+      await refreshRecords()
+      closeNoteModal()
+    } catch (err) {
+      setActionError(err.message)
     }
-    setSessionNotes((prev) => [newNote, ...prev])
-    closeNoteModal()
   }
 
-  function handleSavePatientNote() {
+  async function handleSavePatientNote() {
     if (!currentBed || !noteContent.trim()) return
 
-    const nowIso = new Date().toISOString()
-    const newNote = {
-      id: generateNoteId('pn'),
-      chartNumber: currentBed.chartNumber,
-      patientName: currentBed.patientName,
-      category: noteCategory,
-      content: noteContent.trim(),
-      source: noteSource,
-      active: true,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      createdBy: null,
-      deleted: false,
+    try {
+      await createPatientNote({
+        patientId: currentBed.patientId,
+        category: noteCategory,
+        source: noteSource,
+        content: noteContent.trim(),
+      })
+      await refreshRecords()
+      closeNoteModal()
+    } catch (err) {
+      setActionError(err.message)
     }
-    setPatientNotes((prev) => [newNote, ...prev])
-    closeNoteModal()
   }
 
   async function handleRegister() {
@@ -2312,11 +2303,11 @@ function App() {
       ) : activeTab === 'datamanage' ? (
         <DataManageView
           allHistory={history}
-          onUpdateHistory={setHistory}
+          onUpdateHistory={updateHistoryWithSync}
           sessionNotes={sessionNotes}
-          onUpdateSessionNotes={setSessionNotes}
+          onUpdateSessionNotes={updateSessionNotesWithSync}
           patientNotes={patientNotes}
-          onUpdatePatientNotes={setPatientNotes}
+          onUpdatePatientNotes={updatePatientNotesWithSync}
         />
       ) : (
         <>
