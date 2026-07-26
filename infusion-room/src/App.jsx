@@ -1633,7 +1633,6 @@ function App() {
   const [activeTab, setActiveTab] = useState('all')
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
-  const [endEarlyConfirm, setEndEarlyConfirm] = useState(null)
   const [patientName, setPatientName] = useState('')
   const [chartNumber, setChartNumber] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
@@ -1833,6 +1832,7 @@ function App() {
       const entry = createHistoryEntry(cleanupBed, endTime)
       setHistory((prev) => [entry, ...prev])
       await refreshBoard()
+      closeModal()
     } catch (err) {
       setActionError(err.message)
     }
@@ -1846,17 +1846,6 @@ function App() {
   async function adjustBedDuration(delta) {
     if (!selectedBed || !currentBed) return
 
-    if (delta < 0) {
-      const { remainingMs } = getBedProgress(currentBed, now)
-      const remainingMinutes = remainingMs / (60 * 1000)
-      const reductionMinutes = Math.abs(delta)
-
-      if (reductionMinutes > remainingMinutes) {
-        setEndEarlyConfirm({ bedId: selectedBed.id })
-        return
-      }
-    }
-
     const nextDuration = Math.max(MIN_DURATION, currentBed.durationMinutes + delta)
     try {
       await adjustSessionDuration(currentBed.sessionId, nextDuration)
@@ -1864,27 +1853,6 @@ function App() {
     } catch (err) {
       setActionError(err.message)
     }
-  }
-
-  function closeEndEarlyConfirm() {
-    setEndEarlyConfirm(null)
-  }
-
-  // 서버엔 "완료로 표시"하는 액션이 없다(완료 여부는 저장하지 않고 시간으로 계산되므로).
-  // 조기 종료는 소요시간을 경과분까지 줄여서 같은 효과를 낸다.
-  async function handleEndEarlyYes() {
-    if (!endEarlyConfirm) return
-    const bed = beds.find((b) => b.id === endEarlyConfirm.bedId)
-    if (bed) {
-      const elapsedMinutes = Math.max(MIN_DURATION, Math.ceil((Date.now() - bed.startTime) / 60000))
-      try {
-        await adjustSessionDuration(bed.sessionId, elapsedMinutes)
-        await refreshBoard()
-      } catch (err) {
-        setActionError(err.message)
-      }
-    }
-    setEndEarlyConfirm(null)
   }
 
   function handleStartMoveBed() {
@@ -2426,41 +2394,6 @@ function App() {
         </>
       )}
 
-      {endEarlyConfirm && (
-        <div className="modal-overlay modal-overlay--top">
-          <div
-            className="modal modal--confirm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal__body modal__body--confirm">
-              <p className="confirm__message">
-                현재 남은 시간보다
-                <br />
-                빼려는 시간이 더 많습니다.
-                <br />
-                이용을 종료하시겠습니까?
-              </p>
-              <div className="confirm__actions">
-                <button
-                  type="button"
-                  className="btn-confirm btn-confirm--yes"
-                  onClick={handleEndEarlyYes}
-                >
-                  예
-                </button>
-                <button
-                  type="button"
-                  className="btn-confirm btn-confirm--no"
-                  onClick={closeEndEarlyConfirm}
-                >
-                  아니오
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {cleanupBed && (
         <div className="modal-overlay">
           <div
@@ -2469,9 +2402,7 @@ function App() {
           >
             <div className="modal__body modal__body--confirm">
               <p className="confirm__message">
-                이용이 완료되었습니다.
-                <br />
-                베드를 정리하시겠습니까?
+                이용을 종료하시겠습니까?
               </p>
               <div className="confirm__actions">
                 <button
@@ -2719,6 +2650,16 @@ function App() {
                       특이사항 기록
                     </button>
                   </div>
+                )}
+
+                {isInProgress && (
+                  <button
+                    type="button"
+                    className="btn-register"
+                    onClick={() => setCleanupBed(currentBed)}
+                  >
+                    종료
+                  </button>
                 )}
 
                 {isInProgress && (
