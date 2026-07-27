@@ -4,7 +4,7 @@ import logoIcon from './assets/logo-icon-white.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
-  getBoard,
+  getBoard, readBoardCache,
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
@@ -261,6 +261,16 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
 function formatHour24(timestamp) {
   const d = new Date(timestamp)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// 오프라인 배너의 "언제 기준 정보인지" 문구. lastSyncAt이 없으면(캐시도 없는 첫 접속) 시각은 생략.
+function formatStaleness(lastSyncAt, nowMs) {
+  if (!lastSyncAt) return null
+  const minutes = Math.floor(Math.max(0, nowMs - lastSyncAt) / 60000)
+  if (minutes < 1) return '방금 전 정보'
+  if (minutes < 60) return `${minutes}분 전 정보`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}시간 ${minutes % 60}분 전 정보`
 }
 
 // 공용 발생시각 선택 컴포넌트: 기본값 지금, 당김 버튼(-5/-15/-30분), 시:분 직접입력.
@@ -951,7 +961,7 @@ function PatientView({
 }
 
 // ─── 관리자 설정 — 계정 관리 ──────────────────────────────────────
-function AccountManageSection() {
+function AccountManageSection({ offline }) {
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -975,7 +985,9 @@ function AccountManageSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [])
+  // offline이 바뀔 때도 다시 부른다 — 연결이 끊긴 동안 목록 로딩이 실패했으면
+  // 복구된 뒤에 저절로 채워져야 한다(탭을 다시 눌러야 나오면 안 됨).
+  useEffect(() => { reload() }, [offline])
 
   async function handleAdd() {
     setError('')
@@ -1036,7 +1048,7 @@ function AccountManageSection() {
     <div className="dm-admin-section">
       <div className="dm-note-section__header">
         <h4>계정 관리 ({accounts.length})</h4>
-        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)}>
+        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)} disabled={offline}>
           {showAdd ? '취소' : '+ 계정 추가'}
         </button>
       </div>
@@ -1068,7 +1080,7 @@ function AccountManageSection() {
           <button
             type="button"
             className="btn-register"
-            disabled={!newUsername.trim() || !newPassword || !newDisplayName.trim()}
+            disabled={offline || !newUsername.trim() || !newPassword || !newDisplayName.trim()}
             onClick={handleAdd}
           >
             추가
@@ -1124,14 +1136,14 @@ function AccountManageSection() {
                           onChange={(e) => setEditPassword(e.target.value)}
                         />
                         <div className="dm-admin-edit-actions__buttons">
-                          <button type="button" className="dm-note-btn" disabled={busyId === acc.id} onClick={() => handleEditSave(acc.id)}>저장</button>
+                          <button type="button" className="dm-note-btn" disabled={offline || busyId === acc.id} onClick={() => handleEditSave(acc.id)}>저장</button>
                           <button type="button" className="dm-note-btn" onClick={() => setEditingId(null)}>취소</button>
                         </div>
                       </div>
                     ) : (
                       <div className="dm-admin-edit-actions__buttons">
-                        <button type="button" className="dm-note-btn" onClick={() => startEdit(acc)}>수정</button>
-                        <button type="button" className="dm-note-btn" disabled={busyId === acc.id} onClick={() => handleToggleActive(acc)}>
+                        <button type="button" className="dm-note-btn" onClick={() => startEdit(acc)} disabled={offline}>수정</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === acc.id} onClick={() => handleToggleActive(acc)}>
                           {acc.isActive ? '사용 안함' : '사용'}
                         </button>
                       </div>
@@ -1148,7 +1160,7 @@ function AccountManageSection() {
 }
 
 // ─── 관리자 설정 — 직원 관리 ──────────────────────────────────────
-function StaffManageSection() {
+function StaffManageSection({ offline }) {
   const [staff, setStaff] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1170,7 +1182,9 @@ function StaffManageSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [])
+  // offline이 바뀔 때도 다시 부른다 — 연결이 끊긴 동안 목록 로딩이 실패했으면
+  // 복구된 뒤에 저절로 채워져야 한다(탭을 다시 눌러야 나오면 안 됨).
+  useEffect(() => { reload() }, [offline])
 
   async function handleAdd() {
     setError('')
@@ -1239,7 +1253,7 @@ function StaffManageSection() {
     <div className="dm-admin-section">
       <div className="dm-note-section__header">
         <h4>직원 관리 ({staff.length})</h4>
-        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)}>
+        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)} disabled={offline}>
           {showAdd ? '취소' : '+ 직원 추가'}
         </button>
       </div>
@@ -1252,7 +1266,7 @@ function StaffManageSection() {
             <span className="field__label">이름</span>
             <input className="field__input" value={newName} onChange={(e) => setNewName(e.target.value)} />
           </label>
-          <button type="button" className="btn-register" disabled={!newName.trim()} onClick={handleAdd}>
+          <button type="button" className="btn-register" disabled={offline || !newName.trim()} onClick={handleAdd}>
             추가
           </button>
         </div>
@@ -1286,15 +1300,15 @@ function StaffManageSection() {
                   <td className="dm-note-manage__action">
                     {editingId === s.id ? (
                       <div className="dm-admin-edit-actions__buttons">
-                        <button type="button" className="dm-note-btn" disabled={busyId === s.id} onClick={() => handleEditSave(s.id)}>저장</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id} onClick={() => handleEditSave(s.id)}>저장</button>
                         <button type="button" className="dm-note-btn" onClick={() => setEditingId(null)}>취소</button>
                       </div>
                     ) : (
                       <div className="dm-admin-edit-actions__buttons">
-                        <button type="button" className="dm-note-btn" disabled={busyId === s.id || i === 0} onClick={() => handleMove(i, -1)}>▲</button>
-                        <button type="button" className="dm-note-btn" disabled={busyId === s.id || i === staff.length - 1} onClick={() => handleMove(i, 1)}>▼</button>
-                        <button type="button" className="dm-note-btn" onClick={() => startEdit(s)}>수정</button>
-                        <button type="button" className="dm-note-btn" disabled={busyId === s.id} onClick={() => handleToggleActive(s)}>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === 0} onClick={() => handleMove(i, -1)}>▲</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === staff.length - 1} onClick={() => handleMove(i, 1)}>▼</button>
+                        <button type="button" className="dm-note-btn" onClick={() => startEdit(s)} disabled={offline}>수정</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id} onClick={() => handleToggleActive(s)}>
                           {s.isActive ? '사용 안함' : '사용'}
                         </button>
                       </div>
@@ -1311,7 +1325,7 @@ function StaffManageSection() {
 }
 
 // ─── 관리자 설정 — 운영 설정값 ────────────────────────────────────
-function SettingsManageSection() {
+function SettingsManageSection({ offline }) {
   const [settings, setSettings] = useState([])
   const [draft, setDraft] = useState({})
   const [loading, setLoading] = useState(true)
@@ -1329,7 +1343,9 @@ function SettingsManageSection() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [])
+  // offline이 바뀔 때도 다시 부른다 — 연결이 끊긴 동안 목록 로딩이 실패했으면
+  // 복구된 뒤에 저절로 채워져야 한다(탭을 다시 눌러야 나오면 안 됨).
+  useEffect(() => { reload() }, [offline])
 
   async function handleSave(key) {
     setSavingKey(key)
@@ -1373,7 +1389,7 @@ function SettingsManageSection() {
                 <button
                   type="button"
                   className="dm-note-btn"
-                  disabled={!dirty || savingKey === meta.key}
+                  disabled={offline || !dirty || savingKey === meta.key}
                   onClick={() => handleSave(meta.key)}
                 >
                   저장
@@ -1396,6 +1412,7 @@ function DataManageView({
   patientNotes,
   onUpdatePatientNotes,
   account,
+  offline,
 }) {
   // 검색 조건
   const [searchName, setSearchName] = useState('')
@@ -1645,7 +1662,7 @@ function DataManageView({
             type="button"
             className="dm-btn dm-btn--delete"
             onClick={handleDeleteRequest}
-            disabled={checkedCount === 0}
+            disabled={offline || checkedCount === 0}
           >
             선택 삭제
           </button>
@@ -1654,7 +1671,7 @@ function DataManageView({
             type="button"
             className="dm-btn dm-btn--restore"
             onClick={handleRestore}
-            disabled={checkedCount === 0}
+            disabled={offline || checkedCount === 0}
           >
             선택 복구
           </button>
@@ -1779,6 +1796,7 @@ function DataManageView({
                           onClick={() =>
                             handleToggleSessionNoteDeleted(n.id, !sessionNoteTrash)
                           }
+                          disabled={offline}
                         >
                           {sessionNoteTrash ? '복구' : '삭제'}
                         </button>
@@ -1840,6 +1858,7 @@ function DataManageView({
                           onClick={() =>
                             handleTogglePatientNoteDeleted(n.id, !patientNoteTrash)
                           }
+                          disabled={offline}
                         >
                           {patientNoteTrash ? '복구' : '삭제'}
                         </button>
@@ -1857,9 +1876,9 @@ function DataManageView({
       {account?.role === 'admin' && (
         <div className="dm-admin">
           <h3 className="dm-note-manage__title">관리자 설정</h3>
-          <AccountManageSection />
-          <StaffManageSection />
-          <SettingsManageSection />
+          <AccountManageSection offline={offline} />
+          <StaffManageSection offline={offline} />
+          <SettingsManageSection offline={offline} />
         </div>
       )}
 
@@ -1874,7 +1893,7 @@ function DataManageView({
                 <span className="confirm__sub">삭제된 기록은 휴지통에서 복구할 수 있습니다.</span>
               </p>
               <div className="confirm__actions">
-                <button type="button" className="btn-confirm btn-confirm--yes" onClick={handleDeleteConfirm}>
+                <button type="button" className="btn-confirm btn-confirm--yes" onClick={handleDeleteConfirm} disabled={offline}>
                   예
                 </button>
                 <button type="button" className="btn-confirm btn-confirm--no" onClick={() => setDeleteConfirm(false)}>
@@ -2141,6 +2160,12 @@ function App() {
   const [patientViewSeed, setPatientViewSeed] = useState(null)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
 
+  // 오프라인 폴백 — 서버 폴링이 연속 실패하면 읽기 전용으로 전환하고 마지막 화면을 유지한다.
+  // lastSyncAt은 "지금 보이는 정보가 언제 기준인지"(배너의 N분 전). 캐시에서 복구할 수도 있어
+  // 초기값을 localStorage에서 읽어온다.
+  const [offline, setOffline] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState(null)
+
   // 서버 시각 기준 시계 — 클라이언트 시계가 틀려도 서버와 동일한 여유/곧/밀림 판정이 나오게 함.
   // clockOffsetRef = server_now - Date.now()(마지막 동기화 시점). now = Date.now() + offset.
   const clockOffsetRef = useRef(0)
@@ -2179,6 +2204,8 @@ function App() {
     let timeoutId = null
     let consecutiveFailures = 0
     const FAILURE_DELAYS_MS = [3000, 6000, 12000, 30000]
+    // 한 번 삐끗한 걸로 배너를 번쩍이게 하지 않는다. 3초 간격이라 2번이면 약 6초.
+    const OFFLINE_AFTER_FAILURES = 2
 
     function nextDelay() {
       if (document.visibilityState !== 'visible') return 30000
@@ -2195,11 +2222,17 @@ function App() {
             setBeds(result.beds)
             revisionRef.current = result.revision
           }
+          // unchanged든 아니든 서버와 통신에 성공한 시점 = 지금 보이는 정보의 기준 시각.
+          setLastSyncAt(result.serverNow)
+          setOffline(false)
           consecutiveFailures = 0
         }
       } catch (err) {
         console.error('보드 폴링 실패', err)
         consecutiveFailures += 1
+        if (!cancelled && consecutiveFailures >= OFFLINE_AFTER_FAILURES) {
+          setOffline(true)
+        }
       }
       if (!cancelled) {
         timeoutId = setTimeout(poll, nextDelay())
@@ -2213,11 +2246,13 @@ function App() {
     }
   }, [account])
 
+  // offline도 조건에 넣는다 — 진행 중인 세션이 없으면 now가 안 도는데,
+  // 그러면 오프라인 배너의 "N분 전"이 멈춰 있게 된다.
   useEffect(() => {
-    if (!hasActiveSessions) return
+    if (!hasActiveSessions && !offline) return
     const timer = setInterval(() => setNow(Date.now() + clockOffsetRef.current), 1000)
     return () => clearInterval(timer)
-  }, [hasActiveSessions])
+  }, [hasActiveSessions, offline])
 
   useEffect(() => {
     setBeds((prev) => {
@@ -2298,8 +2333,21 @@ function App() {
         setBeds(result.beds)
         revisionRef.current = result.revision
       }
+      setLastSyncAt(result.serverNow)
+      setOffline(false)
     } catch (err) {
       console.error('보드 갱신 실패', err)
+      // 서버가 이미 죽은 채로 접속·새로고침한 경우 — 캐시라도 띄워서 마지막 화면을 보여준다.
+      // revisionRef가 아직 null = 이번 세션에서 board를 한 번도 못 받았다는 뜻.
+      // 이미 받은 적이 있으면(액션 직후 갱신 실패) 화면을 캐시로 되돌리지 않고 그대로 둔다.
+      if (revisionRef.current === null) {
+        const cached = readBoardCache()
+        if (cached) {
+          setBeds(cached.beds)
+          setLastSyncAt(cached.cachedAt)
+        }
+      }
+      setOffline(true)
     }
   }
 
@@ -2876,6 +2924,17 @@ function App() {
         ))}
       </nav>
 
+      {/* ── 오프라인 배너 — 서버 연결이 끊긴 동안 읽기 전용임을 알린다 ── */}
+      {offline && (
+        <div className="offline-banner" role="status">
+          <span className="offline-banner__label">서버 연결 끊김</span>
+          <span className="offline-banner__desc">
+            {formatStaleness(lastSyncAt, now) ?? '저장된 정보가 없습니다'}
+            {' · 읽기 전용 — 기록·저장은 연결이 돌아온 뒤에 가능합니다'}
+          </span>
+        </div>
+      )}
+
       {/* ── 자리이동 모드 안내 바 ── */}
       {movingBed && (
         <div className="move-banner">
@@ -2932,6 +2991,7 @@ function App() {
           patientNotes={patientNotes}
           onUpdatePatientNotes={updatePatientNotesWithSync}
           account={account}
+          offline={offline}
         />
       ) : (
         <>
@@ -3024,6 +3084,7 @@ function App() {
                   type="button"
                   className="btn-confirm btn-confirm--yes"
                   onClick={handleCleanupYes}
+                  disabled={offline}
                 >
                   예
                 </button>
@@ -3120,7 +3181,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleRegister}
-                  disabled={!patientName.trim() || !chartNumber.trim() || !lineStaffId}
+                  disabled={offline || !patientName.trim() || !chartNumber.trim() || !lineStaffId}
                 >
                   배정
                 </button>
@@ -3168,7 +3229,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleStartSession}
-                  disabled={!mixStaffId}
+                  disabled={offline || !mixStaffId}
                 >
                   투여 시작
                 </button>
@@ -3177,6 +3238,7 @@ function App() {
                   type="button"
                   className="btn-remove-patient-link"
                   onClick={() => setRemovePatientConfirm(true)}
+                  disabled={offline}
                 >
                   배정 취소
                 </button>
@@ -3192,6 +3254,7 @@ function App() {
                         type="button"
                         className="btn-edit-patient"
                         onClick={openEditPatientModal}
+                        disabled={offline}
                       >
                         정보 수정
                       </button>
@@ -3208,6 +3271,7 @@ function App() {
                         type="button"
                         className="btn-move-bed"
                         onClick={handleStartMoveBed}
+                        disabled={offline}
                       >
                         베드이동
                       </button>
@@ -3254,6 +3318,7 @@ function App() {
                       type="button"
                       className="btn-round-entry"
                       onClick={() => openRoundModal()}
+                      disabled={offline}
                     >
                       라운딩
                     </button>
@@ -3261,6 +3326,7 @@ function App() {
                       type="button"
                       className="btn-register"
                       onClick={() => openNoteModal('session')}
+                      disabled={offline}
                     >
                       특이사항 기록
                     </button>
@@ -3272,6 +3338,7 @@ function App() {
                     type="button"
                     className="btn-register"
                     onClick={() => setCleanupBed(currentBed)}
+                    disabled={offline}
                   >
                     종료
                   </button>
@@ -3282,6 +3349,7 @@ function App() {
                     type="button"
                     className="btn-remove-patient-link"
                     onClick={() => setRemovePatientConfirm(true)}
+                    disabled={offline}
                   >
                     환자 등록 취소
                   </button>
@@ -3312,6 +3380,7 @@ function App() {
                   type="button"
                   className="btn-confirm btn-confirm--yes btn-confirm--danger"
                   onClick={handleRemovePatientConfirm}
+                  disabled={offline}
                 >
                   등록 취소
                 </button>
@@ -3368,7 +3437,7 @@ function App() {
                 type="button"
                 className="btn-register"
                 onClick={handleSavePatientEdit}
-                disabled={!editPatientName.trim() || !editChartNumber.trim()}
+                disabled={offline || !editPatientName.trim() || !editChartNumber.trim()}
               >
                 저장
               </button>
@@ -3467,7 +3536,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleSaveSessionNote}
-                  disabled={noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()}
+                  disabled={offline || (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim())}
                 >
                   저장
                 </button>
@@ -3521,7 +3590,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleSavePatientNote}
-                  disabled={!noteContent.trim()}
+                  disabled={offline || !noteContent.trim()}
                 >
                   저장
                 </button>
@@ -3664,6 +3733,7 @@ function App() {
                     type="button"
                     className="btn-register btn-round-complete"
                     onClick={handleSaveRound}
+                    disabled={offline}
                   >
                     ✓ 라운딩 완료
                   </button>

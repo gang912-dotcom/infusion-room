@@ -81,19 +81,64 @@ function mapBoardToBeds(board) {
   })
 }
 
+// ─── board 오프라인 캐시 ────────────────────────────────────────────
+// 2층 무선 단말은 연결이 끊기는 일이 있다. 마지막으로 성공한 board를 localStorage에 넣어두고
+// 서버가 죽었을 때 읽기 전용으로 그 화면을 계속 보여준다.
+// 이건 예전의 "localStorage가 원본" 구조로 되돌아가는 게 아니다 — 어디까지나 읽기 전용 캐시고,
+// 쓰기는 여전히 전부 서버 액션으로만 나간다. 오프라인 중에는 쓰기 자체를 막는다(App.jsx).
+const BOARD_CACHE_KEY = 'infusion-room-board-cache'
+const BOARD_CACHE_AT_KEY = 'infusion-room-board-cached-at'
+
+// beds 본문과 시각을 키를 나눠 저장한다 — 변경 없는 폴링(3초마다)에서 30개 베드 JSON을
+// 통째로 다시 쓰지 않고 숫자 하나만 갱신하려고.
+function writeBoardCache(beds) {
+  try {
+    localStorage.setItem(BOARD_CACHE_KEY, JSON.stringify(beds))
+  } catch {
+    // 용량 초과 등 — 캐시 실패가 앱을 멈추면 안 된다
+  }
+}
+
+function touchBoardCacheTime(serverNow) {
+  try {
+    localStorage.setItem(BOARD_CACHE_AT_KEY, String(serverNow))
+  } catch {
+    // 위와 동일
+  }
+}
+
+// 서버가 안 뜬 채로 새로고침했을 때 쓰는 진입점. 캐시가 없거나 깨졌으면 null.
+export function readBoardCache() {
+  try {
+    const raw = localStorage.getItem(BOARD_CACHE_KEY)
+    if (!raw) return null
+    const beds = JSON.parse(raw)
+    if (!Array.isArray(beds)) return null
+    const cachedAt = Number(localStorage.getItem(BOARD_CACHE_AT_KEY))
+    return { beds, cachedAt: Number.isFinite(cachedAt) && cachedAt > 0 ? cachedAt : null }
+  } catch {
+    return null
+  }
+}
+
 // since를 넘기면 서버가 변경 없을 때 { unchanged: true }만 응답 -> 그대로 전달해서
 // 호출 쪽(App.jsx)이 불필요한 리렌더를 건너뛸 수 있게 한다.
 export async function getBoard(sinceRevision) {
   const query = sinceRevision != null ? `?since=${sinceRevision}` : ''
   const board = await apiFetch(`/board${query}`)
   if (board.unchanged) {
+    // 변경이 없다는 건 "이 시점 기준으로 캐시가 최신"이라는 뜻 — 시각만 갱신한다.
+    touchBoardCacheTime(board.server_now)
     return { unchanged: true, revision: board.revision, serverNow: board.server_now }
   }
+  const beds = mapBoardToBeds(board)
+  writeBoardCache(beds)
+  touchBoardCacheTime(board.server_now)
   return {
     unchanged: false,
     revision: board.revision,
     serverNow: board.server_now,
-    beds: mapBoardToBeds(board),
+    beds,
   }
 }
 

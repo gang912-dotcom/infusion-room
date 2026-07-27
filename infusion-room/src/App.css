@@ -3222,3 +3222,45 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* ── 오프라인 배너 (7b) ── */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: #5c2b2b;
+  border: 1px solid #8a4444;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(92,43,43,0.22);
+}
+
+.offline-banner__label {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffe0e0;
+  background: #8a4444;
+  border-radius: 999px;
+}
+
+.offline-banner__desc {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffd9d9;
+}
+
+/* 오프라인 중 비활성화된 버튼이 "고장난 것"처럼 안 보이게 — 일관된 흐린 처리 */
+.btn-register:disabled,
+.btn-confirm:disabled,
+.btn-remove-patient-link:disabled,
+.btn-edit-patient:disabled,
+.btn-move-bed:disabled,
+.btn-round-entry:disabled,
+.dm-btn:disabled,
+.dm-mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
