@@ -50,10 +50,18 @@
   }
 }
 
+/* 페이지(상한 밖 여백) 배경 — 테마 연동 */
+:root[data-theme='dark'] {
+  --page-bg: #121212;
+}
+:root[data-theme='light'] {
+  --page-bg: #f2f2f7;
+}
+
 body {
   margin: 0;
-  /* 상한(max-width)을 넘는 대형 화면에서 좌우가 흰색으로 비지 않도록 앱과 같은 다크 배경 */
-  background: #121212;
+  /* 상한(max-width)을 넘는 대형 화면에서 좌우가 앱과 같은 배경색이 되도록 */
+  background: var(--page-bg, #121212);
 }
 
 #root {

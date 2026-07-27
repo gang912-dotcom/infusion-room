@@ -2124,6 +2124,15 @@ function LoginScreen({ onLoginSuccess }) {
 // ─── App ────────────────────────────────────────────────────────
 function App() {
   const [account, setAccount] = useState(null)
+  const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'dark')
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    try {
+      localStorage.setItem('iv-theme', theme)
+    } catch {
+      /* localStorage 불가 환경 무시 */
+    }
+  }, [theme])
   const [authChecked, setAuthChecked] = useState(false)
   const [beds, setBeds] = useState([])
   const [staffList, setStaffList] = useState([])
@@ -2910,6 +2919,15 @@ function App() {
           </div>
         </header>
         <div className="header-account">
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            aria-label="밝게/어둡게 전환"
+            title="밝게/어둡게 전환"
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
           <span className="header-account__name">{account.displayName}</span>
           <button type="button" className="header-account__logout" onClick={handleLogout}>
             로그아웃
