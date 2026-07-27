@@ -26,6 +26,9 @@
   --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   --card-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   --card-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
+  /* 프로스티드 글래스(모달) */
+  --glass: rgba(28, 28, 32, 0.82);
+  --glass-brd: rgba(255, 255, 255, 0.12);
 
   display: flex;
   flex-direction: column;
@@ -63,6 +66,8 @@
   --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
   --card-shadow: 0 5px 14px rgba(60, 60, 70, 0.10);
   --card-shadow-hover: 0 12px 26px rgba(60, 60, 70, 0.16);
+  --glass: rgba(250, 250, 252, 0.8);
+  --glass-brd: rgba(255, 255, 255, 0.7);
 }
 
 /* 라이트에선 파랑/인디고 최소화 — 큰 제목·병원명 라벨 중성 처리 */
@@ -263,6 +268,26 @@
 .tab:focus-visible {
   outline: 2px solid var(--status-occupied);
   outline-offset: 2px;
+}
+
+/* ─── 누름 모션 (iOS식 살짝 눌림) ─────────────────────────────── */
+.tab,
+.theme-toggle,
+.header-account__logout,
+.btn-register,
+.btn-confirm,
+.modal__close {
+  transition: transform 0.09s ease, background 0.2s, color 0.2s,
+    border-color 0.2s, box-shadow 0.2s;
+}
+
+.tab:active,
+.theme-toggle:active,
+.header-account__logout:active,
+.btn-register:active,
+.btn-confirm:active,
+.modal__close:active {
+  transform: scale(0.95);
 }
 
 /* ─── 전체보기 상태 요약 바 ──────────────────────────────────── */
@@ -744,12 +769,13 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   z-index: 100;
+  animation: overlay-in 0.2s ease;
 }
 
 .modal-overlay--top {
@@ -762,10 +788,25 @@
   max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
-  background: var(--panel-bg);
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  /* 프로스티드 글래스: 반투명 + 뒤 배경 블러 (iPad 사파리 대비 -webkit- 포함) */
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid var(--glass-brd);
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+  animation: modal-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 
 .modal__header {
@@ -774,8 +815,8 @@
   justify-content: space-between;
   flex-shrink: 0;
   padding: 20px 24px;
-  background: var(--card-bg);
-  border-bottom: 1px solid var(--card-border);
+  background: transparent;
+  border-bottom: 1px solid var(--glass-brd);
 }
 
 .modal__header h2 {
