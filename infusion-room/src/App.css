@@ -39,8 +39,8 @@
   --text-primary: #1c1c1e;
   --text-secondary: #55555a;
   --text-muted: #8a8a8e;
-  --status-occupied: #0a6fd6;
-  --status-occupied-bg: rgba(0, 122, 255, 0.12);
+  --status-occupied: #6c6c70;
+  --status-occupied-bg: #ececf0;
   --status-warning: #c77400;
   --status-warning-bg: rgba(255, 149, 0, 0.14);
   --status-completed: #d22b21;
@@ -54,12 +54,19 @@
   --hover-tint: rgba(0, 0, 0, 0.04);
 }
 
-/* 라이트에서 흰색 로고가 안 보이므로 은은한 뱃지 위에 */
+/* 흰 로고를 라이트에서 검정 모노크롬으로 (뱃지 없이) */
 :root[data-theme='light'] .header__logo {
-  box-sizing: border-box;
-  padding: 5px;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #3a97ff, #0a84ff);
+  filter: brightness(0);
+}
+
+/* 라이트에선 파랑/인디고 최소화 — 큰 제목·병원명 라벨 중성 처리 */
+:root[data-theme='light'] .header__title {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: #1c1c1e;
+}
+:root[data-theme='light'] .header__clinic {
+  color: #8a8a8e;
 }
 
 /* 테마 전환 버튼 */
