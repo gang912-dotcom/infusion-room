@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import db from '../db.js'
 import { SESSION_COOKIE_NAME, requireAuth } from '../middleware/requireAuth.js'
+import { logAccess, ACTIONS } from '../lib/accessLog.js'
 
 const router = Router()
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
@@ -32,6 +33,8 @@ router.post('/login', (req, res) => {
     maxAge: THIRTY_DAYS_MS,
     sameSite: 'lax',
   })
+  // 성공한 로그인만 기록한다(실패는 대상 아님). requireAuth를 안 거치는 경로라 accountId를 직접 넘긴다.
+  logAccess(req, ACTIONS.LOGIN, { accountId: account.id })
   res.json({
     ok: true,
     account: { id: account.id, username: account.username, display_name: account.display_name, role: account.role },

@@ -153,6 +153,13 @@ export async function lookupPatient(chartNo) {
   return apiFetch(`/patients/lookup?chart_no=${encodeURIComponent(chartNo)}`)
 }
 
+// 환자 상세를 연 사실만 서버에 남긴다(접근 로그). 화면 렌더는 이 호출과 무관하므로
+// 실패해도 조용히 넘어간다 — 로그 때문에 조회가 막히면 안 된다.
+export function logPatientDetailView(chartNo) {
+  return apiFetch(`/patients/${encodeURIComponent(chartNo)}/detail-view`, { method: 'POST' })
+    .catch((err) => console.error('환자 조회 로그 기록 실패', err))
+}
+
 export async function assignBed({ bedCode, chartNo, patientName, lineStaffId }) {
   return apiFetch('/sessions/assign', {
     method: 'POST',

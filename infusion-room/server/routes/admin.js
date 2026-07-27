@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import db from '../db.js'
 import { isUniqueConstraintError } from '../lib/validation.js'
+import { logAccess, ACTIONS } from '../lib/accessLog.js'
 
 const router = Router()
 
@@ -27,6 +28,7 @@ router.post('/accounts', (req, res) => {
       `INSERT INTO accounts (username, display_name, password_hash, role, is_active, created_at, updated_at)
        VALUES (?, ?, ?, ?, 1, ?, ?)`,
     ).run(username, display_name, bcrypt.hashSync(password, 10), role, now, now)
+    logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: 'account', targetId: info.lastInsertRowid })
     res.status(201).json({ id: info.lastInsertRowid })
   } catch (err) {
     if (isUniqueConstraintError(err)) return res.status(409).json({ error: '이미 존재하는 아이디입니다' })
@@ -68,6 +70,7 @@ router.patch('/accounts/:id', (req, res) => {
   fields.push('updated_at = ?')
   params.push(Date.now(), account.id)
   db.prepare(`UPDATE accounts SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+  logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: 'account', targetId: account.id })
   res.json({ ok: true })
 })
 
@@ -83,6 +86,7 @@ router.post('/staff', (req, res) => {
   const info = db.prepare(
     'INSERT INTO staff (name, is_active, sort_order, created_at) VALUES (?, 1, ?, ?)',
   ).run(name, maxOrder + 1, Date.now())
+  logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: 'staff', targetId: info.lastInsertRowid })
   res.status(201).json({ id: info.lastInsertRowid })
 })
 
@@ -100,6 +104,7 @@ router.patch('/staff/:id', (req, res) => {
 
   params.push(staff.id)
   db.prepare(`UPDATE staff SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+  logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: 'staff', targetId: staff.id })
   res.json({ ok: true })
 })
 
@@ -119,6 +124,10 @@ router.patch('/settings/:key', (req, res) => {
 
   db.prepare('UPDATE settings SET value = ?, updated_at = ? WHERE key = ?')
     .run(String(value), Date.now(), req.params.key)
+  // settings는 키가 문자열이라 INTEGER인 target_id에 못 담는다. 어떤 설정을 바꿨는지는
+  // 감사 기록에서 중요한 정보라 target_type에 'setting:<key>' 형태로 붙여 보존한다
+  // (스키마 변경 없이. 설정 변경 전체 조회는 target_type LIKE 'setting:%').
+  logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: `setting:${req.params.key}` })
   res.json({ ok: true })
 })
 

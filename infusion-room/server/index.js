@@ -12,6 +12,7 @@ import notesRouter from './routes/notes.js'
 import staffRouter from './routes/staff.js'
 import adminRouter from './routes/admin.js'
 import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
+import { scheduleLogPruning } from './lib/accessLog.js'
 
 const app = express()
 app.use(express.json())
@@ -59,4 +60,7 @@ app.use((err, req, res, next) => {
 
 // 운영·개발 모두 4000. 개발 시 vite(5173)가 /api를 이 포트로 프록시한다(vite.config.js).
 const PORT = process.env.PORT || 4000
-app.listen(PORT, () => console.log(`server listening on :${PORT}`))
+app.listen(PORT, () => {
+  console.log(`server listening on :${PORT}`)
+  scheduleLogPruning()
+})

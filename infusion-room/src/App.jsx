@@ -9,7 +9,7 @@ import {
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
   loadRounds, createRound,
-  getStaffList, lookupPatient,
+  getStaffList, lookupPatient, logPatientDetailView,
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionPatient,
   listAccounts, createAccount, updateAccount,
@@ -727,6 +727,13 @@ function PatientView({
     if (initialChartNumber) onInitialChartConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 접근 로그(7c) — 특정 환자의 상세를 열 때만 남긴다. 검색어를 치는 중이거나
+  // 목록만 보는 단계는 대상이 아니다. selectedKey를 보고 있으므로 결과 클릭으로 열든
+  // 다른 화면에서 넘어와 열리든(initialChartNumber) 양쪽 다 잡힌다.
+  useEffect(() => {
+    if (selectedKey) logPatientDetailView(selectedKey)
+  }, [selectedKey])
 
   // 차트번호 기준으로 환자 목록 구성
   const patientMap = {}
