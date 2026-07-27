@@ -2157,10 +2157,10 @@ function App() {
     if (el && el.animate) {
       el.animate(
         [
-          { opacity: 0, transform: `translateX(${dir * 26}px)` },
+          { opacity: 0.3, transform: `translateX(${dir * 60}%)` },
           { opacity: 1, transform: 'translateX(0)' },
         ],
-        { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+        { duration: 360, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
       )
     }
   }, [activeTab])

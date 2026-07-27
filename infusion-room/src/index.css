@@ -62,6 +62,8 @@ body {
   margin: 0;
   /* 상한(max-width)을 넘는 대형 화면에서 좌우가 앱과 같은 배경색이 되도록 */
   background: var(--page-bg, #121212);
+  /* 탭 슬라이드 전환 시 가로 스크롤바가 잠깐 생기지 않도록 */
+  overflow-x: hidden;
 }
 
 #root {
