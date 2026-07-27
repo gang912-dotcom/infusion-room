@@ -290,6 +290,13 @@
   transform: scale(0.95);
 }
 
+/* 탭 콘텐츠 래퍼 — 기존 .app 세로 간격을 그대로 유지(래핑으로 간격이 사라지지 않게) */
+.tab-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 /* ─── 전체보기 상태 요약 바 ──────────────────────────────────── */
 .bed-summary {
   display: grid;
@@ -805,8 +812,9 @@
 }
 
 @keyframes modal-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  0% { opacity: 0; transform: scale(0.86); }
+  60% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .modal__header {

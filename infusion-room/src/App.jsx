@@ -2126,6 +2126,8 @@ function LoginScreen({ onLoginSuccess }) {
 function App() {
   const [account, setAccount] = useState(null)
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'dark')
+  const tabViewRef = useRef(null)
+  const prevTabRef = useRef('all')
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     try {
@@ -2146,6 +2148,22 @@ function App() {
   const [patientNotes, setPatientNotes] = useState([])
   const [rounds, setRounds] = useState([])
   const [activeTab, setActiveTab] = useState('all')
+  // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
+  useEffect(() => {
+    const el = tabViewRef.current
+    const order = TABS.map((t) => t.id)
+    const dir = order.indexOf(activeTab) >= order.indexOf(prevTabRef.current) ? 1 : -1
+    prevTabRef.current = activeTab
+    if (el && el.animate) {
+      el.animate(
+        [
+          { opacity: 0, transform: `translateX(${dir * 26}px)` },
+          { opacity: 1, transform: 'translateX(0)' },
+        ],
+        { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      )
+    }
+  }, [activeTab])
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
   const [patientName, setPatientName] = useState('')
@@ -2996,6 +3014,7 @@ function App() {
         </div>
       )}
 
+      <div className="tab-view" ref={tabViewRef}>
       {activeTab === 'history' ? (
         <HistoryView history={activeHistory} />
       ) : activeTab === 'patient' ? (
@@ -3094,6 +3113,7 @@ function App() {
           )}
         </>
       )}
+      </div>
 
       {cleanupBed && (
         <div className="modal-overlay">
