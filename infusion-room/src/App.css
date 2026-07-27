@@ -98,7 +98,8 @@
   position: relative;
   background: var(--panel-bg);
   border-radius: 24px;
-  padding: 16px 20px;
+  /* 오른쪽은 초상화(.header__dog, 폭 ~82px)가 차지하는 자리 → 계정 블록과 안 겹치게 확보 */
+  padding: 16px 92px 16px 20px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   display: flex;
@@ -1155,7 +1156,8 @@
   }
 
   .header-wrap {
-    padding: 12px 16px;
+    /* 폰: 초상화 폭(~65px) 확보 */
+    padding: 12px 76px 12px 16px;
     border-radius: 18px;
   }
 
