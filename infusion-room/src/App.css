@@ -447,8 +447,9 @@
   gap: 8px;
 }
 
+/* 미도착 오래돼도 테두리는 보라(배정) 유지 — 주황 테두리 제거. '환자 미도착' 라벨은 그대로. */
 .bed-card--reserved-overdue {
-  border-color: var(--status-warning);
+  border-color: var(--status-reserved);
 }
 
 .bed-card__reserved-label {
