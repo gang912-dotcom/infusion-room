@@ -285,3 +285,64 @@ export async function togglePatientNoteDeleted(id, { deleted, active } = {}) {
   if (active !== undefined) body.active = active
   return apiFetch(`/patient-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 }
+
+// ─── admin — 계정·직원·설정 관리 (admin 롤 전용, 물리삭제 없음) ────────
+function mapAdminAccount(row) {
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role,
+    isActive: !!row.is_active,
+  }
+}
+
+export async function listAccounts() {
+  const rows = await apiFetch('/admin/accounts')
+  return rows.map(mapAdminAccount)
+}
+
+export async function createAccount({ username, displayName, password, role }) {
+  return apiFetch('/admin/accounts', {
+    method: 'POST',
+    body: JSON.stringify({ username, display_name: displayName, password, role }),
+  })
+}
+
+export async function updateAccount(id, { displayName, password, role, isActive } = {}) {
+  const body = {}
+  if (displayName !== undefined) body.display_name = displayName
+  if (password) body.password = password
+  if (role !== undefined) body.role = role
+  if (isActive !== undefined) body.is_active = isActive
+  return apiFetch(`/admin/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+function mapAdminStaff(row) {
+  return { id: row.id, name: row.name, isActive: !!row.is_active, sortOrder: row.sort_order }
+}
+
+export async function listStaffAdmin() {
+  const rows = await apiFetch('/admin/staff')
+  return rows.map(mapAdminStaff)
+}
+
+export async function createStaffMember(name) {
+  return apiFetch('/admin/staff', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
+export async function updateStaffMember(id, { name, isActive, sortOrder } = {}) {
+  const body = {}
+  if (name !== undefined) body.name = name
+  if (isActive !== undefined) body.is_active = isActive
+  if (sortOrder !== undefined) body.sort_order = sortOrder
+  return apiFetch(`/admin/staff/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export async function listSettings() {
+  return apiFetch('/admin/settings')
+}
+
+export async function updateSetting(key, value) {
+  return apiFetch(`/admin/settings/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) })
+}

@@ -3136,3 +3136,89 @@
 .dm-note-btn:hover {
   background: var(--hover-tint);
 }
+
+.dm-note-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 관리자 설정 (계정/직원/설정) ── */
+.dm-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+}
+
+.dm-admin-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dm-admin-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.dm-admin-add-form .field {
+  min-width: 140px;
+}
+
+.dm-admin-edit-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.dm-admin-edit-actions__pw {
+  width: 160px;
+}
+
+.dm-admin-edit-actions__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dm-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dm-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.dm-settings-row__label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dm-settings-row__input {
+  width: 100px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.dm-settings-row__unit {
+  font-size: 13px;
+  color: var(--text-muted);
+}

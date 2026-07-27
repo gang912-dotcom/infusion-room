@@ -12,6 +12,9 @@ import {
   getStaffList, lookupPatient,
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionPatient,
+  listAccounts, createAccount, updateAccount,
+  listStaffAdmin, createStaffMember, updateStaffMember,
+  listSettings, updateSetting,
 } from './api'
 
 const TABS = [
@@ -38,6 +41,22 @@ const ROOM_ORDER = ROOM_TABS.filter((t) => t.id !== 'all')
 
 const DEFAULT_DURATION = 120
 const MIN_DURATION = 10
+
+// ─── 관리자 설정 화면 — 계정 role / 설정값 메타 ──────────────────────
+const ACCOUNT_ROLE_OPTIONS = [
+  { value: 'admin', label: '관리자' },
+  { value: 'staff', label: '직원' },
+]
+
+const SETTINGS_META = [
+  { key: 'round_interval_min', label: '라운딩 간격', unit: '분', step: 1 },
+  { key: 'round_soon_lead_min', label: '곧 리드타임', unit: '분', step: 1 },
+  { key: 'fever_mild_min', label: '미열 기준', unit: '℃', step: 0.1 },
+  { key: 'fever_high_min', label: '고열 기준', unit: '℃', step: 0.1 },
+  { key: 'default_duration_min', label: '기본 소요시간', unit: '분', step: 1 },
+  { key: 'min_duration_min', label: '최소 소요시간', unit: '분', step: 1 },
+  { key: 'assign_timeout_min', label: '미도착 경고 시간', unit: '분', step: 1 },
+]
 
 // ─── 환자 특이사항 표준 어휘 (코드로 저장, 라벨로 표시) ──────────────
 const SYMPTOM_OPTIONS = [
@@ -931,6 +950,443 @@ function PatientView({
   )
 }
 
+// ─── 관리자 설정 — 계정 관리 ──────────────────────────────────────
+function AccountManageSection() {
+  const [accounts, setAccounts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newDisplayName, setNewDisplayName] = useState('')
+  const [newRole, setNewRole] = useState('staff')
+
+  const [editingId, setEditingId] = useState(null)
+  const [editDisplayName, setEditDisplayName] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editRole, setEditRole] = useState('staff')
+
+  function reload() {
+    listAccounts()
+      .then((rows) => { setAccounts(rows); setError('') })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  async function handleAdd() {
+    setError('')
+    try {
+      await createAccount({
+        username: newUsername.trim(),
+        password: newPassword,
+        displayName: newDisplayName.trim(),
+        role: newRole,
+      })
+      setNewUsername(''); setNewPassword(''); setNewDisplayName(''); setNewRole('staff')
+      setShowAdd(false)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function startEdit(acc) {
+    setEditingId(acc.id)
+    setEditDisplayName(acc.displayName)
+    setEditPassword('')
+    setEditRole(acc.role)
+  }
+
+  async function handleEditSave(id) {
+    setBusyId(id)
+    setError('')
+    try {
+      await updateAccount(id, {
+        displayName: editDisplayName.trim(),
+        password: editPassword || undefined,
+        role: editRole,
+      })
+      setEditingId(null)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleToggleActive(acc) {
+    setBusyId(acc.id)
+    setError('')
+    try {
+      await updateAccount(acc.id, { isActive: !acc.isActive })
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>계정 관리 ({accounts.length})</h4>
+        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)}>
+          {showAdd ? '취소' : '+ 계정 추가'}
+        </button>
+      </div>
+
+      {error && <p className="field__error">{error}</p>}
+
+      {showAdd && (
+        <div className="dm-admin-add-form">
+          <label className="field">
+            <span className="field__label">아이디</span>
+            <input className="field__input" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field__label">이름</span>
+            <input className="field__input" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field__label">비밀번호</span>
+            <input type="password" className="field__input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field__label">역할</span>
+            <select className="field__input" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              {ACCOUNT_ROLE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn-register"
+            disabled={!newUsername.trim() || !newPassword || !newDisplayName.trim()}
+            onClick={handleAdd}
+          >
+            추가
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : (
+        <div className="dm-table-wrap">
+          <table className="dm-table">
+            <thead>
+              <tr>
+                <th>아이디</th>
+                <th>이름</th>
+                <th>역할</th>
+                <th>상태</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((acc) => (
+                <tr key={acc.id}>
+                  <td>{acc.username}</td>
+                  <td>
+                    {editingId === acc.id ? (
+                      <input className="field__input" value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} />
+                    ) : acc.displayName}
+                  </td>
+                  <td>
+                    {editingId === acc.id ? (
+                      <select className="field__input" value={editRole} onChange={(e) => setEditRole(e.target.value)}>
+                        {ACCOUNT_ROLE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    ) : ACCOUNT_ROLE_OPTIONS.find((o) => o.value === acc.role)?.label}
+                  </td>
+                  <td>
+                    <span className={`badge ${acc.isActive ? 'badge--info' : 'badge--warning'}`}>
+                      {acc.isActive ? '사용' : '사용 안함'}
+                    </span>
+                  </td>
+                  <td className="dm-note-manage__action">
+                    {editingId === acc.id ? (
+                      <div className="dm-admin-edit-actions">
+                        <input
+                          type="password"
+                          className="field__input dm-admin-edit-actions__pw"
+                          placeholder="새 비밀번호(선택)"
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                        />
+                        <div className="dm-admin-edit-actions__buttons">
+                          <button type="button" className="dm-note-btn" disabled={busyId === acc.id} onClick={() => handleEditSave(acc.id)}>저장</button>
+                          <button type="button" className="dm-note-btn" onClick={() => setEditingId(null)}>취소</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" onClick={() => startEdit(acc)}>수정</button>
+                        <button type="button" className="dm-note-btn" disabled={busyId === acc.id} onClick={() => handleToggleActive(acc)}>
+                          {acc.isActive ? '사용 안함' : '사용'}
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 직원 관리 ──────────────────────────────────────
+function StaffManageSection() {
+  const [staff, setStaff] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+
+  function reload() {
+    listStaffAdmin()
+      .then((rows) => {
+        setStaff([...rows].sort((a, b) => a.sortOrder - b.sortOrder))
+        setError('')
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  async function handleAdd() {
+    setError('')
+    try {
+      await createStaffMember(newName.trim())
+      setNewName('')
+      setShowAdd(false)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function startEdit(s) {
+    setEditingId(s.id)
+    setEditName(s.name)
+  }
+
+  async function handleEditSave(id) {
+    setBusyId(id)
+    setError('')
+    try {
+      await updateStaffMember(id, { name: editName.trim() })
+      setEditingId(null)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleToggleActive(s) {
+    setBusyId(s.id)
+    setError('')
+    try {
+      await updateStaffMember(s.id, { isActive: !s.isActive })
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleMove(index, dir) {
+    const current = staff[index]
+    const target = staff[index + dir]
+    if (!target) return
+    setBusyId(current.id)
+    setError('')
+    try {
+      await Promise.all([
+        updateStaffMember(current.id, { sortOrder: target.sortOrder }),
+        updateStaffMember(target.id, { sortOrder: current.sortOrder }),
+      ])
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>직원 관리 ({staff.length})</h4>
+        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)}>
+          {showAdd ? '취소' : '+ 직원 추가'}
+        </button>
+      </div>
+
+      {error && <p className="field__error">{error}</p>}
+
+      {showAdd && (
+        <div className="dm-admin-add-form">
+          <label className="field">
+            <span className="field__label">이름</span>
+            <input className="field__input" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          </label>
+          <button type="button" className="btn-register" disabled={!newName.trim()} onClick={handleAdd}>
+            추가
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : (
+        <div className="dm-table-wrap">
+          <table className="dm-table">
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>상태</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {staff.map((s, i) => (
+                <tr key={s.id}>
+                  <td>
+                    {editingId === s.id ? (
+                      <input className="field__input" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    ) : s.name}
+                  </td>
+                  <td>
+                    <span className={`badge ${s.isActive ? 'badge--info' : 'badge--warning'}`}>
+                      {s.isActive ? '사용' : '사용 안함'}
+                    </span>
+                  </td>
+                  <td className="dm-note-manage__action">
+                    {editingId === s.id ? (
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" disabled={busyId === s.id} onClick={() => handleEditSave(s.id)}>저장</button>
+                        <button type="button" className="dm-note-btn" onClick={() => setEditingId(null)}>취소</button>
+                      </div>
+                    ) : (
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" disabled={busyId === s.id || i === 0} onClick={() => handleMove(i, -1)}>▲</button>
+                        <button type="button" className="dm-note-btn" disabled={busyId === s.id || i === staff.length - 1} onClick={() => handleMove(i, 1)}>▼</button>
+                        <button type="button" className="dm-note-btn" onClick={() => startEdit(s)}>수정</button>
+                        <button type="button" className="dm-note-btn" disabled={busyId === s.id} onClick={() => handleToggleActive(s)}>
+                          {s.isActive ? '사용 안함' : '사용'}
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 운영 설정값 ────────────────────────────────────
+function SettingsManageSection() {
+  const [settings, setSettings] = useState([])
+  const [draft, setDraft] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [savingKey, setSavingKey] = useState('')
+
+  function reload() {
+    listSettings()
+      .then((rows) => {
+        setSettings(rows)
+        setDraft(Object.fromEntries(rows.map((r) => [r.key, r.value])))
+        setError('')
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  async function handleSave(key) {
+    setSavingKey(key)
+    setError('')
+    try {
+      await updateSetting(key, draft[key])
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingKey('')
+    }
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>설정</h4>
+      </div>
+
+      {error && <p className="field__error">{error}</p>}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : (
+        <div className="dm-settings-list">
+          {SETTINGS_META.map((meta) => {
+            const saved = settings.find((s) => s.key === meta.key)?.value ?? ''
+            const dirty = draft[meta.key] !== undefined && draft[meta.key] !== saved
+            return (
+              <div className="dm-settings-row" key={meta.key}>
+                <span className="dm-settings-row__label">{meta.label}</span>
+                <input
+                  type="number"
+                  step={meta.step}
+                  className="field__input dm-settings-row__input"
+                  value={draft[meta.key] ?? ''}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, [meta.key]: e.target.value }))}
+                />
+                <span className="dm-settings-row__unit">{meta.unit}</span>
+                <button
+                  type="button"
+                  className="dm-note-btn"
+                  disabled={!dirty || savingKey === meta.key}
+                  onClick={() => handleSave(meta.key)}
+                >
+                  저장
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── 데이터관리 화면 ─────────────────────────────────────────────
 function DataManageView({
   allHistory,
@@ -939,6 +1395,7 @@ function DataManageView({
   onUpdateSessionNotes,
   patientNotes,
   onUpdatePatientNotes,
+  account,
 }) {
   // 검색 조건
   const [searchName, setSearchName] = useState('')
@@ -1395,6 +1852,16 @@ function DataManageView({
           )}
         </div>
       </div>
+
+      {/* ── 관리자 설정 (admin 롤 전용) ── */}
+      {account?.role === 'admin' && (
+        <div className="dm-admin">
+          <h3 className="dm-note-manage__title">관리자 설정</h3>
+          <AccountManageSection />
+          <StaffManageSection />
+          <SettingsManageSection />
+        </div>
+      )}
 
       {/* ── 삭제 확인 팝업 ── */}
       {deleteConfirm && (
@@ -2464,6 +2931,7 @@ function App() {
           onUpdateSessionNotes={updateSessionNotesWithSync}
           patientNotes={patientNotes}
           onUpdatePatientNotes={updatePatientNotesWithSync}
+          account={account}
         />
       ) : (
         <>
