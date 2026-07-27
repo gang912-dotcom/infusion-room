@@ -107,6 +107,48 @@ const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
 const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
 
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
+// SF Symbols 풍 단색 라인 아이콘 (currentColor, 1em) — 이모지 대체
+function Icon({ name, className }) {
+  const shapes = {
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5V12l3 1.8" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8.5a6 6 0 0 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14.5 18 8.5" />
+        <path d="M10.2 20a2 2 0 0 0 3.6 0" />
+      </>
+    ),
+    alert: (
+      <>
+        <path d="M10.3 4.4 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z" />
+        <path d="M12 9.5v4" />
+        <path d="M12 17.2h.01" />
+      </>
+    ),
+    droplet: <path d="M12 3.2c3 3.9 6 6.6 6 10.1a6 6 0 0 1-12 0c0-3.5 3-6.2 6-10.1Z" />,
+  }
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width="1em"
+      height="1em"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {shapes[name] ?? null}
+    </svg>
+  )
+}
+
 function getRoundsByChartNumber(rounds, chartNumber) {
   return rounds
     .filter((r) => r.chartNumber === chartNumber && !r.deleted)
@@ -446,11 +488,11 @@ function getCardNoteLines(patientNotes, sessionNotes, bed) {
   )
 
   const allLines = [
-    ...warnings.map((n) => ({ tone: 'danger', icon: '⚠', text: n.content })),
-    ...cautions.map((n) => ({ tone: 'caution', icon: '⚠', text: n.content })),
+    ...warnings.map((n) => ({ tone: 'danger', icon: 'alert', text: n.content })),
+    ...cautions.map((n) => ({ tone: 'caution', icon: 'alert', text: n.content })),
     ...todayNotes.map((n) => ({
       tone: 'neutral',
-      icon: '🕐',
+      icon: 'clock',
       text: `${formatHour24(getNoteOccurredAt(n))} ${summarizeSessionNotesForTable([n])}`,
     })),
   ]
@@ -2835,7 +2877,7 @@ function App() {
             ? `라운딩 필요 · ${roundStatus.minutes}분 경과`
             : ''
     const roundIcon =
-      roundStatus?.status === 'due' ? '⚠' : roundStatus?.status === 'soon' ? '🔔' : '🕐'
+      roundStatus?.status === 'due' ? 'alert' : roundStatus?.status === 'soon' ? 'bell' : 'clock'
 
     return (
       <article
@@ -2859,7 +2901,7 @@ function App() {
               openRoundModal(bed)
             }}
           >
-            <span className="bed-card__round-icon" aria-hidden="true">{roundIcon}</span>
+            <Icon name={roundIcon} className="bed-card__round-icon" />
             <span className="bed-card__round-body">
               {roundText}
               {roundTemp && (
@@ -2874,7 +2916,7 @@ function App() {
           <div className="bed-card__notes">
             {noteLines.lines.map((line, i) => (
               <p key={i} className={`bed-card__caution bed-card__caution--${line.tone}`}>
-                <span className="bed-card__caution-icon">{line.icon}</span>
+                <Icon name={line.icon} className="bed-card__caution-icon" />
                 {line.text}
               </p>
             ))}
@@ -2890,7 +2932,7 @@ function App() {
           <p className="bed-card__progress-text">
             <span>
               진행률 {displayProgress}%
-              {!completed && <span className="bed-card__droplet">💧</span>}
+              {!completed && <Icon name="droplet" className="bed-card__droplet" />}
             </span>
             {!completed && (
               <span className="bed-card__progress-elapsed">

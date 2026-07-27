@@ -661,6 +661,12 @@
   font-size: 11px;
 }
 
+/* SVG 아이콘 세로 정렬 미세보정 (이모지→SVG 교체) */
+.bed-card__caution-icon,
+.bed-card__droplet {
+  vertical-align: -0.12em;
+}
+
 .bed-card__caution--danger {
   color: var(--status-completed);
 }
