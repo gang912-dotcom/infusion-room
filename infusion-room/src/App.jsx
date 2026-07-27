@@ -2182,7 +2182,7 @@ function App() {
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
   const [noteMemo, setNoteMemo] = useState('')
-  const [noteCategory, setNoteCategory] = useState('caution')
+  const [noteCategory, setNoteCategory] = useState('info')
   const [noteContent, setNoteContent] = useState('')
   const [noteSource, setNoteSource] = useState('patient_report')
   const [roundModalOpen, setRoundModalOpen] = useState(false)
@@ -2631,7 +2631,7 @@ function App() {
     setNoteSymptoms([])
     setNoteActions([])
     setNoteMemo('')
-    setNoteCategory('caution')
+    setNoteCategory('info')
     setNoteContent('')
     setNoteSource('patient_report')
     setNoteModalOpen(true)
@@ -3833,13 +3833,22 @@ function App() {
                     <br />
                     특이사항이 있으면 지금 등록하세요.
                   </p>
-                  <button
-                    type="button"
-                    className="btn-add-note"
-                    onClick={handleAddNoteFromBriefing}
-                  >
-                    주의사항 등록
-                  </button>
+                  <div className="briefing__empty-actions">
+                    <button
+                      type="button"
+                      className="btn-skip-note"
+                      onClick={handleBriefingDismiss}
+                    >
+                      주의사항 없음
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-add-note"
+                      onClick={handleAddNoteFromBriefing}
+                    >
+                      주의사항 등록
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="modal__body">

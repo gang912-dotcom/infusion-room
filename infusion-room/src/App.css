@@ -2517,24 +2517,51 @@
 }
 
 /* ─── 특이사항 기록 버튼 ─────────────────────────────────────── */
-.btn-add-note {
-  margin-top: 10px;
-  padding: 11px 14px;
+.briefing__empty-actions {
+  display: flex;
+  gap: 10px;
   width: 100%;
+}
+
+.btn-add-note {
+  flex: 1;
+  padding: 12px 14px;
   font-size: 14px;
   font-family: inherit;
-  font-weight: 600;
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.14);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  border-radius: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(180deg, #35b862, #2ea043);
+  border: 0;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s, transform 0.09s;
 }
 
 .btn-add-note:hover {
-  background: rgba(34, 197, 94, 0.22);
-  border-color: rgba(34, 197, 94, 0.6);
+  background: linear-gradient(180deg, #3cc26a, #2f9e46);
+}
+
+.btn-skip-note {
+  flex: 1;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.09s;
+}
+
+.btn-skip-note:hover {
+  color: var(--text-primary);
+}
+
+.btn-add-note:active,
+.btn-skip-note:active {
+  transform: scale(0.97);
 }
 
 /* ─── 특이사항 기록 모달: 세그먼트 토글 ──────────────────────── */
