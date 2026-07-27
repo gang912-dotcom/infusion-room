@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import logoIcon from './assets/logo-icon-white.png'
+import logoIconColor from './assets/logo-icon.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
@@ -2912,7 +2913,7 @@ function App() {
     <div className="app">
       <div className="header-wrap">
         <header className="header">
-          <img src={logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+          <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
           <div className="header__text">
             <span className="header__clinic">벗이비인후과</span>
             <h1 className="header__title">수액실 관리</h1>

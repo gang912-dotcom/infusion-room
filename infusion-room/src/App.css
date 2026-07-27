@@ -54,11 +54,6 @@
   --hover-tint: rgba(0, 0, 0, 0.04);
 }
 
-/* 흰 로고를 라이트에서 검정 모노크롬으로 (뱃지 없이) */
-:root[data-theme='light'] .header__logo {
-  filter: brightness(0);
-}
-
 /* 라이트에선 파랑/인디고 최소화 — 큰 제목·병원명 라벨 중성 처리 */
 :root[data-theme='light'] .header__title {
   background: none;
