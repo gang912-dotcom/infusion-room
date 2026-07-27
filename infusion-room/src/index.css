@@ -52,11 +52,14 @@
 
 body {
   margin: 0;
+  /* 상한(max-width)을 넘는 대형 화면에서 좌우가 흰색으로 비지 않도록 앱과 같은 다크 배경 */
+  background: #121212;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
+  /* 벽걸이 상황판 — 화면을 넓게 쓰되, 초대형 모니터에서 카드가 늘어지지 않게 상한을 둔다 */
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
   text-align: center;
   border-inline: 1px solid var(--border);
@@ -64,6 +67,13 @@ body {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+/* 아주 넓은 모니터에선 조금 더 활용 */
+@media (min-width: 1920px) {
+  #root {
+    max-width: 1800px;
+  }
 }
 
 h1,
