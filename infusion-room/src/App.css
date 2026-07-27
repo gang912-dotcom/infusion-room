@@ -20,6 +20,10 @@
   --track-bg: #2a2a2a;
   --number-bg: #2a2a2a;
   --hover-tint: rgba(255, 255, 255, 0.04);
+  /* iOS 세그먼트 컨트롤(탭) */
+  --seg-track: rgba(255, 255, 255, 0.06);
+  --seg-active: #3a3a40;
+  --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 
   display: flex;
   flex-direction: column;
@@ -52,6 +56,9 @@
   --track-bg: #e5e5ea;
   --number-bg: #ececf0;
   --hover-tint: rgba(0, 0, 0, 0.04);
+  --seg-track: #e6e6ec;
+  --seg-active: #ffffff;
+  --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
 }
 
 /* 라이트에선 파랑/인디고 최소화 — 큰 제목·병원명 라벨 중성 처리 */
@@ -215,36 +222,38 @@
   filter: drop-shadow(-2px 0px 6px rgba(0,0,0,0.08));
 }
 
-/* ─── 탭 ─────────────────────────────────────────────────────── */
+/* ─── 탭 (iOS 세그먼트 컨트롤) ────────────────────────────────── */
 .tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 3px;
+  padding: 4px;
+  background: var(--seg-track);
+  border-radius: 12px;
 }
 
 .tab {
-  padding: 9px 18px;
+  padding: 8px 18px;
   font-size: 14px;
   font-family: inherit;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
-  background: var(--panel-bg);
-  border: 1.5px solid var(--card-border);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .tab:hover {
-  border-color: var(--status-occupied);
   color: var(--text-primary);
 }
 
 .tab--active {
-  color: #ffffff;
-  background: var(--status-occupied);
-  border-color: transparent;
+  color: var(--text-primary);
+  background: var(--seg-active);
   font-weight: 700;
+  box-shadow: var(--seg-shadow);
 }
 
 .tab:focus-visible {
@@ -1230,9 +1239,7 @@
   }
 
   .tab {
-    flex: 1 1 calc(50% - 4px);
-    text-align: center;
-    padding: 8px 10px;
+    padding: 7px 13px;
     font-size: 13px;
   }
 
