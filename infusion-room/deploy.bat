@@ -1,0 +1,28 @@
+@echo off
+REM ============================================================
+REM  Infusion-room deploy / update
+REM  Run this after code changes to update the running server.
+REM  (nssm service name: iv-app)
+REM ============================================================
+cd /d C:\iv-app\infusion-room
+
+echo [1/4] git pull ...
+git pull || goto :err
+
+echo [2/4] npm ci ...
+call npm ci || goto :err
+
+echo [3/4] build ...
+call npm run build || goto :err
+
+echo [4/4] restart service ...
+nssm restart iv-app || goto :err
+
+echo.
+echo === Deploy done. ===
+goto :eof
+
+:err
+echo.
+echo *** Deploy FAILED (see message above). Server was NOT restarted if build failed. ***
+exit /b 1
