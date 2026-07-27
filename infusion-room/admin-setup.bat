@@ -54,8 +54,18 @@ REM logs + rotation (rotate at 10MB, while running); old rotated logs are pruned
 "%NSSM%" set iv-app AppRotateBytes 10485760
 
 echo Starting service ...
-"%NSSM%" start iv-app
-if errorlevel 1 ( echo [ERROR] service start failed & goto :err )
+"%NSSM%" start iv-app >nul 2>&1
+REM nssm's "start" can exit nonzero reporting START_PENDING even when the app
+REM comes up fine (node isn't service-aware). So trust the SCM state instead:
+REM poll up to ~15s for RUNNING.
+set "SVCUP="
+for /L %%i in (1,1,15) do (
+  sc query iv-app | find "RUNNING" >nul && ( set "SVCUP=1" & goto :svcup )
+  timeout /t 1 >nul
+)
+:svcup
+if not defined SVCUP ( echo [ERROR] service did not reach RUNNING state & goto :err )
+echo Service is RUNNING.
 
 echo.
 echo === [3/3] Task Scheduler: daily DB backup at 03:00 ===
