@@ -229,6 +229,13 @@
   bottom: 0;
   z-index: 2;
   filter: drop-shadow(-2px 0px 6px rgba(0,0,0,0.08));
+  /* 커서 올리면 살짝 확대, 내리면 원위치 (우하단 기준으로 자연스럽게) */
+  transform-origin: bottom right;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.header__dog:hover {
+  transform: scale(1.08);
 }
 
 /* ─── 탭 (iOS 세그먼트 컨트롤) ────────────────────────────────── */
