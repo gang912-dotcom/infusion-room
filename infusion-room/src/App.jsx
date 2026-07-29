@@ -406,6 +406,7 @@ const BOSS_LINES = [
   '그건 아니지.',
   '어? 뒤에 누구야?',
   '웃지마',
+  '너 G야?',
 ]
 
 const BOSS_LINE_MS = 2800
