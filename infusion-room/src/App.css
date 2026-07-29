@@ -214,22 +214,99 @@
   line-height: 1.1;
 }
 
-.header__dog {
-  height: 78px;
-  width: auto;
-  object-fit: contain;
+/* 말풍선을 헤더 카드 바로 아래에 앉히기 위한 기준점.
+   header-wrap 자체는 overflow:hidden이라 그 안에 넣으면 잘린다. */
+.header-zone {
+  position: relative;
+}
+
+/* 초상화는 클릭하면 한마디가 나오는 버튼 — 위치잡기는 버튼이 맡고, 확대는 이미지가 맡는다. */
+.header__dog-btn {
   position: absolute;
   right: 0;
   bottom: 0;
   z-index: 2;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header__dog {
+  height: 78px;
+  width: auto;
+  object-fit: contain;
+  display: block;
   filter: drop-shadow(-2px 0px 6px rgba(0,0,0,0.08));
   /* 커서 올리면 살짝 확대, 내리면 원위치 (우하단 기준으로 자연스럽게) */
   transform-origin: bottom right;
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.header__dog:hover {
+.header__dog-btn:hover .header__dog {
   transform: scale(1.08);
+}
+
+.header__dog-btn:active .header__dog {
+  transform: scale(1.02);
+  transition-duration: 0.08s;
+}
+
+.header__dog-btn:focus-visible {
+  outline: 2px solid var(--status-occupied);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+/* ─── 초상화 한마디 말풍선 ───────────────────────────────────────── */
+.boss-say {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 12px;
+  margin: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.boss-say__bubble {
+  display: inline-block;
+  max-width: min(280px, calc(100vw - 48px));
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  background: var(--panel-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  animation: boss-say-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 꼬리 — 사진 쪽(위)을 가리킨다 */
+.boss-say__bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 26px;
+  width: 11px;
+  height: 11px;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--card-border);
+  border-top: 1px solid var(--card-border);
+  transform: rotate(45deg);
+  border-radius: 2px 0 0 0;
+}
+
+@keyframes boss-say-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boss-say__bubble { animation-duration: 0.01ms; }
 }
 
 /* ─── 탭 (iOS 세그먼트 컨트롤) ────────────────────────────────── */

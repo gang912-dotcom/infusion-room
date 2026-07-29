@@ -363,6 +363,59 @@ function formatHour24(timestamp) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// ─── 헤더 초상화 한마디 ────────────────────────────────────────────
+// 사진을 누르면 아래에 말풍선으로 한 줄 뜬다. 기능이 아니라 분위기용.
+const BOSS_LINES = [
+  '화이팅.',
+  '이뻐.',
+  '까불지 마.',
+  '이럴 시간에 가서 주사기라도 뜯어.',
+  '일 안해?',
+  '나 보고싶어?',
+  '그만 만져.',
+  '힘내. 할 수 있어.',
+  '그만 찔러.',
+  '주말에 인라인 타러 갈래?',
+  '구름산 등산 ᄀ?',
+  '너 누구야.',
+  '팍 씨.',
+  '빨리 안 하고 뭐해.',
+  '집중해.',
+  '잘 하고 있어.',
+  '진짜야.',
+  '물 마시면서 일해.',
+  '잘한다 잘해.',
+  '퇴근하고 싶다.',
+  '동의?',
+  '호출벨 울리기 3초 전.',
+  'G.',
+  '손 느린거 봐라.',
+  '괜찮아.',
+  '걱정 마.',
+  '적당히 해.',
+  'ㅋㅋㅋㅋㅋ',
+  '?',
+  '맞을래?',
+  '밥은 먹었어?',
+  '다치지 마.',
+  '무리하지 마.',
+  '쉬엄쉬엄.',
+  '센 척은.',
+  '귀엽네.',
+  '누가 그래.',
+  '그건 아니지.',
+  '어? 뒤에 누구야?',
+  '웃지마',
+]
+
+const BOSS_LINE_MS = 2800
+
+// 직전에 나온 줄은 빼고 뽑는다 — 연속으로 같은 말이 나오면 고장 난 것처럼 보인다.
+function pickBossLine(previous) {
+  const pool = BOSS_LINES.length > 1 ? BOSS_LINES.filter((l) => l !== previous) : BOSS_LINES
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
 // ─── 모달 닫힘 모션 ────────────────────────────────────────────────
 // React는 조건이 falsy가 되는 즉시 언마운트해서 "닫히는 모습"이 안 보인다.
 // 값이 사라져도 MODAL_EXIT_MS 동안 마지막 값을 붙잡아 두고, 그동안 --closing 클래스로
@@ -2319,6 +2372,9 @@ function App() {
   const [roundState, setRoundState] = useState(null)
   const [roundMemo, setRoundMemo] = useState('')
   const [briefingOpen, setBriefingOpen] = useState(false)
+  // 헤더 초상화 한마디 — 누를 때마다 랜덤 한 줄, 잠시 뒤 사라진다.
+  const [bossLine, setBossLine] = useState(null)
+  const bossTimerRef = useRef(null)
   const [patientViewSeed, setPatientViewSeed] = useState(null)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
 
@@ -2488,6 +2544,16 @@ function App() {
   const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
+
+  // 초상화 클릭 — 이미 떠 있으면 즉시 다음 줄로 갈아끼운다(타이머도 다시 시작).
+  function handleBossClick() {
+    clearTimeout(bossTimerRef.current)
+    setBossLine((prev) => pickBossLine(prev))
+    bossTimerRef.current = setTimeout(() => setBossLine(null), BOSS_LINE_MS)
+  }
+
+  // 말풍선이 떠 있는 채로 화면을 벗어나도 타이머가 남지 않게
+  useEffect(() => () => clearTimeout(bossTimerRef.current), [])
 
   function toggleRoomCollapse(roomId) {
     setCollapsedRooms((prev) => {
@@ -3071,30 +3137,47 @@ function App() {
 
   return (
     <div className="app">
-      <div className="header-wrap">
-        <header className="header">
-          <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
-          <div className="header__text">
-            <span className="header__clinic">벗이비인후과</span>
-            <h1 className="header__title">수액실 관리</h1>
+      {/* header-zone: 말풍선을 헤더 카드 바로 아래에 앉히기 위한 기준점 */}
+      <div className="header-zone">
+        <div className="header-wrap">
+          <header className="header">
+            <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+            <div className="header__text">
+              <span className="header__clinic">벗이비인후과</span>
+              <h1 className="header__title">수액실 관리</h1>
+            </div>
+          </header>
+          <div className="header-account">
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              aria-label="밝게/어둡게 전환"
+              title="밝게/어둡게 전환"
+            >
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+            </button>
+            <span className="header-account__name">{account.displayName}</span>
+            <button type="button" className="header-account__logout" onClick={handleLogout}>
+              로그아웃
+            </button>
           </div>
-        </header>
-        <div className="header-account">
+          {/* 클릭해서 한마디를 듣는 요소라 button — 키보드로도 눌러진다 */}
           <button
             type="button"
-            className="theme-toggle"
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            aria-label="밝게/어둡게 전환"
-            title="밝게/어둡게 전환"
+            className="header__dog-btn"
+            onClick={handleBossClick}
+            aria-label="한마디 듣기"
           >
-            <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-          </button>
-          <span className="header-account__name">{account.displayName}</span>
-          <button type="button" className="header-account__logout" onClick={handleLogout}>
-            로그아웃
+            <img src={headerPortrait} alt="" className="header__dog" aria-hidden="true" />
           </button>
         </div>
-        <img src={headerPortrait} alt="" className="header__dog" aria-hidden="true" />
+
+        {/* 한마디 말풍선 — header-wrap이 overflow:hidden이라 카드 안에는 못 넣는다.
+            header-zone 기준 absolute라 떴다 사라져도 아래 탭이 밀리지 않는다. */}
+        <p className="boss-say" role="status" aria-live="polite">
+          {bossLine && <span className="boss-say__bubble">{bossLine}</span>}
+        </p>
       </div>
 
       <nav className="tabs">
