@@ -829,6 +829,44 @@
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* 인라인 SVG 아이콘(App.jsx의 Icon) — 1em 크기라 글자 옆에서 baseline에 딱 붙으면
+   가라앉아 보인다. 살짝 올려 글자 중앙에 맞춘다. flex 안에서는 찌그러지지 않게 고정. */
+.icon {
+  vertical-align: -0.14em;
+  flex-shrink: 0;
+}
+
+/* 닫힘 모션 — 열림의 역방향(줄어들며 사라짐). App.jsx의 MODAL_EXIT_MS(180ms)와 길이를 맞춘다.
+   닫히는 동안은 클릭이 먹으면 안 되므로 pointer-events를 끊는다. */
+.modal-overlay--closing {
+  animation: overlay-out 0.18s ease forwards;
+  pointer-events: none;
+}
+
+.modal-overlay--closing .modal {
+  animation: modal-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.9); }
+}
+
+/* 모션에 민감한 사용자는 열림·닫힘 애니메이션을 건너뛴다(표시 자체는 그대로). */
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-overlay .modal,
+  .modal-overlay--closing,
+  .modal-overlay--closing .modal {
+    animation-duration: 0.01ms;
+  }
+}
+
 .modal__header {
   display: flex;
   align-items: center;

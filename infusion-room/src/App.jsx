@@ -130,10 +130,65 @@ function Icon({ name, className }) {
       </>
     ),
     droplet: <path d="M12 3.2c3 3.9 6 6.6 6 10.1a6 6 0 0 1-12 0c0-3.5 3-6.2 6-10.1Z" />,
+    close: (
+      <>
+        <path d="M6 6l12 12" />
+        <path d="M18 6 6 18" />
+      </>
+    ),
+    plus: (
+      <>
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </>
+    ),
+    check: <path d="M4.5 12.5 9.5 17.5 19.5 6.5" />,
+    trash: (
+      <>
+        <path d="M3.5 6.5h17" />
+        <path d="M9.5 6.5V4.8a1.3 1.3 0 0 1 1.3-1.3h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />
+        <path d="M5.8 6.5 6.8 19a1.8 1.8 0 0 0 1.8 1.6h6.8a1.8 1.8 0 0 0 1.8-1.6l1-12.5" />
+        <path d="M10.3 10.3v6.4" />
+        <path d="M13.7 10.3v6.4" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="3.5" y="5" width="17" height="15.5" rx="2.6" />
+        <path d="M3.5 9.8h17" />
+        <path d="M8.2 3.5v3" />
+        <path d="M15.8 3.5v3" />
+      </>
+    ),
+    thermometer: (
+      <>
+        <path d="M13.8 13.6V5.2a1.8 1.8 0 1 0-3.6 0v8.4a4 4 0 1 0 3.6 0Z" />
+        <path d="M12 16.4v1.4" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2.6v2.2M12 19.2v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" />
+      </>
+    ),
+    moon: <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2Z" />,
+    'arrow-left': (
+      <>
+        <path d="M19 12H5" />
+        <path d="M11 6 5 12l6 6" />
+      </>
+    ),
+    'arrow-up': (
+      <>
+        <path d="M12 19V5" />
+        <path d="M6 11l6-6 6 6" />
+      </>
+    ),
   }
   return (
     <svg
-      className={className}
+      className={className ? `icon ${className}` : 'icon'}
       viewBox="0 0 24 24"
       width="1em"
       height="1em"
@@ -306,6 +361,33 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
 function formatHour24(timestamp) {
   const d = new Date(timestamp)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// ─── 모달 닫힘 모션 ────────────────────────────────────────────────
+// React는 조건이 falsy가 되는 즉시 언마운트해서 "닫히는 모습"이 안 보인다.
+// 값이 사라져도 MODAL_EXIT_MS 동안 마지막 값을 붙잡아 두고, 그동안 --closing 클래스로
+// 나가는 애니메이션을 태운다.
+//
+// 닫기 경로가 모달마다 여러 개다(× 버튼 / 취소 / 확인 / 액션 성공 후 자동 닫힘).
+// 핸들러마다 지연을 넣으면 하나씩 빠뜨리기 쉬워서, 모든 경로가 반드시 지나가는
+// "값이 falsy가 되는 지점"에서 한 번만 처리한다.
+const MODAL_EXIT_MS = 180
+
+function useModalExit(value) {
+  const [held, setHeld] = useState(value)
+
+  // 열 때는 렌더 중에 바로 반영한다 — 이펙트를 거치면 한 프레임 늦어 깜빡인다.
+  // (React가 권장하는 "렌더 중 state 조정" 패턴. 조건이 있어 무한 루프가 아니다.)
+  if (value && value !== held) setHeld(value)
+
+  useEffect(() => {
+    if (value || !held) return
+    const timer = setTimeout(() => setHeld(null), MODAL_EXIT_MS)
+    return () => clearTimeout(timer)
+  }, [value, held])
+
+  // [닫히는 동안에도 유지되는 값, 지금 닫히는 중인지]
+  return [held, !value && !!held]
 }
 
 // 오프라인 배너의 "언제 기준 정보인지" 문구. lastSyncAt이 없으면(캐시도 없는 첫 접속) 시각은 생략.
@@ -690,7 +772,7 @@ function StatsView({ history }) {
 
       {/* ── 기간 조회 결과 ── */}
       <div className="stats-result">
-        <p className="stats-result__period">📅 {rangeLabel}</p>
+        <p className="stats-result__period"><Icon name="calendar" /> {rangeLabel}</p>
 
         {ranged.length === 0 ? (
           <div className="stats-empty">해당 기간의 이용 기록이 없습니다.</div>
@@ -869,7 +951,7 @@ function PatientView({
             onClick={() => { setQuery(''); setSelectedKey(null) }}
             aria-label="검색 초기화"
           >
-            ×
+            <Icon name="close" />
           </button>
         )}
       </div>
@@ -915,7 +997,7 @@ function PatientView({
         <div className="patient-detail">
           {/* 뒤로 버튼 */}
           <button type="button" className="patient-detail__back" onClick={handleBack}>
-            ← 목록으로
+            <Icon name="arrow-left" /> 목록으로
           </button>
 
           {/* 환자 요약 카드 */}
@@ -1476,6 +1558,7 @@ function DataManageView({
 
   // 삭제 확인 팝업
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleteConfirmHeld, deleteConfirmClosing] = useModalExit(deleteConfirm)
 
   // 휴지통 모드
   const [trashMode, setTrashMode] = useState(false)
@@ -1654,7 +1737,7 @@ function DataManageView({
           className={`dm-mode-btn dm-mode-btn--trash${trashMode ? ' dm-mode-btn--active' : ''}`}
           onClick={() => switchMode(true)}
         >
-          🗑 휴지통 {totalDeleted > 0 && <span className="dm-mode-btn__badge">{totalDeleted}</span>}
+          <Icon name="trash" /> 휴지통 {totalDeleted > 0 && <span className="dm-mode-btn__badge">{totalDeleted}</span>}
         </button>
       </div>
 
@@ -1814,7 +1897,7 @@ function DataManageView({
               className={`dm-mode-btn dm-mode-btn--trash${sessionNoteTrash ? ' dm-mode-btn--active' : ''}`}
               onClick={() => setSessionNoteTrash((prev) => !prev)}
             >
-              🗑 {sessionNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
+              <Icon name="trash" /> {sessionNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
             </button>
           </div>
 
@@ -1870,7 +1953,7 @@ function DataManageView({
               className={`dm-mode-btn dm-mode-btn--trash${patientNoteTrash ? ' dm-mode-btn--active' : ''}`}
               onClick={() => setPatientNoteTrash((prev) => !prev)}
             >
-              🗑 {patientNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
+              <Icon name="trash" /> {patientNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
             </button>
           </div>
 
@@ -1935,8 +2018,8 @@ function DataManageView({
       )}
 
       {/* ── 삭제 확인 팝업 ── */}
-      {deleteConfirm && (
-        <div className="modal-overlay">
+      {deleteConfirmHeld && (
+        <div className={`modal-overlay${deleteConfirmClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal__body modal__body--confirm">
               <p className="confirm__message">
@@ -2376,12 +2459,25 @@ function App() {
     )
   }
 
-  const currentBed = selectedBed
-    ? beds.find((bed) => bed.id === selectedBed.id) ?? selectedBed
+  // 모달 닫힘 모션용 — 값이 비워져도 나가는 애니메이션 동안은 마지막 값을 유지한다.
+  const [selectedBedHeld, selectedBedClosing] = useModalExit(selectedBed)
+  const [cleanupBedHeld, cleanupBedClosing] = useModalExit(cleanupBed)
+  const [removeConfirmHeld, removeConfirmClosing] = useModalExit(removePatientConfirm)
+  const [editPatientHeld, editPatientClosing] = useModalExit(editPatientModal)
+  const [noteModalHeld, noteModalClosing] = useModalExit(noteModalOpen)
+  const [roundModalHeld, roundModalClosing] = useModalExit(roundModalOpen)
+  const [roundModalBedIdHeld] = useModalExit(roundModalBedId)
+  const [briefingHeld, briefingClosing] = useModalExit(briefingOpen)
+
+  // currentBed는 붙잡힌 selectedBed에서 만든다 — 닫히는 동안 환자명·차트번호가 사라지면
+  // 모달이 빈 껍데기로 줄어드는 게 보인다. 그 위에 겹치는 모달들(등록취소 확인·정보수정·특이사항)도
+  // currentBed를 쓰므로 같이 살아 있어야 한다.
+  const currentBed = selectedBedHeld
+    ? beds.find((bed) => bed.id === selectedBedHeld.id) ?? selectedBedHeld
     : null
   // 라운딩 모달은 베드 상세와 별개 상태로 대상을 들고 있음(selectedBed 딸림 방지, A-5)
-  const roundModalBed = roundModalBedId
-    ? beds.find((bed) => bed.id === roundModalBedId) ?? null
+  const roundModalBed = roundModalBedIdHeld
+    ? beds.find((bed) => bed.id === roundModalBedIdHeld) ?? null
     : null
   const isVacant = currentBed?.status === 'vacant'
   const isReserved = currentBed?.status === 'reserved'
@@ -2825,7 +2921,7 @@ function App() {
         >
           <p className="bed-card__number">{bed.number}</p>
           <div className="bed-card__add-slot">
-            <span className="bed-card__add-icon">＋</span>
+            <span className="bed-card__add-icon"><Icon name="plus" /></span>
             <span className="bed-card__add-label">환자 등록</span>
           </div>
         </article>
@@ -2847,7 +2943,9 @@ function App() {
           <p className="bed-card__patient">{bed.patientName}</p>
           <p className="bed-card__chart">{bed.chartNumber}</p>
           <div className="bed-card__spacer" />
-          {bed.overdue && <p className="bed-card__overdue-label">⚠ 환자 미도착</p>}
+          {bed.overdue && (
+            <p className="bed-card__overdue-label"><Icon name="alert" /> 환자 미도착</p>
+          )}
           <p className="bed-card__reserved-label">라인 {bed.lineStaff}</p>
         </article>
       )
@@ -2989,7 +3087,7 @@ function App() {
             aria-label="밝게/어둡게 전환"
             title="밝게/어둡게 전환"
           >
-            {theme === 'dark' ? '☀' : '☾'}
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
           </button>
           <span className="header-account__name">{account.displayName}</span>
           <button type="button" className="header-account__logout" onClick={handleLogout}>
@@ -3159,8 +3257,8 @@ function App() {
       )}
       </div>
 
-      {cleanupBed && (
-        <div className="modal-overlay">
+      {cleanupBedHeld && (
+        <div className={`modal-overlay${cleanupBedClosing ? ' modal-overlay--closing' : ''}`}>
           <div
             className="modal modal--confirm"
             onClick={(e) => e.stopPropagation()}
@@ -3191,12 +3289,13 @@ function App() {
         </div>
       )}
 
-      {selectedBed && (
-        <div className="modal-overlay">
+      {selectedBedHeld && (
+        <div className={`modal-overlay${selectedBedClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
-                <h2>베드 {selectedBed.number}</h2>
+                {/* selectedBed가 아니라 currentBed — 닫히는 동안 selectedBed는 이미 null이다 */}
+                <h2>베드 {currentBed.number}</h2>
                 {isInProgress && (
                   <span className={`modal-chip modal-chip--${currentBedChipCategory}`}>
                     {currentBedChipLabel}
@@ -3209,7 +3308,7 @@ function App() {
                 onClick={closeModal}
                 aria-label="닫기"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
 
@@ -3291,7 +3390,7 @@ function App() {
                 </div>
 
                 {currentBed.overdue && (
-                  <p className="field__error">⚠ 환자 미도착 — 확인이 필요합니다</p>
+                  <p className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
 
                 <label className="field">
@@ -3453,8 +3552,8 @@ function App() {
           </div>
         </div>
       )}
-      {removePatientConfirm && currentBed && (
-        <div className="modal-overlay modal-overlay--top">
+      {removeConfirmHeld && currentBed && (
+        <div className={`modal-overlay modal-overlay--top${removeConfirmClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
             <div className="modal__body modal__body--confirm">
               <p className="confirm__message">
@@ -3487,8 +3586,8 @@ function App() {
         </div>
       )}
 
-      {editPatientModal && currentBed && (
-        <div className="modal-overlay">
+      {editPatientHeld && currentBed && (
+        <div className={`modal-overlay${editPatientClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>환자 정보 수정</h2>
@@ -3498,7 +3597,7 @@ function App() {
                 onClick={closeEditPatientModal}
                 aria-label="닫기"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <div className="modal__body">
@@ -3536,8 +3635,8 @@ function App() {
         </div>
       )}
 
-      {noteModalOpen && currentBed && (
-        <div className="modal-overlay modal-overlay--top">
+      {noteModalHeld && currentBed && (
+        <div className={`modal-overlay modal-overlay--top${noteModalClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>특이사항 기록</h2>
@@ -3547,7 +3646,7 @@ function App() {
                 onClick={closeNoteModal}
                 aria-label="닫기"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
 
@@ -3690,8 +3789,8 @@ function App() {
         </div>
       )}
 
-      {roundModalOpen && roundModalBed && (
-        <div className="modal-overlay modal-overlay--top">
+      {roundModalHeld && roundModalBed && (
+        <div className={`modal-overlay modal-overlay--top${roundModalClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="round-header">
@@ -3709,7 +3808,7 @@ function App() {
                 onClick={closeRoundModal}
                 aria-label="닫기"
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
 
@@ -3739,7 +3838,7 @@ function App() {
                                   {stateLabel && <span className="round-history__sep"> · </span>}
                                   {r.temperature != null ? (
                                     <span className={`round-temp${tone ? ` round-temp--${tone}` : ''}`}>
-                                      {r.temperature}°C{tone ? ' ↑' : ''}
+                                      {r.temperature}°C{tone ? <> <Icon name="arrow-up" /></> : ''}
                                     </span>
                                   ) : (
                                     <span className="round-temp round-temp--none">체온 ---</span>
@@ -3765,7 +3864,7 @@ function App() {
                 <label className="field">
                   <span className="field__label">체온 (선택 · 안 재면 비움 ---)</span>
                   <div className="round-temp-input">
-                    <span className="round-temp-input__icon" aria-hidden="true">🌡</span>
+                    <span className="round-temp-input__icon" aria-hidden="true"><Icon name="thermometer" /></span>
                     <input
                       type="number"
                       step="0.1"
@@ -3825,7 +3924,7 @@ function App() {
                     onClick={handleSaveRound}
                     disabled={offline}
                   >
-                    ✓ 라운딩 완료
+                    <Icon name="check" /> 라운딩 완료
                   </button>
                 </div>
                 <p className="round-actions__hint">
@@ -3837,7 +3936,7 @@ function App() {
         </div>
       )}
 
-      {briefingOpen && currentBed && (() => {
+      {briefingHeld && currentBed && (() => {
         const chartNumber = currentBed.chartNumber
         const activeNotes = getActivePatientNotes(patientNotes, chartNumber)
         const recentSessionNotes = getRecentSessionNotes(sessionNotes, chartNumber, 5)
@@ -3849,7 +3948,7 @@ function App() {
           pastVisitCount === 0 && activeNotes.length === 0 && recentSessionNotes.length === 0
 
         return (
-          <div className="modal-overlay modal-overlay--top">
+          <div className={`modal-overlay modal-overlay--top${briefingClosing ? ' modal-overlay--closing' : ''}`}>
             <div className="modal modal--briefing" onClick={(e) => e.stopPropagation()}>
               <div className="modal__header">
                 <div className="briefing__identity">
@@ -3866,7 +3965,7 @@ function App() {
                   onClick={handleBriefingDismiss}
                   aria-label="닫기"
                 >
-                  ×
+                  <Icon name="close" />
                 </button>
               </div>
 
