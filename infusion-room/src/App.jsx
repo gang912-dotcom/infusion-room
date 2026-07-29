@@ -183,7 +183,9 @@ function getLatestSessionRound(rounds, sessionId) {
 }
 
 // 카드 라운딩 상태: anchor = 마지막 라운딩 occurredAt(없으면 수액 시작시각).
-// 경과 < 20분 → ok(남은 30−경과), 20~30분 → soon(남은 30−경과), ≥30분 → due(경과−30).
+// 경과 < 20분 → ok(남은 30−경과), 20~30분 → soon(남은 30−경과), ≥30분 → due(anchor 이후 경과).
+// due의 분값은 "예정 시각을 얼마나 넘겼나"가 아니라 anchor 이후 실제 경과다 —
+// 30분 규칙에서 "9분 경과"라고 뜨면 마지막으로 본 게 언제인지 알 수 없어 헷갈렸다.
 // A-3의 soon은 순수 로컬 타이머 기준(같은 수액실 묶음 필터는 A-4에서).
 function getRoundStatus(bed, latestRound, now) {
   const anchor = latestRound ? new Date(latestRound.occurredAt).getTime() : bed.startTime
@@ -196,7 +198,7 @@ function getRoundStatus(bed, latestRound, now) {
   if (elapsedMin < ROUND_INTERVAL_MIN) {
     return { status: 'soon', minutes: ROUND_INTERVAL_MIN - elapsedMin }
   }
-  return { status: 'due', minutes: elapsedMin - ROUND_INTERVAL_MIN }
+  return { status: 'due', minutes: elapsedMin }
 }
 
 // 카드에 얹을 체온: 마지막 라운딩 체온이 mild/high면 { temp, tone }, 정상·미측정이면 null.
@@ -2882,7 +2884,7 @@ function App() {
     return (
       <article
         key={bed.id}
-        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${roundStatus?.status === 'due' ? ' bed-card--round-due' : ''}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
+        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
         onClick={() => handleBedClick(bed)}
         role="button"
         tabIndex={0}
