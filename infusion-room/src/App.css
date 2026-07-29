@@ -70,12 +70,8 @@
   --glass-brd: rgba(255, 255, 255, 0.7);
 }
 
-/* 라이트에선 파랑/인디고 최소화 — 큰 제목·병원명 라벨 중성 처리 */
-:root[data-theme='light'] .header__title {
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: #1c1c1e;
-}
+/* 라이트에선 파랑/인디고 최소화 — 병원명 라벨을 한 단계 더 흐리게.
+   제목은 이제 양쪽 테마 모두 --text-primary 단색이라 따로 덮을 게 없다. */
 :root[data-theme='light'] .header__clinic {
   color: #8a8a8e;
 }
@@ -203,19 +199,17 @@
 .header__clinic {
   font-size: 11px;
   font-weight: 700;
-  color: #7c9fd4;
+  color: var(--text-secondary);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
+/* 제목은 로고와 같은 단색 — 다크에선 흰색. 색은 상태(신호등)에만 쓰고 크롬은 중성으로 둔다. */
 .header__title {
   margin: 0;
   font-size: 22px;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--status-occupied) 0%, #6c7fd8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
