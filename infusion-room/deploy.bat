@@ -16,7 +16,8 @@ echo [3/4] build ...
 call npm run build || goto :err
 
 echo [4/4] restart service ...
-nssm restart iv-app || goto :err
+REM full path on purpose: C:\iv-app\tools may not be in PATH on a fresh server PC
+"C:\iv-app\tools\nssm.exe" restart iv-app || goto :err
 
 echo.
 echo === Deploy done. ===
