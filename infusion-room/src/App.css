@@ -728,9 +728,37 @@
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  white-space: nowrap;
+  /* 넘치는 부분은 잘라 가리고, 안쪽 텍스트가 마퀴로 흐른다(아래 caution-text) */
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* 아이콘 다음의 텍스트 뷰포트 — 여길 넘기는 만큼만 마퀴로 흐른다 */
+.bed-card__caution-view {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bed-card__caution-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* 카드 폭을 넘칠 때만(JS가 판별) 이 클래스가 붙어 좌우로 왕복한다.
+   앞뒤로 잠깐 멈춰서 읽을 틈을 준다. --marquee-shift/dur는 JS가 실측해 넣는다. */
+.bed-card__caution-text--marquee {
+  animation: card-marquee var(--marquee-dur, 10s) ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes card-marquee {
+  0%, 12% { transform: translateX(0); }
+  50%, 62% { transform: translateX(calc(var(--marquee-shift) * -1)); }
+  100% { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bed-card__caution-text--marquee { animation: none; }
 }
 
 .bed-card__caution-icon {
@@ -1372,11 +1400,46 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 14px;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 10px;
+}
+
+.bed-detail-summary__meta-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 시작 시각 인라인 편집기 */
+.start-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+
+.start-edit__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.start-edit__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.start-edit__save {
+  width: auto;
+  padding: 8px 20px;
 }
 
 .bed-detail-summary__meta-text {

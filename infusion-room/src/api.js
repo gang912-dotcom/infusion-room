@@ -199,6 +199,13 @@ export async function adjustSessionDuration(sessionId, durationMinutes) {
   })
 }
 
+export async function updateSessionStartedAt(sessionId, startedAt) {
+  return apiFetch(`/sessions/${sessionId}/started-at`, {
+    method: 'PATCH',
+    body: JSON.stringify({ started_at: startedAt }),
+  })
+}
+
 export async function endSession(sessionId, endedAt) {
   return apiFetch(`/sessions/${sessionId}/end`, {
     method: 'POST',

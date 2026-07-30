@@ -12,6 +12,7 @@ import {
   loadRounds, createRound,
   getStaffList, lookupPatient, logPatientDetailView,
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  updateSessionStartedAt,
   updateSessionPatient,
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember,
@@ -649,6 +650,52 @@ function getCardNoteLines(patientNotes, sessionNotes, bed) {
   }
   const shown = allLines.slice(0, MAX_LINES - 1)
   return { lines: shown, moreCount: allLines.length - shown.length }
+}
+
+// 카드 특이사항 한 줄. 카드 폭을 넘기면 좌우로 왕복(마퀴), 짧으면 가만히 있는다.
+// CSS만으론 넘침을 알 수 없어 실제 폭을 재서 넘칠 때만 애니메이션 클래스를 붙인다.
+// 카드 폭은 뷰포트에만 좌우되므로 mount 1회 + window resize에서 다시 잰다.
+// setState는 setTimeout/resize 콜백(비동기)에서만 해서 effect 동기 setState 규칙을 피한다.
+function CardNoteLine({ line }) {
+  const viewRef = useRef(null)
+  const textRef = useRef(null)
+  const [marquee, setMarquee] = useState(null) // { shift, dur } | null
+
+  useEffect(() => {
+    function measure() {
+      const view = viewRef.current
+      const text = textRef.current
+      if (!view || !text) return
+      const over = text.scrollWidth - view.clientWidth
+      if (over > 4) {
+        const shift = over + 8 // 끝 글자가 가장자리에 딱 붙지 않게 여유
+        setMarquee({ shift, dur: Math.max(6, Math.round(shift / 22)) })
+      } else {
+        setMarquee(null)
+      }
+    }
+    const t = setTimeout(measure, 0) // 레이아웃 확정 후 1회 측정
+    window.addEventListener('resize', measure)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('resize', measure)
+    }
+  }, [line.text])
+
+  return (
+    <p className={`bed-card__caution bed-card__caution--${line.tone}`}>
+      <Icon name={line.icon} className="bed-card__caution-icon" />
+      <span className="bed-card__caution-view" ref={viewRef}>
+        <span
+          ref={textRef}
+          className={`bed-card__caution-text${marquee ? ' bed-card__caution-text--marquee' : ''}`}
+          style={marquee ? { '--marquee-shift': `${marquee.shift}px`, '--marquee-dur': `${marquee.dur}s` } : undefined}
+        >
+          {line.text}
+        </span>
+      </span>
+    </p>
+  )
 }
 
 function getRecentSessionNotes(sessionNotes, chartNumber, limit = 5) {
@@ -2355,6 +2402,8 @@ function App() {
   }, [activeTab])
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
+  // 베드 상세에서 종료를 누른 경우, 종료를 취소하면 되돌아갈 베드. (완료 카드 직접 클릭이면 null)
+  const [cleanupReopenBed, setCleanupReopenBed] = useState(null)
   const [patientName, setPatientName] = useState('')
   const [chartNumber, setChartNumber] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
@@ -2362,6 +2411,9 @@ function App() {
   const [editPatientModal, setEditPatientModal] = useState(false)
   const [editPatientName, setEditPatientName] = useState('')
   const [editChartNumber, setEditChartNumber] = useState('')
+  // 시작 시각 인라인 수정 — 열림 여부 + 편집 중인 값(ms)
+  const [editStartOpen, setEditStartOpen] = useState(false)
+  const [startDraft, setStartDraft] = useState(0)
   const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
   const [movingBed, setMovingBed] = useState(null)
   const [moveBedAlert, setMoveBedAlert] = useState('')
@@ -2697,6 +2749,7 @@ function App() {
   function openModal(bed) {
     setSelectedBed(bed)
     setActionError('')
+    setEditStartOpen(false)
     if (bed.status === 'vacant') {
       setPatientName('')
       setChartNumber('')
@@ -2724,10 +2777,25 @@ function App() {
 
   function closeModal() {
     setSelectedBed(null)
+    setEditStartOpen(false)
+  }
+
+  // 베드 상세에서 "종료"를 누르면 상세 모달을 닫고 종료 확인 모달을 띄운다.
+  // 종료를 취소(아니오)하면 원래 보던 상세 모달로 되돌아가게 reopen 대상을 기억해둔다.
+  function requestCleanupFromDetail() {
+    if (!currentBed) return
+    setCleanupReopenBed(currentBed)
+    setSelectedBed(null)
+    setCleanupBed(currentBed)
   }
 
   function closeCleanupConfirm() {
     setCleanupBed(null)
+    // 상세에서 온 종료였으면 그 상세 모달을 다시 연다.
+    if (cleanupReopenBed) {
+      openModal(cleanupReopenBed)
+      setCleanupReopenBed(null)
+    }
   }
 
   async function handleCleanupYes() {
@@ -2742,6 +2810,7 @@ function App() {
       setActionError(err.message)
     }
     setCleanupBed(null)
+    setCleanupReopenBed(null)
   }
 
   function adjustDuration(delta) {
@@ -2837,6 +2906,33 @@ function App() {
       return
     }
     setEditPatientModal(false)
+  }
+
+  function openStartEdit() {
+    if (!currentBed?.startTime) return
+    setStartDraft(currentBed.startTime)
+    setEditStartOpen(true)
+  }
+
+  // 시작 시각은 시:분만 바꾼다(같은 날 기준). 날짜 부분은 기존 시작시각을 그대로 쓴다.
+  function setStartDraftTime(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number)
+    if (Number.isNaN(h) || Number.isNaN(m)) return
+    const next = new Date(startDraft)
+    next.setHours(h, m, 0, 0)
+    setStartDraft(next.getTime())
+  }
+
+  async function handleSaveStartEdit() {
+    if (!selectedBed) return
+    try {
+      await updateSessionStartedAt(selectedBed.sessionId, startDraft)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+      return
+    }
+    setEditStartOpen(false)
   }
 
   function openNoteModal(tab) {
@@ -3090,10 +3186,7 @@ function App() {
         {noteLines.lines.length > 0 && (
           <div className="bed-card__notes">
             {noteLines.lines.map((line, i) => (
-              <p key={i} className={`bed-card__caution bed-card__caution--${line.tone}`}>
-                <Icon name={line.icon} className="bed-card__caution-icon" />
-                {line.text}
-              </p>
+              <CardNoteLine key={i} line={line} />
             ))}
             {noteLines.moreCount > 0 && (
               <p className="bed-card__caution bed-card__caution--more">
@@ -3548,17 +3641,54 @@ function App() {
                       {getBedProgress(currentBed, now).progress}%
                     </span>
                     {isInProgress && (
-                      <button
-                        type="button"
-                        className="btn-move-bed"
-                        onClick={handleStartMoveBed}
-                        disabled={offline}
-                      >
-                        베드이동
-                      </button>
+                      <div className="bed-detail-summary__meta-actions">
+                        <button
+                          type="button"
+                          className="btn-move-bed"
+                          onClick={openStartEdit}
+                          disabled={offline}
+                        >
+                          시작시간 수정
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-move-bed"
+                          onClick={handleStartMoveBed}
+                          disabled={offline}
+                        >
+                          베드이동
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
+
+                {isInProgress && editStartOpen && (
+                  <div className="start-edit">
+                    <div className="start-edit__row">
+                      <span className="field__label">시작 시각</span>
+                      <input
+                        type="time"
+                        className="occurred-at__input"
+                        value={`${String(new Date(startDraft).getHours()).padStart(2, '0')}:${String(new Date(startDraft).getMinutes()).padStart(2, '0')}`}
+                        onChange={(e) => setStartDraftTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="start-edit__actions">
+                      <button type="button" className="dm-note-btn" onClick={() => setEditStartOpen(false)}>
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-register start-edit__save"
+                        onClick={handleSaveStartEdit}
+                        disabled={offline}
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {currentBedActiveNotes.length > 0 && (
                   <div className="bed-detail-notes">
@@ -3618,7 +3748,7 @@ function App() {
                   <button
                     type="button"
                     className="btn-register"
-                    onClick={() => setCleanupBed(currentBed)}
+                    onClick={requestCleanupFromDetail}
                     disabled={offline}
                   >
                     종료

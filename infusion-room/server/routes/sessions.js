@@ -172,6 +172,30 @@ router.patch('/sessions/:id/duration', (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── started_at — 시작 시각 수정 (늦게 눌렀거나 잘못 입력한 경우 보정) ──
+router.patch('/sessions/:id/started-at', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+  if (session.ended_at !== null || session.cancelled) {
+    return res.status(400).json({ error: '종료되었거나 취소된 세션입니다' })
+  }
+  if (session.started_at === null) {
+    return res.status(400).json({ error: '아직 시작 전인 세션입니다' })
+  }
+
+  const startedAt = req.body?.started_at !== undefined ? Number(req.body.started_at) : NaN
+  try {
+    // 시작 시각은 배정 시각 이후 ~ 지금 사이여야 한다(시작 라우트와 동일 규칙).
+    assertInRange(startedAt, session.assigned_at, Date.now(), '시작 시각')
+  } catch (err) {
+    return res.status(err.status).json({ error: err.message })
+  }
+
+  db.prepare('UPDATE sessions SET started_at = ? WHERE id = ?').run(startedAt, session.id)
+  bumpRevision(db)
+  res.json({ ok: true })
+})
+
 // ─── cancel — 배정 취소 (라인 실패, 환자 복귀 등) ──────────────────
 router.post('/sessions/:id/cancel', (req, res) => {
   const session = getSessionOr404(req.params.id, res)
