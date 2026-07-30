@@ -677,6 +677,7 @@
 
 /* 문구+체온을 하나의 인라인 텍스트로 흘려 좁을 때 어절 단위로만 줄바꿈 */
 .bed-card__round-body {
+  flex: 1;
   min-width: 0;
 }
 
@@ -732,23 +733,30 @@
   overflow: hidden;
 }
 
-/* 아이콘 다음의 텍스트 뷰포트 — 여길 넘기는 만큼만 마퀴로 흐른다 */
-.bed-card__caution-view {
-  flex: 1;
+/* ── 재사용 마퀴(Marquee 컴포넌트) ──
+   부모 폭을 넘치면 안쪽 텍스트가 좌우로 왕복. 넘치는 부분은 잘라 가려 카드 밖으로 안 나간다.
+   환자명·차트·라운딩·라인담당·특이사항 등 카드 안 한 줄짜리 텍스트에 두루 쓴다. */
+.marquee {
+  display: block;
   min-width: 0;
   overflow: hidden;
 }
 
-.bed-card__caution-text {
+.marquee__text {
   display: inline-block;
   white-space: nowrap;
 }
 
-/* 카드 폭을 넘칠 때만(JS가 판별) 이 클래스가 붙어 좌우로 왕복한다.
-   앞뒤로 잠깐 멈춰서 읽을 틈을 준다. --marquee-shift/dur는 JS가 실측해 넣는다. */
-.bed-card__caution-text--marquee {
+/* 넘칠 때만(JS가 판별) 붙어 좌우로 왕복. 앞뒤로 잠깐 멈춰 읽을 틈을 준다.
+   --marquee-shift/dur는 JS가 실측해 넣는다. */
+.marquee__text--run {
   animation: card-marquee var(--marquee-dur, 10s) ease-in-out infinite;
   will-change: transform;
+}
+
+/* 특이사항 줄: 아이콘 옆에서 남은 폭을 채운다 */
+.bed-card__caution-marquee {
+  flex: 1;
 }
 
 @keyframes card-marquee {
@@ -758,7 +766,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bed-card__caution-text--marquee { animation: none; }
+  .marquee__text--run { animation: none; }
 }
 
 .bed-card__caution-icon {

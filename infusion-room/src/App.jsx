@@ -416,6 +416,17 @@ const BOSS_LINES = [
   '너 오늘 끝나고 남아.',
   '회식할까?',
   'ㅗ',
+  '귀찮게 하지 마.',
+  '그만해.',
+  '한가하니?',
+  '...',
+  '??????',
+  '^^ㅗ',
+  '액팅 화이팅!',
+  '벗동산으로 가자.',
+  '이맛이 땡기네.',
+  '오점무?',
+  '어쩌라고.',
 ]
 
 const BOSS_LINE_MS = 2800
@@ -652,11 +663,12 @@ function getCardNoteLines(patientNotes, sessionNotes, bed) {
   return { lines: shown, moreCount: allLines.length - shown.length }
 }
 
-// 카드 특이사항 한 줄. 카드 폭을 넘기면 좌우로 왕복(마퀴), 짧으면 가만히 있는다.
-// CSS만으론 넘침을 알 수 없어 실제 폭을 재서 넘칠 때만 애니메이션 클래스를 붙인다.
-// 카드 폭은 뷰포트에만 좌우되므로 mount 1회 + window resize에서 다시 잰다.
-// setState는 setTimeout/resize 콜백(비동기)에서만 해서 effect 동기 setState 규칙을 피한다.
-function CardNoteLine({ line }) {
+// 한 줄 마퀴. 부모 폭을 넘기면 좌우로 왕복(앞뒤로 잠깐 멈춰 읽을 틈), 안 넘치면 가만히.
+// 카드 안 어떤 한 줄에도 재사용한다(환자명·차트·라운딩·라인담당·특이사항).
+// CSS만으론 넘침을 알 수 없어 실제 폭을 잰다. 카드 폭은 뷰포트에만 좌우되므로
+// contentKey(내용)나 창 크기가 바뀔 때 다시 잰다. setState는 setTimeout/resize
+// 콜백(비동기)에서만 해서 effect 동기 setState 규칙을 피한다.
+function Marquee({ children, contentKey, className }) {
   const viewRef = useRef(null)
   const textRef = useRef(null)
   const [marquee, setMarquee] = useState(null) // { shift, dur } | null
@@ -680,20 +692,28 @@ function CardNoteLine({ line }) {
       clearTimeout(t)
       window.removeEventListener('resize', measure)
     }
-  }, [line.text])
+  }, [contentKey])
 
+  return (
+    <span className={`marquee${className ? ` ${className}` : ''}`} ref={viewRef}>
+      <span
+        ref={textRef}
+        className={`marquee__text${marquee ? ' marquee__text--run' : ''}`}
+        style={marquee ? { '--marquee-shift': `${marquee.shift}px`, '--marquee-dur': `${marquee.dur}s` } : undefined}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
+function CardNoteLine({ line }) {
   return (
     <p className={`bed-card__caution bed-card__caution--${line.tone}`}>
       <Icon name={line.icon} className="bed-card__caution-icon" />
-      <span className="bed-card__caution-view" ref={viewRef}>
-        <span
-          ref={textRef}
-          className={`bed-card__caution-text${marquee ? ' bed-card__caution-text--marquee' : ''}`}
-          style={marquee ? { '--marquee-shift': `${marquee.shift}px`, '--marquee-dur': `${marquee.dur}s` } : undefined}
-        >
-          {line.text}
-        </span>
-      </span>
+      <Marquee contentKey={line.text} className="bed-card__caution-marquee">
+        {line.text}
+      </Marquee>
     </p>
   )
 }
@@ -2450,6 +2470,9 @@ function App() {
   const clockOffsetRef = useRef(0)
   const revisionRef = useRef(null)
   const isModalBusyRef = useRef(false)
+  // 폴링 루프(=[account] 한 번만 생성)에서 최신 refreshRecords를 부르기 위한 참조.
+  // refreshRecords를 effect 의존성에 직접 넣으면 매 렌더마다 폴링이 재생성돼서 ref로 우회한다.
+  const refreshRecordsRef = useRef(null)
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
 
@@ -2500,6 +2523,10 @@ function App() {
           if (!result.unchanged && !isModalBusyRef.current) {
             setBeds(result.beds)
             revisionRef.current = result.revision
+            // 서버 상태가 바뀌었다 = 다른 단말이 특이사항·라운딩·종료 등을 했을 수 있다.
+            // 보드만 갱신하면 카드의 note_count는 맞지만 특이사항 내용·이용기록은 옛것이라
+            // 기록(history/rounds/notes)도 함께 다시 불러 실시간 반영한다.
+            refreshRecordsRef.current?.()
           }
           // unchanged든 아니든 서버와 통신에 성공한 시점 = 지금 보이는 정보의 기준 시각.
           setLastSyncAt(result.serverNow)
@@ -2666,6 +2693,11 @@ function App() {
       console.error('기록 갱신 실패', err)
     }
   }
+
+  // 폴링 루프가 항상 최신 refreshRecords를 부르도록 ref를 갱신해둔다.
+  useEffect(() => {
+    refreshRecordsRef.current = refreshRecords
+  })
 
   async function handleLogout() {
     try {
@@ -3111,13 +3143,13 @@ function App() {
         >
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
           <p className="bed-card__number">{bed.number}</p>
-          <p className="bed-card__patient">{bed.patientName}</p>
-          <p className="bed-card__chart">{bed.chartNumber}</p>
+          <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
+          <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
           <div className="bed-card__spacer" />
           {bed.overdue && (
             <p className="bed-card__overdue-label"><Icon name="alert" /> 환자 미도착</p>
           )}
-          <p className="bed-card__reserved-label">라인 {bed.lineStaff}</p>
+          <p className="bed-card__reserved-label"><Marquee contentKey={bed.lineStaff}>라인 {bed.lineStaff}</Marquee></p>
         </article>
       )
     }
@@ -3161,8 +3193,8 @@ function App() {
       >
         <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
         <p className="bed-card__number">{bed.number}</p>
-        <p className="bed-card__patient">{bed.patientName}</p>
-        <p className="bed-card__chart">{bed.chartNumber}</p>
+        <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
+        <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
         {roundStatus && (
           <button
             type="button"
@@ -3173,14 +3205,17 @@ function App() {
             }}
           >
             <Icon name={roundIcon} className="bed-card__round-icon" />
-            <span className="bed-card__round-body">
+            <Marquee
+              className="bed-card__round-body"
+              contentKey={`${roundText}|${roundTemp ? roundTemp.temp + roundTemp.tone : ''}`}
+            >
               {roundText}
               {roundTemp && (
                 <span className={`bed-card__round-temp bed-card__round-temp--${roundTemp.tone}`}>
                   {' · '}{roundTemp.temp}℃
                 </span>
               )}
-            </span>
+            </Marquee>
           </button>
         )}
         {noteLines.lines.length > 0 && (
