@@ -188,3 +188,13 @@ CREATE TABLE IF NOT EXISTS access_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_created ON access_logs(created_at DESC);
+
+-- ─── 베드 등록 잠금 (누가 빈 베드에 환자 등록 중인지) ────────────────
+-- 빈 베드의 등록 모달을 연 단말이 잠금을 걸고, 열려 있는 동안 주기적으로 updated_at을
+-- 갱신(하트비트)한다. 다른 단말은 "환자 등록중"으로 보고 선택 못 한다.
+-- updated_at이 LOCK_TTL(5분) 넘게 오래되면 방치로 보고 무시/정리한다.
+CREATE TABLE IF NOT EXISTS bed_locks (
+  bed_code   TEXT PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  updated_at INTEGER NOT NULL
+);

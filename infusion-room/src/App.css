@@ -497,6 +497,21 @@
   box-shadow: none;
 }
 
+/* 다른 단말에서 등록 중 — 클릭 불가, 보라(배정) 톤으로 진행 중임을 알린다 */
+.bed-card--locked {
+  cursor: not-allowed;
+  border-style: solid;
+  border-color: var(--status-reserved);
+}
+
+.bed-card--locked .bed-card__add-icon {
+  color: var(--status-reserved);
+}
+
+.bed-card--locked .bed-card__add-label {
+  color: var(--status-reserved);
+}
+
 .bed-card--vacant:hover {
   border-color: var(--status-occupied);
   box-shadow: none;

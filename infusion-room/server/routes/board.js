@@ -33,6 +33,13 @@ const cautionCountStmt = db.prepare(`
 
 const settingsStmt = db.prepare('SELECT key, value FROM settings')
 
+// 활성 등록 잠금(5분 안에 갱신된 것)만. 만료된 건 "없는 잠금"으로 친다.
+const LOCK_TTL_MS = 5 * 60 * 1000
+const activeLockStmt = db.prepare(
+  `SELECT l.account_id, a.display_name FROM bed_locks l JOIN accounts a ON a.id = l.account_id
+   WHERE l.bed_code = ? AND l.updated_at >= ?`,
+)
+
 router.get('/board', (req, res) => {
   const serverNow = Date.now()
   const revision = getRevision(db)
@@ -45,11 +52,17 @@ router.get('/board', (req, res) => {
   const settings = Object.fromEntries(
     settingsStmt.all().map((row) => [row.key, Number(row.value)]),
   )
+  const lockThreshold = serverNow - LOCK_TTL_MS
 
   const beds = bedsStmt.all().map((bed) => {
     const session = activeSessionStmt.get(bed.id)
     if (!session) {
-      return { code: bed.code, room: bed.room, number: bed.number, session: null }
+      // 빈 베드에만 등록 잠금이 붙는다. 누가 등록 중이면 lock에 그 사람 이름.
+      const lock = activeLockStmt.get(bed.code, lockThreshold)
+      return {
+        code: bed.code, room: bed.room, number: bed.number, session: null,
+        lock: lock ? { account_id: lock.account_id, name: lock.display_name } : null,
+      }
     }
     const lastRound = lastRoundStmt.get(session.id)
     return {

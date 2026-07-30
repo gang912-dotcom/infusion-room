@@ -14,6 +14,7 @@ import {
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
+  acquireBedLock, releaseBedLock,
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember,
   listSettings, updateSetting,
@@ -2473,6 +2474,8 @@ function App() {
   // 폴링 루프(=[account] 한 번만 생성)에서 최신 refreshRecords를 부르기 위한 참조.
   // refreshRecords를 effect 의존성에 직접 넣으면 매 렌더마다 폴링이 재생성돼서 ref로 우회한다.
   const refreshRecordsRef = useRef(null)
+  // 등록 잠금 하트비트 타이머. 빈 베드 모달이 열려 있는 동안만 돈다.
+  const lockHeartbeatRef = useRef(null)
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
 
@@ -2643,6 +2646,9 @@ function App() {
   // 말풍선이 떠 있는 채로 화면을 벗어나도 타이머가 남지 않게
   useEffect(() => () => clearTimeout(bossTimerRef.current), [])
 
+  // 언마운트(로그아웃 등) 시 등록 잠금 하트비트 타이머 정리
+  useEffect(() => () => clearInterval(lockHeartbeatRef.current), [])
+
   function toggleRoomCollapse(roomId) {
     setCollapsedRooms((prev) => {
       const next = new Set(prev)
@@ -2794,7 +2800,21 @@ function App() {
     }
   }
 
-  function handleBedClick(bed) {
+  // 등록 잠금: 빈 베드 모달을 여는 동안 잠금을 걸고 30초마다 하트비트로 유지한다.
+  function startLockHeartbeat(code) {
+    clearInterval(lockHeartbeatRef.current)
+    lockHeartbeatRef.current = setInterval(() => {
+      acquireBedLock(code).catch(() => {})
+    }, 30000)
+  }
+
+  function stopLockAndRelease(code) {
+    clearInterval(lockHeartbeatRef.current)
+    lockHeartbeatRef.current = null
+    if (code) releaseBedLock(code)
+  }
+
+  async function handleBedClick(bed) {
     // 이동 모드일 때 우선 처리
     if (movingBed) {
       handleMoveToBed(bed)
@@ -2804,10 +2824,23 @@ function App() {
       setCleanupBed(bed)
       return
     }
+    if (bed.status === 'vacant') {
+      if (bed.lockedBy) return // 남이 등록 중 — 카드도 비활성이지만 방어
+      try {
+        await acquireBedLock(bed.id) // 남이 방금 선점했으면 409 → 모달 안 열림
+      } catch (err) {
+        setMoveBedAlert(err.message || '다른 사람이 등록 중입니다.')
+        refreshBoard() // 잠금 상태를 즉시 반영
+        return
+      }
+      startLockHeartbeat(bed.id)
+    }
     openModal(bed)
   }
 
   function closeModal() {
+    // 빈 베드 등록 모달을 닫는 거면 잠금 해제(취소로 간주).
+    if (selectedBed?.status === 'vacant') stopLockAndRelease(selectedBed.id)
     setSelectedBed(null)
     setEditStartOpen(false)
   }
@@ -3069,6 +3102,7 @@ function App() {
         patientName: patientName.trim(),
         lineStaffId: Number(lineStaffId),
       })
+      stopLockAndRelease(selectedBed.id) // 배정 완료 — 등록 잠금 해제
       await refreshBoard()
       setDurationMinutes(DEFAULT_DURATION)
       setMixStaffId('')
@@ -3113,6 +3147,18 @@ function App() {
 
   function renderBedCard(bed) {
     if (bed.status === 'vacant') {
+      // 다른 단말에서 등록 중이면 잠긴 상태로 표시하고 클릭을 막는다.
+      if (bed.lockedBy) {
+        return (
+          <article key={bed.id} className="bed-card bed-card--vacant bed-card--locked">
+            <p className="bed-card__number">{bed.number}</p>
+            <div className="bed-card__add-slot">
+              <span className="bed-card__add-icon"><Icon name="clock" /></span>
+              <span className="bed-card__add-label">환자 등록중</span>
+            </div>
+          </article>
+        )
+      }
       return (
         <article
           key={bed.id}

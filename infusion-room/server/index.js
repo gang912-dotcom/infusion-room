@@ -10,6 +10,7 @@ import sessionsRouter from './routes/sessions.js'
 import roundsRouter from './routes/rounds.js'
 import notesRouter from './routes/notes.js'
 import staffRouter from './routes/staff.js'
+import bedLocksRouter from './routes/bedLocks.js'
 import adminRouter from './routes/admin.js'
 import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
@@ -27,6 +28,7 @@ app.use('/api', sessionsRouter)
 app.use('/api', roundsRouter)
 app.use('/api', notesRouter)
 app.use('/api', staffRouter)
+app.use('/api', bedLocksRouter)
 app.use('/api/admin', requireAdmin, adminRouter)
 
 // ─── 프론트 정적 서빙 ───────────────────────────────────────────────

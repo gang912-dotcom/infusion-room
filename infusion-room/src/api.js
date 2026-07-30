@@ -59,6 +59,8 @@ function mapBoardToBeds(board) {
         id: b.code, number: b.number, room: b.room,
         status: 'vacant', patientName: '', chartNumber: '',
         startTime: null, durationMinutes: null, sessionId: null,
+        // 누가 등록 중이면 { accountId, name }. 카드가 "환자 등록중"으로 잠긴다.
+        lockedBy: b.lock ? { accountId: b.lock.account_id, name: b.lock.name } : null,
       }
     }
     const status = s.started_at ? 'in-progress' : 'reserved'
@@ -204,6 +206,17 @@ export async function updateSessionStartedAt(sessionId, startedAt) {
     method: 'PATCH',
     body: JSON.stringify({ started_at: startedAt }),
   })
+}
+
+// 등록 잠금 — 획득/하트비트. 남이 등록 중이면 409를 throw한다.
+export async function acquireBedLock(bedCode) {
+  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, { method: 'POST' })
+}
+
+// 등록 잠금 해제. 실패해도 조용히 넘어간다(모달 닫기·언마운트 정리용).
+export function releaseBedLock(bedCode) {
+  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, { method: 'DELETE' })
+    .catch((err) => console.error('등록 잠금 해제 실패', err))
 }
 
 export async function endSession(sessionId, endedAt) {
