@@ -806,6 +806,159 @@ function getPatientVisitInfo(history, chartNumber) {
   return { count: visits.length, lastVisitDate: visits[0]?.date ?? null }
 }
 
+// ─── 데이터 추출 (CSV · 인쇄 리포트) ──────────────────────────────
+// 서버/DB는 안 건드리고, 이미 불러온 history·rounds·sessionNotes·patientNotes만 조합한다.
+function xLabels(codes, options) {
+  return (codes || []).map((c) => options.find((o) => o.code === c)?.label || c).filter(Boolean)
+}
+function xDate(iso) {
+  return new Date(iso).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+function xTime(iso) {
+  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+}
+// 특이사항(session_note) → "혈관통·붓기 / 찜질팩 / 메모"
+function xNoteText(n) {
+  const body = [...xLabels(n.symptoms, SYMPTOM_OPTIONS), ...xLabels(n.actions, ACTION_OPTIONS)].join('·')
+  return [body, n.memo].filter(Boolean).join(' · ') || '기록'
+}
+// 라운딩 → "양호 · 37.8℃ · 메모"
+function xRoundText(r) {
+  const st = ROUND_STATE_OPTIONS.find((o) => o.code === r.state)?.label
+  const temp = r.temperature != null ? `${r.temperature}℃` : null
+  return [st, temp, r.memo].filter(Boolean).join(' · ') || '확인'
+}
+// 한 세션의 라운딩+특이사항을 시간순 이벤트로 합친다
+function xVisitEvents(sessionId, sessionNotes, rounds) {
+  const evs = []
+  sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
+    .forEach((n) => evs.push({ t: getNoteOccurredAt(n), kind: '특이사항', text: xNoteText(n) }))
+  rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
+    .forEach((r) => evs.push({ t: r.occurredAt, kind: '라운딩', text: xRoundText(r) }))
+  return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
+}
+function xCsvCell(v) {
+  const s = v == null ? '' : String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+function xToCsv(headers, rows) {
+  // BOM(엑셀 한글깨짐 방지) — 엑셀에서 한글이 깨지지 않게
+  return '\uFEFF' + [headers, ...rows].map((r) => r.map(xCsvCell).join(',')).join('\r\n')
+}
+function xDownload(filename, content, mime) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// 날짜별 이용기록 CSV — 한 세션 = 한 행 (특이사항·라운딩은 시각과 함께 요약 셀)
+function buildHistoryCsv(history, sessionNotes, rounds) {
+  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '특이사항', '라운딩']
+  const rows = history.map((h) => {
+    const notes = sessionNotes.filter((n) => n.sessionId === h.sessionId && !n.deleted)
+      .sort((a, b) => new Date(getNoteOccurredAt(a)) - new Date(getNoteOccurredAt(b)))
+      .map((n) => `${xTime(getNoteOccurredAt(n))} ${xNoteText(n)}`).join(' | ')
+    const rds = rounds.filter((r) => r.sessionId === h.sessionId && !r.deleted)
+      .sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt))
+      .map((r) => `${xTime(r.occurredAt)} ${xRoundText(r)}`).join(' | ')
+    return [h.date, h.room, h.bedNumber, h.patientName, h.chartNumber, h.startTime, h.endTime, h.usedMinutes, notes, rds]
+  })
+  return xToCsv(headers, rows)
+}
+
+// 환자별 CSV — 한 이벤트 = 한 행 (주의사항 → 이용/라운딩/특이사항 타임라인)
+function buildPatientCsv(chartNumber, history, sessionNotes, rounds, patientNotes) {
+  const headers = ['날짜', '시각', '구분', '수액실', '베드', '내용', '비고']
+  const rows = []
+  getActivePatientNotes(patientNotes, chartNumber).forEach((n) => {
+    const cat = NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label || ''
+    const src = NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label || ''
+    rows.push(['', '', `주의사항(${cat})`, '', '', n.content, src ? `근거: ${src}` : ''])
+  })
+  const sessions = history.filter((h) => h.chartNumber === chartNumber)
+    .sort((a, b) => parseDateStr(a.date) - parseDateStr(b.date))
+  sessions.forEach((h) => {
+    rows.push([h.date, h.startTime, '이용', h.room, h.bedNumber,
+      `수액 이용 (${formatDuration(h.usedMinutes)})`, `${h.startTime}~${h.endTime}`])
+    xVisitEvents(h.sessionId, sessionNotes, rounds).forEach((e) => {
+      rows.push([h.date, xTime(e.t), e.kind, h.room, h.bedNumber, e.text, ''])
+    })
+  })
+  return xToCsv(headers, rows)
+}
+
+// 환자별 인쇄용 리포트(HTML) — 새 창으로 열고 인쇄/PDF 저장
+function openPatientReport(patientName, chartNumber, history, sessionNotes, rounds, patientNotes) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+  const notes = getActivePatientNotes(patientNotes, chartNumber)
+  const sessions = history.filter((h) => h.chartNumber === chartNumber)
+    .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date))
+  const printedAt = new Date().toLocaleString('ko-KR')
+
+  const notesHtml = notes.length ? `
+    <section><h2>환자 주의사항</h2><ul class="notes">${notes.map((n) => {
+      const cat = NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label || ''
+      const src = NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label || ''
+      return `<li><b class="cat cat--${esc(n.category)}">${esc(cat)}</b> ${esc(n.content)}${src ? ` <span class="src">근거: ${esc(src)}</span>` : ''}</li>`
+    }).join('')}</ul></section>` : ''
+
+  const visitsHtml = sessions.map((h) => {
+    const events = xVisitEvents(h.sessionId, sessionNotes, rounds)
+    const tl = events.length ? `<ul class="tl">${events.map((e) =>
+      `<li><span class="t">${esc(xTime(e.t))}</span><span class="k k--${e.kind === '라운딩' ? 'round' : 'note'}">${esc(e.kind)}</span><span class="c">${esc(e.text)}</span></li>`).join('')}</ul>`
+      : '<p class="none">특이사항·라운딩 기록 없음</p>'
+    return `<section class="visit">
+      <h3>${esc(h.date)} · ${esc(h.room)} ${esc(h.bedNumber)}번</h3>
+      <p class="meta">${esc(h.startTime)} ~ ${esc(h.endTime)} · 이용 ${esc(formatDuration(h.usedMinutes))}</p>
+      ${tl}
+    </section>`
+  }).join('')
+
+  const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+  <title>${esc(patientName)}(${esc(chartNumber)}) 이용기록</title>
+  <style>
+    *{box-sizing:border-box} body{font-family:-apple-system,'Pretendard','Apple SD Gothic Neo','Segoe UI',sans-serif;color:#1b1b1f;margin:0;padding:32px;max-width:860px;margin:0 auto;line-height:1.5}
+    header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:8px}
+    h1{font-size:24px;margin:0} .chart{color:#666;font-weight:600}
+    .sum{color:#555;font-size:14px;margin:6px 0 20px}
+    h2{font-size:16px;margin:22px 0 8px;color:#1b6} section.visit h3{font-size:15px;margin:18px 0 2px;border-left:3px solid #4c8bf5;padding-left:8px}
+    .meta{color:#666;font-size:13px;margin:0 0 8px 11px}
+    ul.notes{list-style:none;padding:0;margin:0} ul.notes li{padding:6px 0;border-bottom:1px solid #eee;font-size:14px}
+    .cat{display:inline-block;font-size:12px;padding:1px 7px;border-radius:10px;margin-right:6px;color:#fff}
+    .cat--warning{background:#d22b21} .cat--caution{background:#c77400} .cat--info{background:#888}
+    .src{color:#999;font-size:12px}
+    ul.tl{list-style:none;padding:0;margin:0 0 0 11px} ul.tl li{display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:14px;border-bottom:1px dotted #e5e5e5}
+    .t{font-variant-numeric:tabular-nums;color:#333;font-weight:700;min-width:44px}
+    .k{font-size:11px;padding:1px 6px;border-radius:8px;color:#fff;flex:none}
+    .k--round{background:#5b8def} .k--note{background:#c77400}
+    .none{color:#aaa;font-size:13px;margin:2px 0 0 11px}
+    .toolbar{position:sticky;top:0;text-align:right;margin-bottom:12px}
+    .toolbar button{font:inherit;font-weight:700;padding:8px 16px;border:0;border-radius:8px;background:#4c8bf5;color:#fff;cursor:pointer}
+    @media print{.toolbar{display:none} body{padding:0}}
+  </style></head><body>
+    <div class="toolbar"><button onclick="window.print()">인쇄 / PDF 저장</button></div>
+    <header><h1>${esc(patientName)} <span class="chart">${esc(chartNumber)}</span></h1><div class="sum">출력: ${esc(printedAt)}</div></header>
+    <p class="sum">총 이용 ${sessions.length}회${sessions[0] ? ` · 최근 ${esc(sessions[0].date)}` : ''}</p>
+    ${notesHtml}
+    <h2>이용 이력 · 타임라인</h2>
+    ${visitsHtml || '<p class="none">이용 기록이 없습니다.</p>'}
+  </body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) {
+    alert('팝업이 차단되어 리포트를 열 수 없습니다. 팝업 허용 후 다시 시도해주세요.')
+    return
+  }
+  w.document.write(html)
+  w.document.close()
+}
+
 // ─── 통계 화면 ──────────────────────────────────────────────────
 function StatsView({ history }) {
   const [dateFrom, setDateFrom] = useState(thisMonthStartStr)
@@ -995,6 +1148,7 @@ function PatientView({
   history,
   patientNotes,
   sessionNotes,
+  rounds = [],
   initialChartNumber,
   onInitialChartConsumed,
 }) {
@@ -1033,8 +1187,8 @@ function PatientView({
   // 각 환자: 이용횟수, 최근 이용일 (entries는 이미 최신순으로 history에 들어있음)
   const allPatients = Object.values(patientMap).map((p) => {
     const sorted = [...p.entries].sort((a, b) => {
-      // date 문자열 "YYYY. MM. DD." 비교
-      return b.id.localeCompare(a.id)
+      // 세션 id(자동증가·숫자) 역순 = 최신 이용 먼저. (서버 전환 후 id가 숫자라 localeCompare 불가)
+      return Number(b.id) - Number(a.id)
     })
     return {
       ...p,
@@ -1073,9 +1227,23 @@ function PatientView({
     setSelectedKey(null)
   }
 
-  // 이용이력 최신순 정렬 (id에 타임스탬프 포함되어 있으므로 역순)
+  function handleExportPatientCsv() {
+    if (!selectedPatient) return
+    const csv = buildPatientCsv(selectedPatient.chartNumber, history, sessionNotes, rounds, patientNotes)
+    xDownload(`환자_${selectedPatient.patientName}_${selectedPatient.chartNumber}.csv`, csv, 'text/csv;charset=utf-8')
+  }
+
+  function handleOpenReport() {
+    if (!selectedPatient) return
+    openPatientReport(
+      selectedPatient.patientName, selectedPatient.chartNumber,
+      history, sessionNotes, rounds, patientNotes,
+    )
+  }
+
+  // 이용이력 최신순 정렬 (세션 id 숫자 역순 — 서버 전환 후 id가 숫자라 localeCompare 불가)
   const patientHistory = selectedPatient
-    ? [...selectedPatient.entries].sort((a, b) => b.id.localeCompare(a.id))
+    ? [...selectedPatient.entries].sort((a, b) => Number(b.id) - Number(a.id))
     : []
 
   const selectedPatientNotes = selectedPatient
@@ -1084,6 +1252,13 @@ function PatientView({
 
   const selectedPatientRecentNotes = selectedPatient
     ? getRecentSessionNotes(sessionNotes, selectedPatient.chartNumber, 5)
+    : []
+
+  const selectedPatientRounds = selectedPatient
+    ? rounds
+        .filter((r) => r.chartNumber === selectedPatient.chartNumber && !r.deleted)
+        .sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))
+        .slice(0, 10)
     : []
 
   return (
@@ -1149,10 +1324,20 @@ function PatientView({
 
       {selectedPatient && (
         <div className="patient-detail">
-          {/* 뒤로 버튼 */}
-          <button type="button" className="patient-detail__back" onClick={handleBack}>
-            <Icon name="arrow-left" /> 목록으로
-          </button>
+          {/* 뒤로 버튼 + 내보내기 */}
+          <div className="patient-detail__toolbar">
+            <button type="button" className="patient-detail__back" onClick={handleBack}>
+              <Icon name="arrow-left" /> 목록으로
+            </button>
+            <div className="patient-detail__export">
+              <button type="button" className="export-btn" onClick={handleExportPatientCsv}>
+                <Icon name="arrow-up" /> CSV
+              </button>
+              <button type="button" className="export-btn export-btn--primary" onClick={handleOpenReport}>
+                <Icon name="calendar" /> 인쇄용 리포트
+              </button>
+            </div>
+          </div>
 
           {/* 환자 요약 카드 */}
           <div className="patient-card">
@@ -1201,6 +1386,20 @@ function PatientView({
               <ul className="briefing__history-list">
                 {selectedPatientRecentNotes.map((n) => (
                   <li key={n.id}>{formatSessionNoteLine(n)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 라운딩 기록 (최근) */}
+          {selectedPatientRounds.length > 0 && (
+            <div className="patient-notes">
+              <h3 className="patient-history__title">라운딩 기록 (최근)</h3>
+              <ul className="briefing__history-list">
+                {selectedPatientRounds.map((r) => (
+                  <li key={r.id}>
+                    {xDate(r.occurredAt)} {xTime(r.occurredAt)} · {xRoundText(r)}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -2198,7 +2397,7 @@ function DataManageView({
 }
 
 // ─── 이용기록 화면 ──────────────────────────────────────────────
-function HistoryView({ history }) {
+function HistoryView({ history, sessionNotes = [], rounds = [] }) {
   const [searchName, setSearchName] = useState('')
   const [searchChart, setSearchChart] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
@@ -2234,6 +2433,12 @@ function HistoryView({ history }) {
     setSearchChart('')
     setSearchDateFrom('')
     setSearchDateTo('')
+  }
+
+  function handleExportCsv() {
+    const csv = buildHistoryCsv(filtered, sessionNotes, rounds)
+    const stamp = new Date().toISOString().slice(0, 10)
+    xDownload(`이용기록_${stamp}.csv`, csv, 'text/csv;charset=utf-8')
   }
 
   return (
@@ -2300,6 +2505,18 @@ function HistoryView({ history }) {
           </p>
         )}
       </div>
+
+      {/* 내보내기 바 */}
+      {filtered.length > 0 && (
+        <div className="export-bar">
+          <span className="export-bar__count">
+            {hasFilter ? `검색 ${filtered.length}건` : `전체 ${filtered.length}건`}
+          </span>
+          <button type="button" className="export-btn" onClick={handleExportCsv}>
+            <Icon name="arrow-up" /> CSV 내보내기
+          </button>
+        </div>
+      )}
 
       {/* 테이블 */}
       {filtered.length === 0 ? (
@@ -3451,12 +3668,13 @@ function App() {
 
       <div className="tab-view" ref={tabViewRef}>
       {activeTab === 'history' ? (
-        <HistoryView history={activeHistory} />
+        <HistoryView history={activeHistory} sessionNotes={sessionNotes} rounds={rounds} />
       ) : activeTab === 'patient' ? (
         <PatientView
           history={activeHistory}
           patientNotes={patientNotes}
           sessionNotes={sessionNotes}
+          rounds={rounds}
           initialChartNumber={patientViewSeed}
           onInitialChartConsumed={() => setPatientViewSeed(null)}
         />
