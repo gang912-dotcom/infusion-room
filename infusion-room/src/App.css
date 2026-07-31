@@ -26,9 +26,9 @@
   --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   --card-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   --card-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
-  /* 프로스티드 글래스(모달) */
-  --glass: rgba(28, 28, 32, 0.82);
-  --glass-brd: rgba(255, 255, 255, 0.12);
+  /* 프로스티드 글래스(모달) — 더 투명하게, 뒤 배경이 은은히 비치도록 */
+  --glass: rgba(28, 28, 32, 0.58);
+  --glass-brd: rgba(255, 255, 255, 0.14);
 
   display: flex;
   flex-direction: column;
@@ -66,8 +66,8 @@
   --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
   --card-shadow: 0 5px 14px rgba(60, 60, 70, 0.10);
   --card-shadow-hover: 0 12px 26px rgba(60, 60, 70, 0.16);
-  --glass: rgba(250, 250, 252, 0.8);
-  --glass-brd: rgba(255, 255, 255, 0.7);
+  --glass: rgba(252, 252, 254, 0.6);
+  --glass-brd: rgba(255, 255, 255, 0.8);
 }
 
 /* 라이트에선 파랑/인디고 최소화 — 병원명 라벨을 한 단계 더 흐리게.
@@ -912,7 +912,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.28);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -933,8 +933,8 @@
   flex-direction: column;
   /* 프로스티드 글래스: 반투명 + 뒤 배경 블러 (iPad 사파리 대비 -webkit- 포함) */
   background: var(--glass);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  backdrop-filter: blur(40px) saturate(200%);
   border: 1px solid var(--glass-brd);
   border-radius: 22px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
