@@ -3808,3 +3808,30 @@
     animation:none !important; transition:none !important;
   }
 }
+
+/* ==========================================================================
+   애플풍 폴리시 patch2 — 브랜드 폰트 + 모달 닫힘 "빨려들어가듯" 강화
+   ========================================================================== */
+
+/* 브랜드 폰트(Pretendard)를 앱 전체에 확실히 적용 — 내부 요소는 대부분 inherit */
+.app{
+  font-family:var(--sans);
+  letter-spacing:-.01em;               /* 애플식 살짝 조인 자간 */
+  -webkit-font-smoothing:antialiased;
+}
+
+/* 모달 닫힘: 단순 축소 → 프로스티드 글래스가 '빨려들어가듯' (더 작게 + 블러 + 살짝 내려감) */
+.modal-overlay--closing .modal{
+  animation:modal-suck .2s cubic-bezier(.4,0,.9,.3) forwards;
+  transform-origin:center 46%;
+}
+@keyframes modal-suck{
+  0%  { opacity:1; transform:scale(1)    translateY(0);    filter:blur(0); }
+  100%{ opacity:0; transform:scale(.82)  translateY(6px);  filter:blur(6px); }
+}
+/* 오버레이(배경 딤)도 아주 살짝 늦게 걷혀 잔상이 자연스럽게 */
+.modal-overlay--closing{ animation:overlay-out .2s ease forwards; }
+
+@media (prefers-reduced-motion:reduce){
+  .modal-overlay--closing .modal{ animation-duration:.01ms; }
+}

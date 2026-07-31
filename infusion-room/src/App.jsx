@@ -470,7 +470,7 @@ function pickBossLine(previous) {
 // 닫기 경로가 모달마다 여러 개다(× 버튼 / 취소 / 확인 / 액션 성공 후 자동 닫힘).
 // 핸들러마다 지연을 넣으면 하나씩 빠뜨리기 쉬워서, 모든 경로가 반드시 지나가는
 // "값이 falsy가 되는 지점"에서 한 번만 처리한다.
-const MODAL_EXIT_MS = 180
+const MODAL_EXIT_MS = 200
 
 function useModalExit(value) {
   const [held, setHeld] = useState(value)

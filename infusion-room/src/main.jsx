@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import 'pretendard/dist/web/static/pretendard-dynamic-subset.css' // 브랜드 폰트(자체 호스팅 · 오프라인 LAN에서도 동작)
 import './index.css'
 import App from './App.jsx'
 
