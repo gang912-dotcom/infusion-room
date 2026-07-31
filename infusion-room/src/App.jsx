@@ -2938,7 +2938,7 @@ function ComposeMessageModal({ onClose, closing }) {
           {done && <p role="status" className="msg-compose__done">{done}</p>}
           <button
             type="button"
-            className="btn-register"
+            className="btn-register msg-compose__send"
             onClick={handleSend}
             disabled={sending || !to || !content.trim()}
           >
