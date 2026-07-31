@@ -3958,3 +3958,43 @@
 @media (prefers-reduced-motion:reduce){
   .app .bed-card__droplet{ animation:none !important; }
 }
+
+/* ==========================================================================
+   patch11 — 모달 열림 시 유리 블러가 '끝에서 툭' 켜지던 문제 수정 + 블러가 서서히 스며들게
+   원인: backdrop-filter가 패널의 scale 애니메이션 동안 렌더 안 됨 → 끝나면 갑자기 적용.
+   해결: (1) 블러를 transform 안 타는 오버레이로 이동  (2) 블러 세기를 0→최대로 애니메이션.
+   ========================================================================== */
+.modal-overlay{
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  /* 열릴 때 배경 딤 + 블러가 함께 서서히 차오른다 */
+  animation: overlay-blur-in 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes overlay-blur-in{
+  from{
+    opacity: 0;
+    -webkit-backdrop-filter: blur(0px) saturate(1);
+    backdrop-filter: blur(0px) saturate(1);
+  }
+  to{
+    opacity: 1;
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+  }
+}
+/* 닫힐 때도 블러가 서서히 빠진다(툭 사라지지 않게) */
+.modal-overlay--closing{
+  animation: overlay-blur-out 0.22s ease forwards;
+}
+@keyframes overlay-blur-out{
+  from{ opacity:1; -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%); }
+  to{ opacity:0; -webkit-backdrop-filter: blur(0px) saturate(1); backdrop-filter: blur(0px) saturate(1); }
+}
+/* 패널 자체 블러는 제거(위 오버레이가 담당) — 패널은 반투명 유리 틴트만 */
+.modal{
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (prefers-reduced-motion:reduce){
+  .modal-overlay{ animation-duration:0.01ms; }
+}
