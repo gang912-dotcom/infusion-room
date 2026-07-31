@@ -2018,7 +2018,9 @@ function DataManageView({
   }
 
   const hasFilter = searchName.trim() || searchChart.trim() || searchDate
-  const checkedCount = filtered.filter((e) => checkedIds.has(e.id)).size
+  // filter()는 배열을 반환하므로 .length. (.size는 Set 전용이라 undefined가 돼서
+  // "N건 선택됨" 라벨이 안 뜨고 선택삭제 버튼이 항상 활성으로 보이던 버그를 고침)
+  const checkedCount = filtered.filter((e) => checkedIds.has(e.id)).length
 
   // ── 특이사항 데이터 관리 ──
   function findPatientNameByChart(chartNumber) {
@@ -2142,9 +2144,6 @@ function DataManageView({
 
       {/* ── 액션 버튼 ── */}
       <div className="dm-actions">
-        <span className="dm-actions__selected">
-          {checkedCount > 0 ? `${checkedCount}건 선택됨` : ''}
-        </span>
         {!trashMode ? (
           <button
             type="button"
@@ -2163,6 +2162,9 @@ function DataManageView({
           >
             선택 복구
           </button>
+        )}
+        {checkedCount > 0 && (
+          <span className="dm-actions__selected">{checkedCount}건 선택됨</span>
         )}
       </div>
 

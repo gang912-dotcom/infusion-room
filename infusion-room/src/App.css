@@ -2507,7 +2507,6 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--status-occupied);
-  min-width: 80px;
 }
 
 .dm-btn {
