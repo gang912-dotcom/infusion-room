@@ -3998,3 +3998,31 @@
 @media (prefers-reduced-motion:reduce){
   .modal-overlay{ animation-duration:0.01ms; }
 }
+
+/* ==========================================================================
+   patch13 — 모달 유리 효과 재정리 (patch11의 전체화면 블러 취소)
+   · 오버레이는 단순 딤만(배경 블러 제거)
+   · 프로스티드 글래스는 '패널 자체'에만.
+   · 등장은 scale 팝 대신 opacity 페이드 → backdrop-filter가 끝에서 안 튀고
+     투명한 패널이 서서히 유리로 진해진다.
+   ========================================================================== */
+.modal-overlay{
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: overlay-in 0.26s ease both;
+}
+.modal-overlay--closing{
+  animation: overlay-out 0.2s ease forwards;
+}
+.modal{
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  transform: none;
+  animation: modal-fade-in 0.3s ease both;
+}
+@keyframes modal-fade-in{ from{ opacity:0 } to{ opacity:1 } }
+/* 닫힘은 patch2의 modal-suck(빨려들어가듯)을 그대로 쓴다 — 여기서 덮지 않는다.
+   (닫힐 땐 유리가 어차피 걷혀서 transform 중 backdrop-filter가 안 그려지는 게 티나지 않음) */
+@media (prefers-reduced-motion:reduce){
+  .modal, .modal-overlay, .modal-overlay--closing .modal{ animation-duration:0.01ms; }
+}
