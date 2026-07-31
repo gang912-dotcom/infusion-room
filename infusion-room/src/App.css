@@ -3867,3 +3867,29 @@
   margin-bottom:14px;
 }
 .patient-detail__export{ display:flex; gap:8px; }
+
+/* ==========================================================================
+   patch7 — HIG 터치 타깃 44px 확보 + 탭/버튼 간격 (아이패드 오터치 방지)
+   시각 위치는 유지하되, 자주 누르는 컨트롤의 탭 영역을 44px로 키운다.
+   ========================================================================== */
+.app .tab{ min-height:44px; display:inline-flex; align-items:center; }
+.app .tabs{ gap:6px; }
+.app .chip{ min-height:44px; display:inline-flex; align-items:center; }
+.app .theme-toggle,
+.app .modal__close,
+.app .patient-search__clear{ min-width:44px; min-height:44px; }
+.app .header-account__logout,
+.app .dm-mode-btn,
+.app .dm-note-btn,
+.app .dm-search__reset,
+.app .history-search__reset,
+.app .patient-detail__back,
+.app .stats-range__btn,
+.app .occurred-at__now,
+.app .occurred-at__pull{ min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
+.app .dm-admin-edit-actions__buttons{ gap:8px; }
+/* 작은 편집/파괴 알약 — 탭 높이 40+ 확보 + 인접 간격 */
+.app .btn-move-bed,
+.app .btn-edit-patient,
+.app .btn-remove-patient-link{ min-height:40px; display:inline-flex; align-items:center; justify-content:center; }
+.app .bed-detail-summary__meta-actions{ gap:8px; }
