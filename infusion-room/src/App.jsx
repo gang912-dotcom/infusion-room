@@ -471,6 +471,7 @@ function pickBossLine(previous) {
 // 핸들러마다 지연을 넣으면 하나씩 빠뜨리기 쉬워서, 모든 경로가 반드시 지나가는
 // "값이 falsy가 되는 지점"에서 한 번만 처리한다.
 const MODAL_EXIT_MS = 200
+const LOCK_IDLE_MS = 3 * 60 * 1000 // 등록창 무입력 방치 3분이면 잠금 자동 해제
 
 function useModalExit(value) {
   const [held, setHeld] = useState(value)
@@ -2719,6 +2720,8 @@ function App() {
   const refreshRecordsRef = useRef(null)
   // 등록 잠금 하트비트 타이머. 빈 베드 모달이 열려 있는 동안만 돈다.
   const lockHeartbeatRef = useRef(null)
+  // 등록창 마지막 사용자 상호작용 시각. 무입력 방치 감지용.
+  const lockActivityRef = useRef(0)
 
   const hasActiveSessions = beds.some((bed) => bed.status !== 'vacant')
 
@@ -2892,6 +2895,18 @@ function App() {
   // 언마운트(로그아웃 등) 시 등록 잠금 하트비트 타이머 정리
   useEffect(() => () => clearInterval(lockHeartbeatRef.current), [])
 
+  // 빈 베드 등록 모달이 열려 있는 동안, 사용자 상호작용마다 마지막 입력 시각 갱신(무입력 방치 감지용)
+  useEffect(() => {
+    if (selectedBed?.status !== 'vacant') return
+    const bump = () => { lockActivityRef.current = Date.now() }
+    window.addEventListener('pointerdown', bump)
+    window.addEventListener('keydown', bump)
+    return () => {
+      window.removeEventListener('pointerdown', bump)
+      window.removeEventListener('keydown', bump)
+    }
+  }, [selectedBed?.status])
+
   function toggleRoomCollapse(roomId) {
     setCollapsedRooms((prev) => {
       const next = new Set(prev)
@@ -3044,9 +3059,18 @@ function App() {
   }
 
   // 등록 잠금: 빈 베드 모달을 여는 동안 잠금을 걸고 30초마다 하트비트로 유지한다.
+  // 단, LOCK_IDLE_MS 동안 무입력이면 방치로 보고 모달을 닫아 잠금을 자동 해제한다.
   function startLockHeartbeat(code) {
     clearInterval(lockHeartbeatRef.current)
+    lockActivityRef.current = Date.now()
     lockHeartbeatRef.current = setInterval(() => {
+      if (Date.now() - lockActivityRef.current > LOCK_IDLE_MS) {
+        // 무입력 방치 — closure의 code로 확실히 잠금 해제(하트비트도 정지)한 뒤 모달 닫기.
+        // closeModal은 selectedBed를 참조하는데 이 콜백이 캡처한 값이 낡을 수 있어, 해제는 여기서 직접 한다.
+        stopLockAndRelease(code)
+        closeModal()
+        return
+      }
       acquireBedLock(code).catch(() => {})
     }, 30000)
   }
