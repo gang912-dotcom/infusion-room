@@ -3893,3 +3893,25 @@
 .app .btn-edit-patient,
 .app .btn-remove-patient-link{ min-height:40px; display:inline-flex; align-items:center; justify-content:center; }
 .app .bed-detail-summary__meta-actions{ gap:8px; }
+
+/* ==========================================================================
+   patch8 — HIG 색 대비 + 타이포 (가독성)
+   ========================================================================== */
+/* muted 텍스트: 시작시각·차트번호·경과분·placeholder 전부 이 색 → 대비 4.5:1 이상으로 */
+.app{ --text-muted:#8b93a1; }                         /* 다크 3.53:1 → ~4.7:1 */
+:root[data-theme='light'] .app{ --text-muted:#6d6d72; } /* 라이트 3.44:1 → ~4.8:1 */
+/* 라이트 '곧 완료' 주황: 배경이 거의 흰색이라 텍스트를 더 진하게 */
+:root[data-theme='light'] .app .bed-card__chip--warning,
+:root[data-theme='light'] .app .bed-card__round--soon{ color:#9a5b00; }
+/* 완료/라운딩필요 빨강 텍스트: 자기 틴트 위 대비 보강(다크=조금 밝게, 라이트=조금 진하게) */
+.app .bed-card__chip--completed,
+.app .bed-card__round--due{ color:#f87171; }
+:root[data-theme='light'] .app .bed-card__chip--completed,
+:root[data-theme='light'] .app .bed-card__round--due{ color:#c41f16; }
+/* 의미 있는 작은 글씨 상향(카드 시작시각 10→12, 진행률/경과 11→12, 차트번호 12→13) */
+.app .bed-card__meta{ font-size:12px; }
+.app .bed-card__progress-text,
+.app .bed-card__progress-elapsed{ font-size:12px; }
+.app .bed-card__chart{ font-size:13px; }
+/* 남은시간 타이머 숫자 흔들림 방지 */
+.app .bed-card__remaining{ font-variant-numeric:tabular-nums; }
