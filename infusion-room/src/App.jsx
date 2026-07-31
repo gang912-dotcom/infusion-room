@@ -1541,7 +1541,7 @@ function AccountManageSection({ offline }) {
         </button>
       </div>
 
-      {error && <p className="field__error">{error}</p>}
+      {error && <p role="alert" className="field__error">{error}</p>}
 
       {showAdd && (
         <div className="dm-admin-add-form">
@@ -1746,7 +1746,7 @@ function StaffManageSection({ offline }) {
         </button>
       </div>
 
-      {error && <p className="field__error">{error}</p>}
+      {error && <p role="alert" className="field__error">{error}</p>}
 
       {showAdd && (
         <div className="dm-admin-add-form">
@@ -1793,8 +1793,8 @@ function StaffManageSection({ offline }) {
                       </div>
                     ) : (
                       <div className="dm-admin-edit-actions__buttons">
-                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === 0} onClick={() => handleMove(i, -1)}>▲</button>
-                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === staff.length - 1} onClick={() => handleMove(i, 1)}>▼</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === 0} aria-label="위로 이동" onClick={() => handleMove(i, -1)}>▲</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id || i === staff.length - 1} aria-label="아래로 이동" onClick={() => handleMove(i, 1)}>▼</button>
                         <button type="button" className="dm-note-btn" onClick={() => startEdit(s)} disabled={offline}>수정</button>
                         <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id} onClick={() => handleToggleActive(s)}>
                           {s.isActive ? '사용 안함' : '사용'}
@@ -1854,7 +1854,7 @@ function SettingsManageSection({ offline }) {
         <h4>설정</h4>
       </div>
 
-      {error && <p className="field__error">{error}</p>}
+      {error && <p role="alert" className="field__error">{error}</p>}
 
       {loading ? (
         <div className="dm-empty">불러오는 중...</div>
@@ -2117,7 +2117,7 @@ function DataManageView({
               className="dm-search__input"
               value={searchChart}
               onChange={(e) => { setSearchChart(e.target.value); setCheckedIds(new Set()) }}
-              placeholder="차트번호 검색"
+              inputMode="numeric" placeholder="차트번호 검색"
             />
           </label>
           <label className="dm-search__field">
@@ -2240,7 +2240,7 @@ function DataManageView({
             className="dm-search__input"
             value={noteSearchChart}
             onChange={(e) => setNoteSearchChart(e.target.value)}
-            placeholder="차트번호 검색"
+            inputMode="numeric" placeholder="차트번호 검색"
           />
         </label>
 
@@ -2466,7 +2466,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [] }) {
               className="history-search__input"
               value={searchChart}
               onChange={(e) => setSearchChart(e.target.value)}
-              placeholder="차트번호 검색"
+              inputMode="numeric" placeholder="차트번호 검색"
             />
           </label>
         </div>
@@ -2609,7 +2609,7 @@ function LoginScreen({ onLoginSuccess }) {
               autoComplete="current-password"
             />
           </label>
-          {error && <p className="field__error">{error}</p>}
+          {error && <p role="alert" className="field__error">{error}</p>}
           <button
             type="submit"
             className="btn-register"
@@ -2655,7 +2655,8 @@ function App() {
     const order = TABS.map((t) => t.id)
     const dir = order.indexOf(activeTab) >= order.indexOf(prevTabRef.current) ? 1 : -1
     prevTabRef.current = activeTab
-    if (el && el.animate) {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    if (el && el.animate && !reduce) {
       el.animate(
         [
           { opacity: 0.3, transform: `translateX(${dir * 60}%)` },
@@ -2698,6 +2699,25 @@ function App() {
   const [roundState, setRoundState] = useState(null)
   const [roundMemo, setRoundMemo] = useState('')
   const [briefingOpen, setBriefingOpen] = useState(false)
+
+  // ESC로 열린 모달 닫기 — 위(top)에 뜬 것부터 하나씩. (HIG: 시트는 Esc/바깥탭으로 해제 가능)
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      if (briefingOpen) setBriefingOpen(false)
+      else if (noteModalOpen) setNoteModalOpen(false)
+      else if (roundModalOpen) setRoundModalOpen(false)
+      else if (removePatientConfirm) setRemovePatientConfirm(false)
+      else if (editPatientModal) setEditPatientModal(false)
+      else if (cleanupBed) setCleanupBed(null)
+      else if (movingBed) setMovingBed(null)
+      else if (selectedBed) closeModal()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [briefingOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
+
   // 헤더 초상화 한마디 — 누를 때마다 랜덤 한 줄, 잠시 뒤 사라진다.
   const [bossLine, setBossLine] = useState(null)
   const bossTimerRef = useRef(null)
@@ -3678,7 +3698,7 @@ function App() {
 
       {/* ── 자리이동 알림 메시지 ── */}
       {moveBedAlert && (
-        <div className="move-alert">
+        <div className="move-alert" role="alert">
           {moveBedAlert.split('\n').map((line, i) => (
             <span key={i}>{line}{i === 0 && <br />}</span>
           ))}
@@ -3870,7 +3890,7 @@ function App() {
                     value={chartNumber}
                     onChange={(e) => setChartNumber(e.target.value)}
                     onBlur={handleChartNumberBlur}
-                    placeholder="차트번호 입력"
+                    inputMode="numeric" placeholder="차트번호 입력"
                   />
                 </label>
 
@@ -3901,7 +3921,7 @@ function App() {
                   </select>
                 </label>
 
-                {actionError && <p className="field__error">{actionError}</p>}
+                {actionError && <p role="alert" className="field__error">{actionError}</p>}
 
                 <button
                   type="button"
@@ -3927,7 +3947,7 @@ function App() {
                 </div>
 
                 {currentBed.overdue && (
-                  <p className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
+                  <p role="alert" className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
 
                 <label className="field">
@@ -3949,7 +3969,7 @@ function App() {
                   onAdjust={adjustDuration}
                 />
 
-                {actionError && <p className="field__error">{actionError}</p>}
+                {actionError && <p role="alert" className="field__error">{actionError}</p>}
 
                 <button
                   type="button"
@@ -4193,7 +4213,7 @@ function App() {
                   className="field__input"
                   value={editChartNumber}
                   onChange={(e) => setEditChartNumber(e.target.value)}
-                  placeholder="차트번호 입력"
+                  inputMode="numeric" placeholder="차트번호 입력"
                 />
               </label>
               <button

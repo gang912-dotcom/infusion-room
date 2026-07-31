@@ -3915,3 +3915,46 @@
 .app .bed-card__chart{ font-size:13px; }
 /* 남은시간 타이머 숫자 흔들림 방지 */
 .app .bed-card__remaining{ font-variant-numeric:tabular-nums; }
+
+/* ==========================================================================
+   patch9 — HIG 접근성: 키보드 포커스 링 복구 + 모션 최소화 보강
+   (폼 inputMode·aria·role=alert·ESC 닫기는 App.jsx에서 처리)
+   ========================================================================== */
+.app .tab:focus-visible,
+.app .chip:focus-visible,
+.app .dm-note-btn:focus-visible,
+.app .dm-mode-btn:focus-visible,
+.app .note-segment__btn:focus-visible,
+.app .btn-move-bed:focus-visible,
+.app .btn-edit-patient:focus-visible,
+.app .btn-remove-patient-link:focus-visible,
+.app .patient-list__item:focus-visible,
+.app .room-section__header:focus-visible,
+.app .occurred-at__now:focus-visible,
+.app .occurred-at__pull:focus-visible,
+.app .modal__close:focus-visible,
+.app .patient-search__clear:focus-visible,
+.app .theme-toggle:focus-visible,
+.app .header-account__logout:focus-visible,
+.app .export-btn:focus-visible,
+.app .dm-search__reset:focus-visible,
+.app .history-search__reset:focus-visible,
+.app .stats-range__btn:focus-visible,
+.app .btn-register:focus-visible,
+.app .btn-confirm:focus-visible{
+  outline:2.5px solid #4c8bf5;
+  outline-offset:2px;
+}
+/* 입력창 포커스 표시 복구(테두리 색만 바뀌던 걸 또렷한 링으로) */
+.app .field__input:focus-visible,
+.app .patient-search__input:focus-visible,
+.app .dm-search__input:focus-visible,
+.app .history-search__input:focus-visible,
+.app .occurred-at__input:focus-visible{
+  outline:2.5px solid #4c8bf5;
+  outline-offset:1px;
+}
+/* 모션 최소화: 물방울 낙하 애니메이션도 정지 */
+@media (prefers-reduced-motion:reduce){
+  .app .bed-card__droplet{ animation:none !important; }
+}
