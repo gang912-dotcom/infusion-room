@@ -17,6 +17,13 @@ async function apiFetch(path, options = {}) {
   return data
 }
 
+// 등록 잠금(bed_locks)의 "누가 쥐고 있나"는 계정이 아니라 이 브라우저 탭 단위여야 한다.
+// 같은 계정(예: 공용 로그인)으로 창을 두 개 켜도 서로 다른 소유자로 구분돼야
+// 중복 등록·잠금 꼬임이 안 생긴다. 탭이 살아있는 동안 고정되는 임의 ID.
+const CLIENT_ID =
+  (globalThis.crypto?.randomUUID?.() ??
+    `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
+
 function mapAccount(account) {
   if (!account) return null
   return {
@@ -210,12 +217,18 @@ export async function updateSessionStartedAt(sessionId, startedAt) {
 
 // 등록 잠금 — 획득/하트비트. 남이 등록 중이면 409를 throw한다.
 export async function acquireBedLock(bedCode) {
-  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, { method: 'POST' })
+  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, {
+    method: 'POST',
+    body: JSON.stringify({ clientId: CLIENT_ID }),
+  })
 }
 
 // 등록 잠금 해제. 실패해도 조용히 넘어간다(모달 닫기·언마운트 정리용).
 export function releaseBedLock(bedCode) {
-  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, { method: 'DELETE' })
+  return apiFetch(`/bed-locks/${encodeURIComponent(bedCode)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ clientId: CLIENT_ID }),
+  })
     .catch((err) => console.error('등록 잠금 해제 실패', err))
 }
 

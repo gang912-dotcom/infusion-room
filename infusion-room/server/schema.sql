@@ -196,5 +196,6 @@ CREATE INDEX IF NOT EXISTS idx_logs_created ON access_logs(created_at DESC);
 CREATE TABLE IF NOT EXISTS bed_locks (
   bed_code   TEXT PRIMARY KEY,
   account_id INTEGER NOT NULL REFERENCES accounts(id),
+  client_id  TEXT,
   updated_at INTEGER NOT NULL
 );

@@ -2867,6 +2867,9 @@ function App() {
     if (selectedBed?.status === 'vacant') stopLockAndRelease(selectedBed.id)
     setSelectedBed(null)
     setEditStartOpen(false)
+    // 모달이 열려 있는 동안은 폴링이 보드 갱신을 미룬다(입력 보호).
+    // 닫는 즉시 한 번 강제 동기화해서, 그 사이 다른 단말이 건 잠금·변경을 바로 반영한다.
+    refreshBoard()
   }
 
   // 베드 상세에서 "종료"를 누르면 상세 모달을 닫고 종료 확인 모달을 띄운다.
