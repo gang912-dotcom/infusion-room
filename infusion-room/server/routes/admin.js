@@ -108,6 +108,44 @@ router.patch('/staff/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── 쪽지 로그 (읽기 전용 감사) ─────────────────────────────────────
+// 직원 화면의 10분 휘발과 무관하게 주고받은 전부를 보여준다. 편집·삭제 없음.
+router.get('/messages', (req, res) => {
+  const { from, to, account, limit = 200, offset = 0 } = req.query ?? {}
+
+  const where = []
+  const params = []
+  if (account) {
+    where.push('(m.from_account = ? OR m.to_account = ?)')
+    params.push(Number(account), Number(account))
+  }
+  // 날짜(YYYY-MM-DD)는 로컬 자정 기준 epoch 범위로. to는 그날 끝까지 포함해야 하므로 +1일.
+  if (from) {
+    const t = new Date(`${from}T00:00:00`).getTime()
+    if (!Number.isNaN(t)) { where.push('m.created_at >= ?'); params.push(t) }
+  }
+  if (to) {
+    const t = new Date(`${to}T00:00:00`).getTime()
+    if (!Number.isNaN(t)) { where.push('m.created_at < ?'); params.push(t + 24 * 60 * 60 * 1000) }
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+  const total = db.prepare(`SELECT COUNT(*) c FROM messages m ${whereSql}`).get(...params).c
+  const messages = db.prepare(`
+    SELECT m.id, m.from_account, fa.display_name AS from_name,
+           m.to_account, ta.display_name AS to_name,
+           m.content, m.broadcast_id, m.created_at, m.read_at
+    FROM messages m
+    JOIN accounts fa ON fa.id = m.from_account
+    JOIN accounts ta ON ta.id = m.to_account
+    ${whereSql}
+    ORDER BY m.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, Number(limit), Number(offset))
+
+  res.json({ messages, total })
+})
+
 // ─── settings ───────────────────────────────────────────────────────
 router.get('/settings', (req, res) => {
   res.json(db.prepare('SELECT key, value, updated_at FROM settings ORDER BY key').all())

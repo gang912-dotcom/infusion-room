@@ -199,3 +199,22 @@ CREATE TABLE IF NOT EXISTS bed_locks (
   client_id  TEXT,
   updated_at INTEGER NOT NULL
 );
+
+-- ─── 쪽지 메신저 ─────────────────────────────────────────────────────
+-- 계정 간 1:1 쪽지. 직원 화면은 발송 후 10분만 노출(휘발), 이 테이블은 영구 보관(관리자 감사).
+-- 삭제 개념 없음 — 휘발은 "조회에서 제외"일 뿐 row는 남는다.
+CREATE TABLE IF NOT EXISTS messages (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_account INTEGER NOT NULL REFERENCES accounts(id),
+  to_account   INTEGER NOT NULL REFERENCES accounts(id),
+  content      TEXT    NOT NULL,
+  broadcast_id TEXT,               -- 전체발송이면 같은 값으로 묶음. 1:1이면 NULL.
+  created_at   INTEGER NOT NULL,   -- 발송 시각(epoch ms). 10분 TTL 기준.
+  read_at      INTEGER             -- 확인/답장으로 닫은 시각. NULL이면 아직 안 읽음.
+);
+
+-- 수신함 조회용: 특정 계정의 안읽음 + 최근분만 빠르게.
+CREATE INDEX IF NOT EXISTS idx_messages_inbox
+  ON messages(to_account, read_at, created_at DESC);
+-- 관리자 로그 조회용.
+CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
