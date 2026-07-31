@@ -2384,11 +2384,11 @@ function DataManageView({
                 <span className="confirm__sub">삭제된 기록은 휴지통에서 복구할 수 있습니다.</span>
               </p>
               <div className="confirm__actions">
-                <button type="button" className="btn-confirm btn-confirm--yes" onClick={handleDeleteConfirm} disabled={offline}>
-                  예
-                </button>
                 <button type="button" className="btn-confirm btn-confirm--no" onClick={() => setDeleteConfirm(false)}>
                   아니오
+                </button>
+                <button type="button" className="btn-confirm btn-confirm--yes" onClick={handleDeleteConfirm} disabled={offline}>
+                  예
                 </button>
               </div>
             </div>
@@ -3827,18 +3827,18 @@ function App() {
               <div className="confirm__actions">
                 <button
                   type="button"
+                  className="btn-confirm btn-confirm--no"
+                  onClick={closeCleanupConfirm}
+                >
+                  아니오
+                </button>
+                <button
+                  type="button"
                   className="btn-confirm btn-confirm--yes"
                   onClick={handleCleanupYes}
                   disabled={offline}
                 >
                   예
-                </button>
-                <button
-                  type="button"
-                  className="btn-confirm btn-confirm--no"
-                  onClick={closeCleanupConfirm}
-                >
-                  아니오
                 </button>
               </div>
             </div>
@@ -4161,18 +4161,18 @@ function App() {
               <div className="confirm__actions">
                 <button
                   type="button"
+                  className="btn-confirm btn-confirm--no"
+                  onClick={() => setRemovePatientConfirm(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
                   className="btn-confirm btn-confirm--yes btn-confirm--danger"
                   onClick={handleRemovePatientConfirm}
                   disabled={offline}
                 >
                   등록 취소
-                </button>
-                <button
-                  type="button"
-                  className="btn-confirm btn-confirm--no"
-                  onClick={() => setRemovePatientConfirm(false)}
-                >
-                  취소
                 </button>
               </div>
             </div>
