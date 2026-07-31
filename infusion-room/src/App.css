@@ -4026,3 +4026,18 @@
 @media (prefers-reduced-motion:reduce){
   .modal, .modal-overlay, .modal-overlay--closing .modal{ animation-duration:0.01ms; }
 }
+
+/* ==========================================================================
+   patch14 — 애플식 genie(요술램프): 베드 모달이 '누른 카드'에서 확대/축소
+   transform과 backdrop-filter는 충돌(툭 현상)하므로 genie 모달은 반투명 유리(블러 X).
+   실제 확대/축소 모션은 App.jsx의 WAAPI가 카드 좌표 기준으로 제어한다.
+   ========================================================================== */
+.modal-overlay{
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.modal--genie{
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  will-change: transform, opacity;
+}

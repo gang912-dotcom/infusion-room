@@ -2878,6 +2878,37 @@ function App() {
 
   // 모달 닫힘 모션용 — 값이 비워져도 나가는 애니메이션 동안은 마지막 값을 유지한다.
   const [selectedBedHeld, selectedBedClosing] = useModalExit(selectedBed)
+
+  // ── genie(요술램프) 프레젠테이션 ──────────────────────────────────
+  // 베드 모달이 '방금 누른 카드'에서 확대되며 나타나고, 닫힐 때 그 카드로 축소되며 빨려들어간다.
+  const modalOriginRef = useRef(null)   // 소스 카드의 화면 좌표
+  const bedModalRef = useRef(null)      // 베드 모달 .modal 요소
+  useEffect(() => {
+    const el = bedModalRef.current
+    if (!el) return
+    const origin = modalOriginRef.current
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    if (!origin || reduce) return // 소스(카드) 없으면 CSS 기본 모션에 맡긴다
+    el.style.animation = 'none'   // genie는 WAAPI가 직접 제어
+    const m = el.getBoundingClientRect()
+    if (!m.width || !m.height) return
+    const dx = (origin.left + origin.width / 2) - (m.left + m.width / 2)
+    const dy = (origin.top + origin.height / 2) - (m.top + m.height / 2)
+    const scale = Math.max(0.12, Math.min(origin.width / m.width, origin.height / m.height))
+    const atCard = `translate(${dx}px, ${dy}px) scale(${scale})`
+    const centered = 'translate(0, 0) scale(1)'
+    if (!selectedBedClosing) {
+      el.animate(
+        [{ transform: atCard, opacity: 0 }, { transform: centered, opacity: 1 }],
+        { duration: 440, easing: 'cubic-bezier(0.32, 1.25, 0.5, 1)', fill: 'both' },
+      )
+    } else {
+      el.animate(
+        [{ transform: centered, opacity: 1 }, { transform: atCard, opacity: 0 }],
+        { duration: 200, easing: 'cubic-bezier(0.4, 0, 0.7, 0.2)', fill: 'both' },
+      )
+    }
+  }, [selectedBedHeld, selectedBedClosing])
   const [cleanupBedHeld, cleanupBedClosing] = useModalExit(cleanupBed)
   const [removeConfirmHeld, removeConfirmClosing] = useModalExit(removePatientConfirm)
   const [editPatientHeld, editPatientClosing] = useModalExit(editPatientModal)
@@ -3105,7 +3136,9 @@ function App() {
     if (code) releaseBedLock(code)
   }
 
-  async function handleBedClick(bed) {
+  async function handleBedClick(bed, sourceEl) {
+    // genie(요술램프)용 — 방금 누른 카드의 화면 위치를 기억해뒀다가 모달을 그 지점에서 확대/축소.
+    if (sourceEl && sourceEl.getBoundingClientRect) modalOriginRef.current = sourceEl.getBoundingClientRect()
     // 이동 모드일 때 우선 처리
     if (movingBed) {
       handleMoveToBed(bed)
@@ -3457,10 +3490,10 @@ function App() {
         <article
           key={bed.id}
           className={`bed-card bed-card--vacant${movingBed ? ' bed-card--movable' : ''}`}
-          onClick={() => handleBedClick(bed)}
+          onClick={(e) => handleBedClick(bed, e.currentTarget)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
         >
           <p className="bed-card__number">{bed.number}</p>
           <div className="bed-card__add-slot">
@@ -3476,10 +3509,10 @@ function App() {
         <article
           key={bed.id}
           className={`bed-card bed-card--reserved${bed.overdue ? ' bed-card--reserved-overdue' : ''}`}
-          onClick={() => handleBedClick(bed)}
+          onClick={(e) => handleBedClick(bed, e.currentTarget)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+          onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
         >
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
           <p className="bed-card__number">{bed.number}</p>
@@ -3526,10 +3559,10 @@ function App() {
       <article
         key={bed.id}
         className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
-        onClick={() => handleBedClick(bed)}
+        onClick={(e) => handleBedClick(bed, e.currentTarget)}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed)}
+        onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
       >
         <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
         <p className="bed-card__number">{bed.number}</p>
@@ -3852,7 +3885,7 @@ function App() {
 
       {selectedBedHeld && (
         <div className={`modal-overlay${selectedBedClosing ? ' modal-overlay--closing' : ''}`}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--genie" ref={bedModalRef} onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
                 {/* selectedBed가 아니라 currentBed — 닫히는 동안 selectedBed는 이미 null이다 */}
