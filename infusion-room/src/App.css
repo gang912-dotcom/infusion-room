@@ -4047,3 +4047,18 @@
   backdrop-filter: none;
   will-change: transform, opacity;
 }
+
+/* ==========================================================================
+   patch16 — 겹친 모달 뒤 '블러로 뭉개기'가 거슬린다는 피드백 → 블러 완전 제거.
+   대신 위에 뜬 모달(--top) 패널을 '불투명'으로 만들어 아래가 비치지 않게 한다(블러 0).
+   뒤는 오버레이 딤(어둑함)만 남고 보드는 선명. 단일 모달의 투명도/genie는 그대로 유지.
+   ========================================================================== */
+.modal-overlay.modal-overlay--top{
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.modal-overlay--top .modal{
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
