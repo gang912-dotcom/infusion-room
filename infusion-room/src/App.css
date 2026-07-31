@@ -4082,3 +4082,117 @@
   background: rgba(21, 115, 71, 0.12);
   border-color: rgba(21, 115, 71, 0.5);
 }
+
+/* ==========================================================================
+   쪽지 메신저
+   카드는 불투명 배경(--panel-bg) — 뒤 보드가 비쳐 읽기 방해되지 않게(patch18과 같은 취지).
+   ========================================================================== */
+.msg-cards{
+  position:fixed; inset:0; z-index:300;
+  pointer-events:none;            /* 레이어는 통과, 카드만 받는다 */
+}
+.msg-card{
+  position:fixed; width:300px; max-width:calc(100vw - 32px);
+  pointer-events:auto;
+  background:var(--panel-bg);
+  border:1px solid var(--card-border);
+  border-radius:16px;
+  box-shadow:var(--card-shadow-hover);
+  padding:12px 14px 14px;
+  display:flex; flex-direction:column; gap:8px;
+  will-change:transform;
+  animation:msg-card-in .22s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes msg-card-in{
+  from{ opacity:0; transform:translateY(-8px) scale(.97) }
+  to{ opacity:1; transform:none }
+}
+.msg-card__head{
+  display:flex; align-items:center; gap:8px;
+  cursor:grab; touch-action:none;   /* 포인터 드래그가 스크롤로 먹히지 않게 */
+  user-select:none;
+  margin:-4px -4px 0; padding:4px;
+}
+.msg-card__head:active{ cursor:grabbing }
+.msg-card__from{ font-weight:700; font-size:14px; color:var(--text-primary) }
+.msg-card__badge{
+  font-size:11px; font-weight:600; padding:2px 7px; border-radius:999px;
+  color:var(--status-reserved); background:color-mix(in srgb, var(--status-reserved) 16%, transparent);
+  border:1px solid color-mix(in srgb, var(--status-reserved) 45%, transparent);
+}
+.msg-card__body{
+  margin:0; font-size:14px; line-height:1.5; color:var(--text-primary);
+  white-space:pre-wrap; word-break:break-word;
+  max-height:40vh; overflow-y:auto;
+}
+.msg-card__input, .msg-compose__text{
+  width:100%; resize:vertical; font:inherit; line-height:1.5;
+}
+.msg-card__error{ margin:0; font-size:12px; color:var(--status-completed) }
+.msg-card__actions{ display:flex; gap:8px; justify-content:flex-end }
+.msg-card__btn{
+  min-height:44px; padding:0 16px; border-radius:12px;
+  font-size:14px; font-weight:600; cursor:pointer;
+  background:var(--card-bg); color:var(--text-primary);
+  border:1px solid var(--card-border);
+}
+.msg-card__btn--primary{
+  background:var(--status-occupied); border-color:transparent; color:#fff;
+}
+.msg-card__btn:disabled{ opacity:.5; cursor:default }
+.msg-card__btn:focus-visible, .msg-card__head:focus-visible{
+  outline:2.5px solid #4c8bf5; outline-offset:2px;
+}
+
+/* 헤더 쪽지 버튼 */
+.header-msg-btn{
+  position:relative; min-width:44px; min-height:44px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border-radius:999px; cursor:pointer;
+  background:transparent; border:1px solid var(--card-border);
+  color:var(--text-secondary); font-size:15px;
+}
+.header-msg-btn:hover{ color:var(--text-primary) }
+.header-msg-btn:focus-visible{ outline:2.5px solid #4c8bf5; outline-offset:2px }
+.header-msg-btn__badge{
+  position:absolute; top:-2px; right:-2px; min-width:18px; height:18px; padding:0 5px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; line-height:1;
+  color:#fff; background:var(--status-completed);
+  border-radius:999px;
+}
+.msg-compose__done{ margin:0; font-size:13px; color:var(--status-occupied) }
+
+/* 관리자 쪽지 로그 */
+.msg-log__count{ font-size:12px; color:var(--text-muted) }
+.msg-log__filters{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:10px }
+.msg-log__list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px }
+.msg-log__item{
+  background:var(--card-bg); border:1px solid var(--card-border);
+  border-radius:12px; padding:10px 12px;
+}
+.msg-log__meta{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:4px }
+.msg-log__time{ font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums }
+.msg-log__who{ font-size:13px; font-weight:600; color:var(--text-primary) }
+.msg-log__read{ font-size:11px; color:var(--text-muted) }
+.msg-log__badge{
+  font-size:11px; font-weight:600; padding:2px 7px; border-radius:999px;
+  color:var(--status-reserved); background:color-mix(in srgb, var(--status-reserved) 16%, transparent);
+}
+.msg-log__content{
+  margin:0; font-size:13px; line-height:1.5; color:var(--text-secondary);
+  white-space:pre-wrap; word-break:break-word;
+}
+.msg-log__targets{ margin-top:6px; font-size:12px; color:var(--text-muted) }
+.msg-log__targets summary{ cursor:pointer; min-height:32px; display:flex; align-items:center }
+.msg-log__targets ul{ margin:4px 0 0; padding-left:18px }
+.msg-log__pager{ display:flex; align-items:center; gap:10px; justify-content:center; margin-top:12px; font-size:13px }
+
+@media (prefers-reduced-motion:reduce){
+  .msg-card{ animation-duration:.01ms }
+}
+
+/* 전체발송 배지 — 라이트에서는 보라(#8f34c9)가 자기 16% 틴트 위에서 4.1:1로 미달이라 한 단계 진하게.
+   (대비는 흰 배경이 아니라 틴트가 깔린 실제 배경 기준으로 봐야 한다 — patch17과 같은 함정) */
+:root[data-theme='light'] .app .msg-card__badge,
+:root[data-theme='light'] .app .msg-log__badge{ color:#7e2bb0 }

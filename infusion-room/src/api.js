@@ -431,3 +431,35 @@ export async function listSettings() {
 export async function updateSetting(key, value) {
   return apiFetch(`/admin/settings/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) })
 }
+
+// ─── 쪽지 메신저 ────────────────────────────────────────────────────
+// 직원 화면에서 쪽지가 살아있는 시간. 서버(routes/messages.js)와 같은 값이어야 한다.
+export const MESSAGE_TTL_MS = 10 * 60 * 1000
+
+export async function getInbox() {
+  return apiFetch('/messages')
+}
+
+export async function sendMessage({ to, content, inReplyTo }) {
+  return apiFetch('/messages', {
+    method: 'POST',
+    body: JSON.stringify({ to, content, in_reply_to: inReplyTo }),
+  })
+}
+
+// 읽음처리가 실패해도 카드는 닫는다(사용자 입장에선 이미 확인한 쪽지).
+// 서버에 안 닿았으면 다음 폴링에 다시 뜨는데, 그게 조용히 사라지는 것보다 낫다.
+export async function markMessageRead(id) {
+  return apiFetch(`/messages/${id}/read`, { method: 'POST' })
+    .catch((err) => console.error('쪽지 읽음처리 실패', err))
+}
+
+export async function getRecipients() {
+  return apiFetch('/messages/recipients')
+}
+
+export async function getAdminMessages(params = {}) {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v != null))
+  const q = new URLSearchParams(clean).toString()
+  return apiFetch(`/admin/messages${q ? `?${q}` : ''}`)
+}

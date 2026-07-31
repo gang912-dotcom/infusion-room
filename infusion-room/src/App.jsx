@@ -18,6 +18,7 @@ import {
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember,
   listSettings, updateSetting,
+  MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
 } from './api'
 
 // 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
@@ -156,6 +157,12 @@ function Icon({ name, className }) {
       </>
     ),
     droplet: <path d="M12 3.2c3 3.9 6 6.6 6 10.1a6 6 0 0 1-12 0c0-3.5 3-6.2 6-10.1Z" />,
+    send: (
+      <>
+        <path d="M21 3 10.5 13.5" />
+        <path d="M21 3l-6.8 18-3.7-7.5L3 9.8 21 3Z" />
+      </>
+    ),
     close: (
       <>
         <path d="M6 6l12 12" />
@@ -1817,6 +1824,128 @@ function StaffManageSection({ offline }) {
 }
 
 // ─── 관리자 설정 — 운영 설정값 ────────────────────────────────────
+// 쪽지 로그 — 관리자 전용 읽기 전용 감사 화면. 직원 화면의 10분 휘발과 무관하게 전부 남는다.
+function formatMessageStamp(ts) {
+  const d = new Date(ts)
+  const date = d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return `${date} ${formatHour24(ts)}`
+}
+
+function MessageLogSection() {
+  const PAGE_SIZE = 50
+  const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  // 다른 관리자 섹션과 같은 방식 — loading은 true로 시작하고 effect 안에서 동기 setState를 하지 않는다
+  // (react-hooks/set-state-in-effect 베이스라인을 넘기지 않기 위해서이기도 하다).
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    getAdminMessages({ from, to, limit: PAGE_SIZE, offset })
+      .then((r) => { if (!cancelled) { setRows(r.messages ?? []); setTotal(r.total ?? 0); setError('') } })
+      .catch((err) => { if (!cancelled) setError(err.message ?? '쪽지 로그를 불러오지 못했습니다') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [from, to, offset])
+
+  // 전체발송은 broadcast_id로 묶어 한 건처럼 보여준다(펼치면 개별 대상).
+  const groups = []
+  const byBroadcast = new Map()
+  for (const row of rows) {
+    if (!row.broadcast_id) { groups.push({ kind: 'one', row }); continue }
+    const found = byBroadcast.get(row.broadcast_id)
+    if (found) { found.rows.push(row); continue }
+    const group = { kind: 'broadcast', id: row.broadcast_id, rows: [row] }
+    byBroadcast.set(row.broadcast_id, group)
+    groups.push(group)
+  }
+
+  return (
+    <section className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>쪽지 로그</h4>
+        <span className="msg-log__count">{total}건</span>
+      </div>
+
+      <div className="msg-log__filters">
+        <label className="dm-search__field">
+          <span>시작일</span>
+          <input type="date" className="dm-search__input" value={from}
+            onChange={(e) => { setFrom(e.target.value); setOffset(0) }} />
+        </label>
+        <label className="dm-search__field">
+          <span>종료일</span>
+          <input type="date" className="dm-search__input" value={to}
+            onChange={(e) => { setTo(e.target.value); setOffset(0) }} />
+        </label>
+        {(from || to) && (
+          <button type="button" className="dm-search__reset"
+            onClick={() => { setFrom(''); setTo(''); setOffset(0) }}>
+            초기화
+          </button>
+        )}
+      </div>
+
+      {error && <p role="alert" className="field__error">{error}</p>}
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : groups.length === 0 ? (
+        <div className="dm-empty">쪽지 기록이 없습니다</div>
+      ) : (
+        <ul className="msg-log__list">
+          {groups.map((g) => (
+            g.kind === 'one' ? (
+              <li key={g.row.id} className="msg-log__item">
+                <div className="msg-log__meta">
+                  <span className="msg-log__time">{formatMessageStamp(g.row.created_at)}</span>
+                  <span className="msg-log__who">{g.row.from_name} → {g.row.to_name}</span>
+                  {g.row.read_at && <span className="msg-log__read">읽음</span>}
+                </div>
+                <p className="msg-log__content">{g.row.content}</p>
+              </li>
+            ) : (
+              <li key={g.id} className="msg-log__item">
+                <div className="msg-log__meta">
+                  <span className="msg-log__time">{formatMessageStamp(g.rows[0].created_at)}</span>
+                  <span className="msg-log__who">{g.rows[0].from_name} → </span>
+                  <span className="msg-log__badge">전체발송 ({g.rows.length}명)</span>
+                </div>
+                <p className="msg-log__content">{g.rows[0].content}</p>
+                <details className="msg-log__targets">
+                  <summary>받는 사람 보기</summary>
+                  <ul>
+                    {g.rows.map((r) => (
+                      <li key={r.id}>{r.to_name}{r.read_at ? ' · 읽음' : ''}</li>
+                    ))}
+                  </ul>
+                </details>
+              </li>
+            )
+          ))}
+        </ul>
+      )}
+
+      {total > PAGE_SIZE && (
+        <div className="msg-log__pager">
+          <button type="button" className="dm-note-btn" disabled={offset === 0}
+            onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}>
+            이전
+          </button>
+          <span>{Math.floor(offset / PAGE_SIZE) + 1} / {Math.ceil(total / PAGE_SIZE)}</span>
+          <button type="button" className="dm-note-btn" disabled={offset + PAGE_SIZE >= total}
+            onClick={() => setOffset((o) => o + PAGE_SIZE)}>
+            다음
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function SettingsManageSection({ offline }) {
   const [settings, setSettings] = useState([])
   const [draft, setDraft] = useState({})
@@ -2374,6 +2503,7 @@ function DataManageView({
           <AccountManageSection offline={offline} />
           <StaffManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
+          <MessageLogSection />
         </div>
       )}
 
@@ -2627,6 +2757,199 @@ function LoginScreen({ onLoginSuccess }) {
   )
 }
 
+// ─── 쪽지 메신저 ────────────────────────────────────────────────
+// 받은 쪽지 하나 = 카드 하나. 헤더를 잡고 드래그해 옮길 수 있고, 확인/답장으로 닫는다.
+// 위치를 안 잡은(=아직 안 옮긴) 카드는 cascade 기본 자리에 뜬다.
+const MSG_CASCADE_STEP = 28
+const MSG_CASCADE_MAX = 7 // 이보다 많이 쌓이면 더 밀지 않고 겹쳐 쌓는다
+
+function MessageCard({ message, index, onClose, onMove }) {
+  const [replying, setReplying] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const dragRef = useRef(null)
+
+  const pos = message.pos
+  const step = Math.min(index, MSG_CASCADE_MAX) * MSG_CASCADE_STEP
+  const style = pos
+    ? { left: `${pos.x}px`, top: `${pos.y}px`, right: 'auto' }
+    : { top: `${80 + step}px`, right: `${24 + step}px` }
+
+  function handlePointerDown(e) {
+    // 버튼 위에서 시작한 드래그는 무시 — 확인/답장 클릭을 잡아먹지 않게.
+    if (e.target.closest('button')) return
+    const card = e.currentTarget.closest('.msg-card')
+    const rect = card.getBoundingClientRect()
+    dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, w: rect.width, h: rect.height }
+    onMove(message.id, { x: rect.left, y: rect.top })
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  function handlePointerMove(e) {
+    const d = dragRef.current
+    if (!d) return
+    // 화면 밖으로 완전히 빠져나가 못 잡는 일이 없게 가둔다.
+    const x = Math.max(0, Math.min(window.innerWidth - d.w, e.clientX - d.dx))
+    const y = Math.max(0, Math.min(window.innerHeight - d.h, e.clientY - d.dy))
+    onMove(message.id, { x, y })
+  }
+
+  function handlePointerUp(e) {
+    dragRef.current = null
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+  }
+
+  async function handleConfirm() {
+    onClose(message.id)
+    markMessageRead(message.id)
+  }
+
+  async function handleSendReply() {
+    const text = replyText.trim()
+    if (!text || sending) return
+    setSending(true)
+    setError('')
+    try {
+      await sendMessage({ to: message.from_account, content: text, inReplyTo: message.id })
+      onClose(message.id) // 원본은 서버가 답장과 함께 읽음처리한다
+    } catch (err) {
+      setError(err.message ?? '전송 실패')
+      setSending(false)
+    }
+  }
+
+  return (
+    <article className="msg-card" style={style}>
+      <header
+        className="msg-card__head"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        <span className="msg-card__from">{message.from_name}</span>
+        {message.broadcast_id && <span className="msg-card__badge">전체발송</span>}
+      </header>
+
+      {/* content는 React 기본 이스케이프로 텍스트 렌더 — dangerouslySetInnerHTML 금지 */}
+      <p className="msg-card__body">{message.content}</p>
+
+      {replying ? (
+        <div className="msg-card__reply">
+          <textarea
+            className="msg-card__input"
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder={`${message.from_name}님에게 답장`}
+            aria-label="답장 내용"
+            autoFocus
+          />
+          {error && <p role="alert" className="msg-card__error">{error}</p>}
+          <div className="msg-card__actions">
+            <button type="button" className="msg-card__btn" onClick={() => setReplying(false)} disabled={sending}>
+              취소
+            </button>
+            <button
+              type="button"
+              className="msg-card__btn msg-card__btn--primary"
+              onClick={handleSendReply}
+              disabled={sending || !replyText.trim()}
+            >
+              {sending ? '보내는 중…' : '보내기'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="msg-card__actions">
+          <button type="button" className="msg-card__btn" onClick={handleConfirm}>
+            확인
+          </button>
+          <button type="button" className="msg-card__btn msg-card__btn--primary" onClick={() => setReplying(true)}>
+            답장
+          </button>
+        </div>
+      )}
+    </article>
+  )
+}
+
+function ComposeMessageModal({ onClose, closing }) {
+  const [recipients, setRecipients] = useState([])
+  const [to, setTo] = useState('')
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+
+  useEffect(() => {
+    getRecipients()
+      .then((r) => setRecipients(r.recipients ?? []))
+      .catch((err) => setError(err.message ?? '받는 사람을 불러오지 못했습니다'))
+  }, [])
+
+  async function handleSend() {
+    const text = content.trim()
+    if (!text || !to || sending) return
+    setSending(true)
+    setError('')
+    try {
+      const result = await sendMessage({ to: to === 'all' ? 'all' : Number(to), content: text })
+      setDone(result.sent ? `${result.sent}명에게 보냈습니다` : '보냈습니다')
+      setTimeout(onClose, 700)
+    } catch (err) {
+      setError(err.message ?? '전송 실패')
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className={`modal-overlay modal-overlay--top${closing ? ' modal-overlay--closing' : ''}`}>
+      <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal__header">
+          <div className="modal__header-title"><h2>쪽지 쓰기</h2></div>
+          <button type="button" className="modal__close" onClick={onClose} aria-label="닫기">×</button>
+        </div>
+        <div className="modal__body">
+          <label className="field">
+            <span className="field__label">받는 사람</span>
+            <select className="field__input" value={to} onChange={(e) => setTo(e.target.value)}>
+              <option value="">선택</option>
+              <option value="all">전체발송</option>
+              {recipients.map((r) => (
+                <option key={r.id} value={r.id}>{r.display_name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field__label">내용</span>
+            <textarea
+              className="field__input msg-compose__text"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              maxLength={1000}
+              rows={5}
+              placeholder="쪽지 내용 (1000자까지)"
+            />
+          </label>
+          {error && <p role="alert" className="field__error">{error}</p>}
+          {done && <p role="status" className="msg-compose__done">{done}</p>}
+          <button
+            type="button"
+            className="btn-register"
+            onClick={handleSend}
+            disabled={sending || !to || !content.trim()}
+          >
+            {sending ? '보내는 중…' : '보내기'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── App ────────────────────────────────────────────────────────
 function App() {
   const [account, setAccount] = useState(null)
@@ -2704,11 +3027,31 @@ function App() {
   const [roundMemo, setRoundMemo] = useState('')
   const [briefingOpen, setBriefingOpen] = useState(false)
 
+  // ─── 쪽지 ──────────────────────────────────────────────────────
+  // 받은 쪽지(살아있는 것만). 서버 폴링 결과로 갱신하되 카드의 드래그 위치(pos)는 보존한다.
+  const [inboxMessages, setInboxMessages] = useState([])
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [composeHeld, composeClosing] = useModalExit(composeOpen)
+
+  // 확인·답장으로 닫은 쪽지 id. 읽음처리 요청이 서버에 반영되기 전에 폴링이 돌면
+  // 아직 안읽음으로 내려와 카드가 되살아나므로, 그 사이를 이걸로 막는다.
+  const closedMessageIdsRef = useRef(new Set())
+
+  function closeMessageCard(id) {
+    closedMessageIdsRef.current.add(id)
+    setInboxMessages((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  function moveMessageCard(id, pos) {
+    setInboxMessages((prev) => prev.map((m) => (m.id === id ? { ...m, pos } : m)))
+  }
+
   // ESC로 열린 모달 닫기 — 위(top)에 뜬 것부터 하나씩. (HIG: 시트는 Esc/바깥탭으로 해제 가능)
   useEffect(() => {
     function onKey(e) {
       if (e.key !== 'Escape') return
-      if (briefingOpen) setBriefingOpen(false)
+      if (composeOpen) setComposeOpen(false)
+      else if (briefingOpen) setBriefingOpen(false)
       else if (noteModalOpen) setNoteModalOpen(false)
       else if (roundModalOpen) setRoundModalOpen(false)
       else if (removePatientConfirm) setRemovePatientConfirm(false)
@@ -2720,7 +3063,17 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [briefingOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
+  }, [composeOpen, briefingOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
+
+  // 쪽지 10분 휘발 — 폴링(≤3초)으로도 빠지지만, 정확히 10:00에 사라지게 하는 보조 타이머.
+  useEffect(() => {
+    if (inboxMessages.length === 0) return
+    const timer = setInterval(() => {
+      const serverNow = Date.now() + clockOffsetRef.current
+      setInboxMessages((prev) => prev.filter((m) => serverNow - m.created_at < MESSAGE_TTL_MS))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [inboxMessages.length])
 
   // 헤더 초상화 한마디 — 누를 때마다 랜덤 한 줄, 잠시 뒤 사라진다.
   const [bossLine, setBossLine] = useState(null)
@@ -2805,6 +3158,25 @@ function App() {
           setLastSyncAt(result.serverNow)
           setOffline(false)
           consecutiveFailures = 0
+        }
+        // 쪽지 수신 — 타이머를 새로 만들지 않고 이 루프에 얹는다.
+        // 쪽지 쪽 실패가 보드 폴링·오프라인 판정을 건드리면 안 되므로 try/catch를 따로 둔다.
+        try {
+          const inbox = await getInbox()
+          if (!cancelled) {
+            // 서버가 준 "살아있는 목록"으로 맞추되, 이미 떠 있는 카드의 드래그 위치는 보존한다.
+            const closed = closedMessageIdsRef.current
+            const live = inbox.messages.filter((m) => !closed.has(m.id))
+            // 서버가 더는 안 주는 id는 읽음처리가 반영된 것 — 기억해둘 필요가 없어졌다.
+            const stillPending = new Set(inbox.messages.map((m) => m.id))
+            for (const id of closed) if (!stillPending.has(id)) closed.delete(id)
+            setInboxMessages((prev) => {
+              const posById = new Map(prev.map((m) => [m.id, m.pos]))
+              return live.map((m) => ({ ...m, pos: posById.get(m.id) ?? null }))
+            })
+          }
+        } catch (err) {
+          console.error('쪽지 수신 실패', err)
         }
       } catch (err) {
         console.error('보드 폴링 실패', err)
@@ -3666,6 +4038,19 @@ function App() {
               title="밝게/어둡게 전환"
             >
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+            </button>
+            {/* 쪽지 쓰기 — 받은 쪽지는 알아서 팝업으로 뜨므로 이 버튼은 쓰기 전용 */}
+            <button
+              type="button"
+              className="header-msg-btn"
+              onClick={() => setComposeOpen(true)}
+              aria-label={inboxMessages.length > 0 ? `쪽지 쓰기 (안읽음 ${inboxMessages.length})` : '쪽지 쓰기'}
+              title="쪽지 쓰기"
+            >
+              <Icon name="send" />
+              {inboxMessages.length > 0 && (
+                <span className="header-msg-btn__badge">{inboxMessages.length}</span>
+              )}
             </button>
             <span className="header-account__name">{account.displayName}</span>
             <button type="button" className="header-account__logout" onClick={handleLogout}>
@@ -4690,6 +5075,26 @@ function App() {
           </div>
         )
       })()}
+
+      {/* ── 받은 쪽지 카드 (누적·드래그) ── */}
+      {inboxMessages.length > 0 && (
+        <div className="msg-cards">
+          {inboxMessages.map((m, i) => (
+            <MessageCard
+              key={m.id}
+              message={m}
+              index={i}
+              onClose={closeMessageCard}
+              onMove={moveMessageCard}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── 쪽지 쓰기 ── */}
+      {composeHeld && (
+        <ComposeMessageModal onClose={() => setComposeOpen(false)} closing={composeClosing} />
+      )}
     </div>
   )
 }
