@@ -611,7 +611,9 @@
 .bed-card--vacant .bed-card__number {
   background: transparent;
   border-color: var(--status-vacant-border);
-  color: var(--text-muted);
+  /* 빈 베드 카드는 opacity 0.62로 물러나 있어 번호가 흐려진다. 번호는 "몇 번 자리가
+     비었나"라는 핵심 정보라, muted보다 또렷한 secondary로 올려 다크·라이트 모두 가독성 확보. */
+  color: var(--text-secondary);
   align-self: auto;
 }
 
