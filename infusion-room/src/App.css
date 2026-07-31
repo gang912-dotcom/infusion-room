@@ -3627,3 +3627,184 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+/* ==========================================================================
+   수액실 상황판 · iOS(애플) 감성 폴리시 — App.css 맨 끝에 "그대로 붙여넣기"
+   --------------------------------------------------------------------------
+   · 전부 기존 클래스에 얹는 override라 JSX 수정 없이 바로 적용됩니다.
+     (뒤에 오는 규칙이 이기므로 App.css '맨 아래'에 붙여야 함)
+   · 색은 기존 신호등(초록/주황/빨강/보라) 토큰을 그대로 씁니다.
+   · 맥북에서 붙여넣고 `npm run dev`로 확인 → 마음에 들면 커밋.
+   · 카운트업 등 JS가 필요한 효과는 아래 '적용가이드.md' 참고(선택).
+   ========================================================================== */
+
+/* ── 1. 새 스케일/이징 토큰 (기존엔 색·그림자만 있었음) ───────────────── */
+.app{
+  --r-card:20px;                 /* iOS는 더 둥글게 (기존 18 → 20) */
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --ease-out:cubic-bezier(.22,.61,.36,1);
+  --hair:rgba(255,255,255,.06);  /* 카드 상단 하이라이트(재질감) */
+  /* 깊이감 있는 2단 그림자 */
+  --card-shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.22);
+  --card-shadow-hover:0 2px 4px rgba(0,0,0,.45), 0 18px 44px rgba(0,0,0,.40);
+}
+:root[data-theme='light'] .app{
+  --hair:rgba(255,255,255,.9);
+  --card-shadow:0 1px 2px rgba(20,20,40,.05), 0 8px 22px rgba(20,20,50,.07);
+  --card-shadow-hover:0 2px 6px rgba(20,20,40,.09), 0 20px 46px rgba(20,20,50,.14);
+}
+
+/* 타이머·퍼센트·차트번호 숫자 흔들림 방지(애플식 정렬) */
+.app .bed-card__progress-text,
+.app .bed-card__progress-elapsed,
+.app .bed-card__chart,
+.app .bed-summary__value{ font-variant-numeric:tabular-nums; }
+
+/* ── 2. 카드 공통: 라운드 + 깊이 + 스프링 hover ──────────────────────── */
+.app .bed-card{
+  border-radius:var(--r-card);
+  border-top:1px solid var(--hair);
+  box-shadow:var(--card-shadow);
+  transition:transform .4s var(--ease-spring),
+             box-shadow .4s var(--ease-out),
+             border-color .3s var(--ease-out);
+}
+.app .bed-card--occupied:hover,
+.app .bed-card--warning:hover,
+.app .bed-card--completed:hover,
+.app .bed-card--reserved:hover{
+  transform:translateY(-4px);
+  box-shadow:var(--card-shadow-hover);
+}
+
+/* ── 3. 상태별 은은한 틴트 배경(색을 "면"으로도 전달) ────────────────── */
+.app .bed-card--occupied{ --st:var(--status-occupied); }
+.app .bed-card--warning  { --st:var(--status-warning);  }
+.app .bed-card--completed{ --st:var(--status-completed);}
+.app .bed-card--reserved,
+.app .bed-card--reserved-overdue{ --st:var(--status-reserved); }
+
+.app .bed-card--occupied,
+.app .bed-card--warning,
+.app .bed-card--completed,
+.app .bed-card--reserved,
+.app .bed-card--reserved-overdue{
+  background:linear-gradient(168deg,
+             color-mix(in srgb, var(--st) 12%, var(--card-bg)) 0%,
+             var(--card-bg) 46%);
+  border-color:color-mix(in srgb, var(--st) 30%, var(--card-border));
+}
+.app .bed-card--occupied:hover,
+.app .bed-card--warning:hover,
+.app .bed-card--completed:hover,
+.app .bed-card--reserved:hover{
+  border-color:color-mix(in srgb, var(--st) 55%, var(--card-border));
+}
+
+/* ── 4. 빈 베드는 '조용하게' (23개가 화면을 덜 어지럽히도록) ──────────── */
+.app .bed-card--vacant{
+  border:1px solid transparent;
+  background:var(--surface-bg);
+  box-shadow:none;
+  opacity:.62;                       /* 활성 카드보다 뒤로 물러나게 */
+  transition:opacity .3s, transform .4s var(--ease-spring),
+             box-shadow .3s, background .3s;
+}
+.app .bed-card--vacant:hover{
+  opacity:1;
+  border-color:transparent;
+  background:color-mix(in srgb, var(--status-occupied) 8%, var(--surface-bg));
+  box-shadow:var(--card-shadow);
+  transform:translateY(-3px);
+}
+.app .bed-card--vacant .bed-card__add-icon{ transition:transform .3s var(--ease-spring), color .3s; }
+.app .bed-card--vacant:hover .bed-card__add-icon{ transform:rotate(90deg); color:var(--status-occupied); }
+.app .bed-card--vacant:hover .bed-card__add-label{ color:var(--status-occupied); }
+/* 잠긴(등록중) 카드는 예외로 또렷하게 */
+.app .bed-card--locked{ opacity:1; }
+
+/* ── 5. 진행 바: 유리질 + 광택 + 진행중 sheen 흐름 ──────────────────── */
+.app .progress-bar{ border-radius:999px; overflow:hidden; height:7px; }
+.app .progress-fill{
+  border-radius:999px;
+  background:linear-gradient(90deg,
+             color-mix(in srgb, var(--st,var(--status-occupied)) 78%, #000),
+             var(--st,var(--status-occupied)));
+  box-shadow:0 0 10px color-mix(in srgb, var(--st,var(--status-occupied)) 50%, transparent);
+  transition:width 1s var(--ease-out);
+  position:relative;
+}
+/* 진행중 카드에서만 은은히 흐르는 하이라이트 */
+.app .bed-card--occupied .progress-fill::after{
+  content:""; position:absolute; inset:0; border-radius:999px;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
+  transform:translateX(-100%); animation:iv-sheen 2.6s var(--ease-out) infinite;
+}
+@keyframes iv-sheen{ to{ transform:translateX(340%); } }
+
+/* ── 6. '곧 완료'(주황) 카드는 살짝 맥동해서 시선을 끈다 ─────────────── */
+.app .bed-card--warning{
+  animation:iv-pulse 2.4s ease-in-out infinite;
+}
+@keyframes iv-pulse{
+  0%,100%{ box-shadow:var(--card-shadow); }
+  50%    { box-shadow:var(--card-shadow),
+                      0 0 0 4px color-mix(in srgb, var(--status-warning) 22%, transparent); }
+}
+
+/* ── 7. 상태 칩: 테두리 한 겹 더해 또렷하게(애플 배지 느낌) ───────────── */
+.app .bed-card__chip{
+  padding:4px 11px; font-size:11.5px; letter-spacing:-.01em;
+  border:1px solid color-mix(in srgb, var(--chip, var(--status-occupied)) 30%, transparent);
+}
+.app .bed-card__chip--occupied{ --chip:var(--status-occupied); }
+.app .bed-card__chip--warning  { --chip:var(--status-warning);  }
+.app .bed-card__chip--completed{ --chip:var(--status-completed);}
+.app .bed-card__chip--reserved { --chip:var(--status-reserved); }
+
+/* ── 8. 요약 스트립: 좌측 컬러 악센트 + 라벨 점 ─────────────────────── */
+.app .bed-summary__card{
+  position:relative; overflow:hidden;
+  border-top:1px solid var(--hair);
+  box-shadow:var(--card-shadow);
+  border-radius:16px;
+}
+.app .bed-summary__card::before{
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px; border-radius:3px;
+  background:var(--accent, var(--text-muted));
+}
+.app .bed-summary__card:nth-child(1){ --accent:var(--status-reserved); }
+.app .bed-summary__card:nth-child(2){ --accent:var(--status-occupied); }
+.app .bed-summary__card:nth-child(3){ --accent:var(--status-warning); }
+.app .bed-summary__card:nth-child(4){ --accent:var(--status-completed); }
+.app .bed-summary__card:nth-child(5){ --accent:var(--text-muted); }
+
+/* ── 9. 카드 등장 모션: 뜨면서 살짝 떠오르기(순차 stagger, JS 불필요) ─── */
+@keyframes iv-rise{ from{ opacity:0; transform:translateY(10px) scale(.985); } to{ opacity:1; transform:none; } }
+.app .bed-grid .bed-card,          /* ← 그리드 컨테이너 클래스가 다르면 이 줄만 맞춰주세요 */
+.app .room-grid .bed-card,
+.app .bed-card{
+  animation:iv-rise .5s var(--ease-out) both;
+}
+/* 앞쪽 카드부터 40ms씩 밀리게 (최대 20개) */
+.app .bed-card:nth-child(1){ animation-delay:.00s } .app .bed-card:nth-child(2){ animation-delay:.04s }
+.app .bed-card:nth-child(3){ animation-delay:.08s } .app .bed-card:nth-child(4){ animation-delay:.12s }
+.app .bed-card:nth-child(5){ animation-delay:.16s } .app .bed-card:nth-child(6){ animation-delay:.20s }
+.app .bed-card:nth-child(7){ animation-delay:.24s } .app .bed-card:nth-child(8){ animation-delay:.28s }
+.app .bed-card:nth-child(9){ animation-delay:.32s } .app .bed-card:nth-child(10){ animation-delay:.36s }
+.app .bed-card:nth-child(n+11){ animation-delay:.4s }
+/* '곧 완료' 카드는 등장모션 대신 맥동만 (겹치면 튀므로) */
+.app .bed-card--warning{ animation:iv-pulse 2.4s ease-in-out infinite; }
+/* 빈 베드는 등장모션에서 제외 — iv-rise의 both fill이 opacity:1로 굳어 위 4번의
+   '조용하게(.62)'를 덮어쓰기 때문. 빈 베드는 그냥 .62로 조용히 있게 둔다.
+   (위 iv-rise가 .bed-grid .bed-card 3-class 선택자라 특이도를 맞춰 눌러야 이긴다) */
+.app .bed-grid .bed-card--vacant,
+.app .room-grid .bed-card--vacant,
+.app .bed-card--vacant{ animation:none; }
+
+/* ── 10. 접근성: 모션 최소화 설정이면 애니메이션 끔 ─────────────────── */
+@media (prefers-reduced-motion:reduce){
+  .app .bed-card, .app .progress-fill,
+  .app .bed-card--warning, .app .bed-card--occupied .progress-fill::after{
+    animation:none !important; transition:none !important;
+  }
+}

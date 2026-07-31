@@ -20,6 +20,30 @@ import {
   listSettings, updateSetting,
 } from './api'
 
+// 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
+function CountUp({ value, ms = 500 }) {
+  const [n, setN] = useState(value)
+  const prev = useRef(value)
+  useEffect(() => {
+    const reduce = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    const from = prev.current
+    prev.current = value
+    if (reduce || from === value) { setN(value); return }
+    let raf, start
+    const tick = (t) => {
+      if (!start) start = t
+      const p = Math.min(1, (t - start) / ms)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setN(Math.round(from + (value - from) * eased))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value, ms])
+  return <>{n}</>
+}
+
 const TABS = [
   { id: 'all', label: '전체' },
   { id: 'room2', label: '2수액실' },
@@ -3452,31 +3476,31 @@ function App() {
             <div className="bed-summary__card">
               <span className="bed-summary__label">배정됨</span>
               <span className="bed-summary__value bed-summary__value--reserved">
-                {bedSummaryCounts.reserved}
+                <CountUp value={bedSummaryCounts.reserved} />
               </span>
             </div>
             <div className="bed-summary__card">
               <span className="bed-summary__label">진행중</span>
               <span className="bed-summary__value bed-summary__value--occupied">
-                {bedSummaryCounts.occupied}
+                <CountUp value={bedSummaryCounts.occupied} />
               </span>
             </div>
             <div className="bed-summary__card">
               <span className="bed-summary__label">곧 완료</span>
               <span className="bed-summary__value bed-summary__value--warning">
-                {bedSummaryCounts.warning}
+                <CountUp value={bedSummaryCounts.warning} />
               </span>
             </div>
             <div className="bed-summary__card">
               <span className="bed-summary__label">완료 · 정리</span>
               <span className="bed-summary__value bed-summary__value--completed">
-                {bedSummaryCounts.completed}
+                <CountUp value={bedSummaryCounts.completed} />
               </span>
             </div>
             <div className="bed-summary__card">
               <span className="bed-summary__label">빈 베드</span>
               <span className="bed-summary__value bed-summary__value--vacant">
-                {bedSummaryCounts.vacant}
+                <CountUp value={bedSummaryCounts.vacant} />
               </span>
             </div>
           </div>
