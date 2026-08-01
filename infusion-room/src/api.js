@@ -302,6 +302,18 @@ export async function createRound({ sessionId, occurredAt, temperature, state, m
   })
 }
 
+export async function toggleRoundDeleted(id, deleted) {
+  return apiFetch(`/rounds/${id}`, { method: 'PATCH', body: JSON.stringify({ deleted }) })
+}
+
+// 기록 편집(베드 상세 오른쪽 패널). 서버는 전달된 필드만 반영한다.
+export async function editRound(id, { occurredAt, temperature, state, memo }) {
+  return apiFetch(`/rounds/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ occurred_at: occurredAt, temperature, state, memo }),
+  })
+}
+
 // ─── session_notes — 금일 특이사항 ──────────────────────────────────
 function mapSessionNoteRow(row) {
   return {
@@ -333,6 +345,13 @@ export async function createSessionNote({ sessionId, occurredAt, symptoms, actio
 
 export async function toggleSessionNoteDeleted(id, deleted) {
   return apiFetch(`/session-notes/${id}`, { method: 'PATCH', body: JSON.stringify({ deleted }) })
+}
+
+export async function editSessionNote(id, { occurredAt, symptoms, actions, memo }) {
+  return apiFetch(`/session-notes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ occurred_at: occurredAt, symptoms, actions, memo }),
+  })
 }
 
 // ─── patient_notes — 환자 주의사항 ──────────────────────────────────
@@ -369,6 +388,13 @@ export async function togglePatientNoteDeleted(id, { deleted, active } = {}) {
   if (deleted !== undefined) body.deleted = deleted
   if (active !== undefined) body.active = active
   return apiFetch(`/patient-notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export async function editPatientNote(id, { content, category, source }) {
+  return apiFetch(`/patient-notes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content, category, source }),
+  })
 }
 
 // ─── admin — 계정·직원·설정 관리 (admin 롤 전용, 물리삭제 없음) ────────

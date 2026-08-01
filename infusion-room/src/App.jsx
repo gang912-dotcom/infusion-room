@@ -9,7 +9,8 @@ import {
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
-  loadRounds, createRound,
+  loadRounds, createRound, editRound, toggleRoundDeleted,
+  editSessionNote, editPatientNote,
   getStaffList, lookupPatient, logPatientDetailView,
   assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
@@ -847,6 +848,17 @@ function xVisitEvents(sessionId, sessionNotes, rounds) {
     .forEach((n) => evs.push({ t: getNoteOccurredAt(n), kind: '특이사항', text: xNoteText(n) }))
   rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
     .forEach((r) => evs.push({ t: r.occurredAt, kind: '라운딩', text: xRoundText(r) }))
+  return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
+}
+// 위 xVisitEvents와 같은 병합이지만 원본 레코드를 함께 들고 온다 —
+// 베드 상세 오른쪽 패널은 항목마다 수정·삭제를 걸어야 해서 id가 필요하다.
+// (xVisitEvents는 CSV·인쇄에서 쓰이므로 그대로 둔다.)
+function xEditableEvents(sessionId, sessionNotes, rounds) {
+  const evs = []
+  sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
+    .forEach((n) => evs.push({ key: `n${n.id}`, t: getNoteOccurredAt(n), kind: '특이사항', text: xNoteText(n), note: n }))
+  rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
+    .forEach((r) => evs.push({ key: `r${r.id}`, t: r.occurredAt, kind: '라운딩', text: xRoundText(r), round: r }))
   return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
 }
 function xCsvCell(v) {
@@ -3012,6 +3024,10 @@ function App() {
   const [moveBedAlert, setMoveBedAlert] = useState('')
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [noteTab, setNoteTab] = useState('session')
+  // 기록 편집 — null이면 신규 작성, id가 있으면 그 레코드를 수정하는 모드.
+  // 폼(특이사항·주의사항·라운딩)은 신규와 편집이 같은 것을 쓰고 저장 시점만 갈린다.
+  const [editingNoteId, setEditingNoteId] = useState(null)
+  const [editingPatientNoteId, setEditingPatientNoteId] = useState(null)
   const [noteOccurredAt, setNoteOccurredAt] = useState(() => Date.now())
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
@@ -3021,6 +3037,7 @@ function App() {
   const [noteSource, setNoteSource] = useState('patient_report')
   const [roundModalOpen, setRoundModalOpen] = useState(false)
   const [roundModalBedId, setRoundModalBedId] = useState(null)
+  const [editingRoundId, setEditingRoundId] = useState(null)
   const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
   const [roundTemp, setRoundTemp] = useState('')
   const [roundState, setRoundState] = useState(null)
@@ -3306,6 +3323,10 @@ function App() {
     ? getActivePatientNotes(patientNotes, currentBed.chartNumber)
     : []
   const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
+  // 오른쪽 기록 패널용 — 이번 세션의 특이사항·라운딩만 시각순으로. 과거 세션 것은 안 띄운다.
+  const currentBedEvents = isInProgress && currentBed?.sessionId
+    ? xEditableEvents(currentBed.sessionId, sessionNotes, rounds)
+    : []
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
 
@@ -3699,51 +3720,64 @@ function App() {
     setEditStartOpen(false)
   }
 
-  function openNoteModal(tab) {
+  // record를 주면 그 값으로 폼을 채운 '편집 모드', 안 주면 기존처럼 빈 폼(신규 작성).
+  function openNoteModal(tab, record) {
     if (!currentBed) return
     setNoteTab(tab)
-    setNoteOccurredAt(now)
-    setNoteSymptoms([])
-    setNoteActions([])
-    setNoteMemo('')
-    setNoteCategory('info')
-    setNoteContent('')
-    setNoteSource('patient_report')
+    setActionError('')
+    if (tab === 'patient') {
+      setEditingPatientNoteId(record?.id ?? null)
+      setNoteCategory(record?.category ?? 'info')
+      setNoteContent(record?.content ?? '')
+      setNoteSource(record?.source ?? 'patient_report')
+    } else {
+      setEditingNoteId(record?.id ?? null)
+      setNoteOccurredAt(record ? new Date(getNoteOccurredAt(record)).getTime() : now)
+      setNoteSymptoms(record?.symptoms ?? [])
+      setNoteActions(record?.actions ?? [])
+      setNoteMemo(record?.memo ?? '')
+    }
     setNoteModalOpen(true)
   }
 
   function closeNoteModal() {
     setNoteModalOpen(false)
+    setEditingNoteId(null)
+    setEditingPatientNoteId(null)
   }
 
-  function openRoundModal(bed) {
+  function openRoundModal(bed, record) {
     // 라운딩 모달은 selectedBed(베드 상세 트리거)와 별개인 roundModalBedId로 대상을 들고 있음.
     // 카드에서 열 때는 그 베드를, 베드 상세 안 버튼에서 열 때는 인자 없이(이미 열려있는 currentBed) 대상으로 삼음.
     const target = bed ?? currentBed
     if (!target) return
     setRoundModalBedId(target.id)
-    setRoundOccurredAt(now) // 기본 발생시각 = 현재(매초 갱신되는 now state)
-    setRoundTemp('')
-    setRoundState(null)
-    setRoundMemo('')
+    setActionError('')
+    setEditingRoundId(record?.id ?? null)
+    setRoundOccurredAt(record ? new Date(record.occurredAt).getTime() : now)
+    setRoundTemp(record?.temperature != null ? String(record.temperature) : '')
+    setRoundState(record?.state ?? null)
+    setRoundMemo(record?.memo ?? '')
     setRoundModalOpen(true)
   }
 
   function closeRoundModal() {
     setRoundModalOpen(false)
     setRoundModalBedId(null)
+    setEditingRoundId(null)
   }
 
   async function handleSaveRound() {
     if (!roundModalBed) return
     try {
-      await createRound({
-        sessionId: roundModalBed.sessionId,
+      const payload = {
         occurredAt: roundOccurredAt,
         temperature: parseTemperature(roundTemp),
         state: roundState,
         memo: roundMemo.trim(),
-      })
+      }
+      if (editingRoundId) await editRound(editingRoundId, payload)
+      else await createRound({ sessionId: roundModalBed.sessionId, ...payload })
       await refreshRecords()
       closeRoundModal()
     } catch (err) {
@@ -3760,15 +3794,37 @@ function App() {
     if (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim()) return
 
     try {
-      await createSessionNote({
-        sessionId: currentBed.sessionId,
+      const payload = {
         occurredAt: noteOccurredAt,
         symptoms: noteSymptoms,
         actions: noteActions,
         memo: noteMemo.trim(),
-      })
+      }
+      if (editingNoteId) await editSessionNote(editingNoteId, payload)
+      else await createSessionNote({ sessionId: currentBed.sessionId, ...payload })
       await refreshRecords()
       closeNoteModal()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  // 주의사항 '해제' = 비활성화(soft). 기록은 남고 목록에서만 빠진다.
+  async function handleDeactivatePatientNote(note) {
+    try {
+      await togglePatientNoteDeleted(note.id, { active: false })
+      await refreshRecords()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  // 타임라인 항목 삭제 — 특이사항·라운딩 모두 기존 소프트삭제 토글을 재사용한다.
+  async function handleDeleteRecord(ev) {
+    try {
+      if (ev.round) await toggleRoundDeleted(ev.round.id, true)
+      else await toggleSessionNoteDeleted(ev.note.id, true)
+      await refreshRecords()
     } catch (err) {
       setActionError(err.message)
     }
@@ -3778,12 +3834,9 @@ function App() {
     if (!currentBed || !noteContent.trim()) return
 
     try {
-      await createPatientNote({
-        patientId: currentBed.patientId,
-        category: noteCategory,
-        source: noteSource,
-        content: noteContent.trim(),
-      })
+      const payload = { category: noteCategory, source: noteSource, content: noteContent.trim() }
+      if (editingPatientNoteId) await editPatientNote(editingPatientNoteId, payload)
+      else await createPatientNote({ patientId: currentBed.patientId, ...payload })
       await refreshRecords()
       closeNoteModal()
     } catch (err) {
@@ -4270,7 +4323,11 @@ function App() {
 
       {selectedBedHeld && (
         <div className={`modal-overlay${selectedBedClosing ? ' modal-overlay--closing' : ''}`}>
-          <div className="modal modal--genie" ref={bedModalRef} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`modal modal--genie${isInProgress ? ' modal--detail-wide' : ''}`}
+            ref={bedModalRef}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal__header">
               <div className="modal__header-title">
                 {/* selectedBed가 아니라 currentBed — 닫히는 동안 selectedBed는 이미 null이다 */}
@@ -4412,7 +4469,8 @@ function App() {
                 </button>
               </div>
             ) : (
-              <div className="modal__body">
+              <div className={isInProgress ? 'bed-detail-2col' : 'modal__body'}>
+                <div className={isInProgress ? 'bed-detail-2col__left' : undefined}>
                 <div className="bed-detail-summary">
                   <div className="bed-detail-summary__patient">
                     <span className="bed-detail-summary__name">{currentBed.patientName}</span>
@@ -4484,7 +4542,8 @@ function App() {
                   </div>
                 )}
 
-                {currentBedActiveNotes.length > 0 && (
+                {/* 진행중에는 주의사항이 오른쪽 기록 패널로 간다(지속 정보라 거기 속함). */}
+                {!isInProgress && currentBedActiveNotes.length > 0 && (
                   <div className="bed-detail-notes">
                     <h3 className="bed-detail-notes__title">환자 주의사항</h3>
                     <ul className="briefing__note-list">
@@ -4517,26 +4576,7 @@ function App() {
                   />
                 )}
 
-                {isInProgress && (
-                  <div className="bed-detail-actions">
-                    <button
-                      type="button"
-                      className="btn-round-entry"
-                      onClick={() => openRoundModal()}
-                      disabled={offline}
-                    >
-                      라운딩
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-register"
-                      onClick={() => openNoteModal('session')}
-                      disabled={offline}
-                    >
-                      특이사항 기록
-                    </button>
-                  </div>
-                )}
+                {/* 라운딩·특이사항 기록 버튼은 오른쪽 기록 패널 헤더로 옮겼다. */}
 
                 {isInProgress && (
                   <button
@@ -4563,6 +4603,131 @@ function App() {
                 <button type="button" className="btn-detail-confirm" onClick={closeModal}>
                   확인
                 </button>
+                </div>
+
+                {/* ── 오른쪽: 이 환자의 기록 (진행중일 때만) ── */}
+                {isInProgress && (
+                  <div className="bed-detail-2col__right">
+                    {/* (A) 환자 주의사항 — 세션을 넘어 유지되는 지속 정보 */}
+                    <section className="rec-block">
+                      <div className="rec-block__head">
+                        <h3 className="rec-block__title">환자 주의사항</h3>
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() => openNoteModal('patient')}
+                          disabled={offline}
+                        >
+                          + 추가
+                        </button>
+                      </div>
+                      {currentBedActiveNotes.length === 0 ? (
+                        <p className="rec-empty">등록된 주의사항이 없습니다</p>
+                      ) : (
+                        <ul className="rec-list">
+                          {currentBedActiveNotes.map((n) => (
+                            <li key={n.id} className="rec-item">
+                              <div className="rec-item__main">
+                                <span className={`badge badge--${n.category}`}>
+                                  {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
+                                </span>
+                                <span className="rec-item__text">{n.content}</span>
+                              </div>
+                              <div className="rec-item__foot">
+                                <span className="rec-item__sub">
+                                  근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
+                                </span>
+                                <div className="rec-item__actions">
+                                  <button
+                                    type="button"
+                                    className="rec-btn"
+                                    onClick={() => openNoteModal('patient', n)}
+                                    disabled={offline}
+                                  >
+                                    수정
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rec-btn rec-btn--danger"
+                                    onClick={() => handleDeactivatePatientNote(n)}
+                                    disabled={offline}
+                                  >
+                                    해제
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+
+                    {/* (B) 금일 특이사항 · 라운딩 — 이번 세션 것만, 시각순 타임라인 */}
+                    <section className="rec-block">
+                      <div className="rec-block__head">
+                        <h3 className="rec-block__title">금일 기록</h3>
+                        <div className="rec-block__actions">
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            onClick={() => openRoundModal()}
+                            disabled={offline}
+                          >
+                            라운딩
+                          </button>
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            onClick={() => openNoteModal('session')}
+                            disabled={offline}
+                          >
+                            특이사항
+                          </button>
+                        </div>
+                      </div>
+                      {currentBedEvents.length === 0 ? (
+                        <p className="rec-empty">오늘 기록이 아직 없습니다</p>
+                      ) : (
+                        <ul className="rec-list">
+                          {currentBedEvents.map((ev) => (
+                            <li key={ev.key} className="rec-item">
+                              <div className="rec-item__main">
+                                <span className="rec-item__time">{xTime(ev.t)}</span>
+                                <span className={`rec-kind rec-kind--${ev.round ? 'round' : 'note'}`}>
+                                  {ev.kind}
+                                </span>
+                                <span className="rec-item__text">{ev.text}</span>
+                              </div>
+                              <div className="rec-item__foot">
+                                <span className="rec-item__sub" />
+                                <div className="rec-item__actions">
+                                  <button
+                                    type="button"
+                                    className="rec-btn"
+                                    onClick={() => (ev.round
+                                      ? openRoundModal(undefined, ev.round)
+                                      : openNoteModal('session', ev.note))}
+                                    disabled={offline}
+                                  >
+                                    수정
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rec-btn rec-btn--danger"
+                                    onClick={() => handleDeleteRecord(ev)}
+                                    disabled={offline}
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
+                )}
               </div>
             )}
           </div>
