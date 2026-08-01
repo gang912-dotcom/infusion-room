@@ -96,16 +96,64 @@ router.get('/patients/:patientId/session-notes', (req, res) => {
   })))
 })
 
+// deleted 토글 + 내용 편집(발생시각·메모·증상·조치)을 함께 받는다. 전달된 필드만 반영.
 router.patch('/session-notes/:id', (req, res) => {
-  const note = db.prepare('SELECT id FROM session_notes WHERE id = ?').get(req.params.id)
+  const note = db.prepare(`
+    SELECT n.id, s.started_at FROM session_notes n
+    JOIN sessions s ON s.id = n.session_id WHERE n.id = ?
+  `).get(req.params.id)
   if (!note) return res.status(404).json({ error: '존재하지 않는 특이사항입니다' })
 
-  const { deleted } = req.body ?? {}
-  if (typeof deleted !== 'boolean') {
-    return res.status(400).json({ error: 'deleted(boolean)가 필요합니다' })
+  const { deleted, occurred_at: occurredAt, memo, symptoms, actions } = req.body ?? {}
+  if (deleted === undefined && occurredAt === undefined && memo === undefined
+      && symptoms === undefined && actions === undefined) {
+    return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
 
-  db.prepare('UPDATE session_notes SET deleted = ? WHERE id = ?').run(deleted ? 1 : 0, note.id)
+  // 발생 시각은 생성 때와 같은 범위 규칙(세션 시작 ~ 지금)을 적용한다.
+  if (occurredAt !== undefined) {
+    try {
+      assertInRange(Number(occurredAt), note.started_at, Date.now(), '발생 시각')
+    } catch (err) {
+      return res.status(err.status).json({ error: err.message })
+    }
+  }
+  for (const code of symptoms ?? []) {
+    if (!db.prepare('SELECT 1 FROM symptom_codes WHERE code = ?').get(code)) {
+      return res.status(400).json({ error: `유효하지 않은 증상 코드: ${code}` })
+    }
+  }
+  for (const code of actions ?? []) {
+    if (!db.prepare('SELECT 1 FROM action_codes WHERE code = ?').get(code)) {
+      return res.status(400).json({ error: `유효하지 않은 조치 코드: ${code}` })
+    }
+  }
+
+  const fields = []
+  const params = []
+  if (typeof deleted === 'boolean') { fields.push('deleted = ?'); params.push(deleted ? 1 : 0) }
+  if (occurredAt !== undefined) { fields.push('occurred_at = ?'); params.push(Number(occurredAt)) }
+  if (memo !== undefined) { fields.push('memo = ?'); params.push(memo) }
+
+  // 증상·조치는 조인 테이블이라 해당 note 것만 지우고 다시 넣는다(생성 핸들러와 같은 방식).
+  // 본문 UPDATE와 함께 트랜잭션으로 묶어 중간에 깨져 반쯤 반영되는 일이 없게 한다.
+  const apply = db.transaction(() => {
+    if (fields.length) {
+      db.prepare(`UPDATE session_notes SET ${fields.join(', ')} WHERE id = ?`).run(...params, note.id)
+    }
+    if (symptoms !== undefined) {
+      db.prepare('DELETE FROM session_note_symptoms WHERE note_id = ?').run(note.id)
+      const ins = db.prepare('INSERT INTO session_note_symptoms (note_id, code) VALUES (?, ?)')
+      symptoms.forEach((code) => ins.run(note.id, code))
+    }
+    if (actions !== undefined) {
+      db.prepare('DELETE FROM session_note_actions WHERE note_id = ?').run(note.id)
+      const ins = db.prepare('INSERT INTO session_note_actions (note_id, code) VALUES (?, ?)')
+      actions.forEach((code) => ins.run(note.id, code))
+    }
+  })
+  apply()
+
   bumpRevision(db)
   res.json({ ok: true })
 })
@@ -163,15 +211,31 @@ router.patch('/patient-notes/:id', (req, res) => {
   const note = db.prepare('SELECT id FROM patient_notes WHERE id = ?').get(req.params.id)
   if (!note) return res.status(404).json({ error: '존재하지 않는 주의사항입니다' })
 
-  const { deleted, active } = req.body ?? {}
-  if (deleted === undefined && active === undefined) {
-    return res.status(400).json({ error: 'deleted 또는 active 중 하나는 필요합니다' })
+  const { deleted, active, content, category, source } = req.body ?? {}
+  if (deleted === undefined && active === undefined
+      && content === undefined && category === undefined && source === undefined) {
+    return res.status(400).json({ error: '변경할 값이 없습니다' })
+  }
+
+  // 분류·근거는 생성 때와 같은 코드 유효성 검사를 거친다.
+  if (category !== undefined && !db.prepare('SELECT 1 FROM note_categories WHERE code = ?').get(category)) {
+    return res.status(400).json({ error: '유효하지 않은 category입니다' })
+  }
+  if (source !== undefined && source !== null
+      && !db.prepare('SELECT 1 FROM note_sources WHERE code = ?').get(source)) {
+    return res.status(400).json({ error: '유효하지 않은 source입니다' })
+  }
+  if (content !== undefined && !String(content).trim()) {
+    return res.status(400).json({ error: '내용을 입력하세요' })
   }
 
   const fields = []
   const params = []
   if (typeof deleted === 'boolean') { fields.push('deleted = ?'); params.push(deleted ? 1 : 0) }
   if (typeof active === 'boolean') { fields.push('active = ?'); params.push(active ? 1 : 0) }
+  if (content !== undefined) { fields.push('content = ?'); params.push(content) }
+  if (category !== undefined) { fields.push('category = ?'); params.push(category) }
+  if (source !== undefined) { fields.push('source = ?'); params.push(source) }
   fields.push('updated_at = ?')
   params.push(Date.now())
   params.push(note.id)
