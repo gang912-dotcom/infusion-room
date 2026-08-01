@@ -219,3 +219,19 @@ CREATE INDEX IF NOT EXISTS idx_messages_inbox
   ON messages(to_account, read_at, created_at DESC);
 -- 관리자 로그 조회용.
 CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
+
+-- ─── 바이탈(체온·혈압·맥박) ───────────────────────────────────────────
+-- 라운딩과 별개. 자유 빈도 기록. 한 행에 재지 않은 항목은 NULL.
+CREATE TABLE IF NOT EXISTS vitals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id   INTEGER NOT NULL REFERENCES sessions(id),
+  occurred_at  INTEGER NOT NULL,
+  temperature  REAL,        -- 체온 ℃
+  bp_systolic  INTEGER,     -- 수축기
+  bp_diastolic INTEGER,     -- 이완기
+  pulse        INTEGER,     -- 맥박
+  created_at   INTEGER NOT NULL,
+  account_id   INTEGER NOT NULL REFERENCES accounts(id),
+  deleted      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_vitals_session ON vitals(session_id, occurred_at DESC);

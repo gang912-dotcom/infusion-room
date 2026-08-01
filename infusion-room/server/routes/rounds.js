@@ -21,7 +21,8 @@ router.post('/sessions/:id/rounds', (req, res) => {
     return res.status(400).json({ error: '시작 전에는 라운딩을 기록할 수 없습니다' })
   }
 
-  const { temperature = null, state = null, memo = '' } = req.body ?? {}
+  // 체온은 2단계에서 바이탈(vitals)로 분리됐다. 신규 라운딩은 temperature NULL로 들어간다.
+  const { state = null, memo = '' } = req.body ?? {}
   const now = Date.now()
   const occurredAt = req.body?.occurred_at !== undefined ? Number(req.body.occurred_at) : now
   try {
@@ -35,9 +36,9 @@ router.post('/sessions/:id/rounds', (req, res) => {
   }
 
   const info = db.prepare(
-    `INSERT INTO rounds (session_id, occurred_at, temperature, state, memo, created_at, account_id, deleted)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
-  ).run(session.id, occurredAt, temperature, state, memo, now, req.account.id)
+    `INSERT INTO rounds (session_id, occurred_at, state, memo, created_at, account_id, deleted)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+  ).run(session.id, occurredAt, state, memo, now, req.account.id)
 
   bumpRevision(db)
   res.status(201).json({ id: info.lastInsertRowid, occurred_at: occurredAt })
@@ -67,7 +68,7 @@ router.get('/patients/:patientId/rounds', (req, res) => {
   res.json(rows)
 })
 
-// deleted 토글 + 내용 편집(발생시각·체온·상태·메모)을 함께 받는다. 전달된 필드만 반영.
+// deleted 토글 + 내용 편집(발생시각·상태·메모)을 함께 받는다. 전달된 필드만 반영.
 router.patch('/rounds/:id', (req, res) => {
   const round = db.prepare(`
     SELECT r.id, s.started_at FROM rounds r
@@ -75,9 +76,8 @@ router.patch('/rounds/:id', (req, res) => {
   `).get(req.params.id)
   if (!round) return res.status(404).json({ error: '존재하지 않는 라운딩입니다' })
 
-  const { deleted, occurred_at: occurredAt, temperature, state, memo } = req.body ?? {}
-  if (deleted === undefined && occurredAt === undefined && temperature === undefined
-      && state === undefined && memo === undefined) {
+  const { deleted, occurred_at: occurredAt, state, memo } = req.body ?? {}
+  if (deleted === undefined && occurredAt === undefined && state === undefined && memo === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
 
@@ -98,7 +98,6 @@ router.patch('/rounds/:id', (req, res) => {
   const params = []
   if (typeof deleted === 'boolean') { fields.push('deleted = ?'); params.push(deleted ? 1 : 0) }
   if (occurredAt !== undefined) { fields.push('occurred_at = ?'); params.push(Number(occurredAt)) }
-  if (temperature !== undefined) { fields.push('temperature = ?'); params.push(temperature) }
   if (state !== undefined) { fields.push('state = ?'); params.push(state) }
   if (memo !== undefined) { fields.push('memo = ?'); params.push(memo) }
   params.push(round.id)

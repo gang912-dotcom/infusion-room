@@ -18,8 +18,28 @@ const activeSessionStmt = db.prepare(`
 `)
 
 const lastRoundStmt = db.prepare(`
-  SELECT occurred_at, temperature FROM rounds
+  SELECT occurred_at FROM rounds
   WHERE session_id = ? AND deleted = 0
+  ORDER BY occurred_at DESC LIMIT 1
+`)
+
+// 카드 우상단 바이탈 — "필드별 최신"이다. 체온만 자주 재고 혈압은 한 번인 상황이 흔해서,
+// 최근 레코드 하나만 보면 이전 혈압이 사라진다.
+const lastTempStmt = db.prepare(`
+  SELECT temperature, occurred_at FROM vitals
+  WHERE session_id = ? AND deleted = 0 AND temperature IS NOT NULL
+  ORDER BY occurred_at DESC LIMIT 1
+`)
+// 혈압·맥박은 보통 같이 재므로 한 레코드 단위로 묶어 가져온다.
+const lastBpStmt = db.prepare(`
+  SELECT bp_systolic, bp_diastolic, pulse, occurred_at FROM vitals
+  WHERE session_id = ? AND deleted = 0 AND bp_systolic IS NOT NULL
+  ORDER BY occurred_at DESC LIMIT 1
+`)
+// 혈압 없이 맥박만 잰 경우를 위한 보조.
+const lastPulseStmt = db.prepare(`
+  SELECT pulse, occurred_at FROM vitals
+  WHERE session_id = ? AND deleted = 0 AND pulse IS NOT NULL
   ORDER BY occurred_at DESC LIMIT 1
 `)
 
@@ -59,6 +79,9 @@ router.get('/board', (req, res) => {
       }
     }
     const lastRound = lastRoundStmt.get(session.id)
+    const lastTemp = lastTempStmt.get(session.id)
+    const lastBp = lastBpStmt.get(session.id)
+    const lastPulse = lastPulseStmt.get(session.id)
     return {
       code: bed.code,
       room: bed.room,
@@ -73,7 +96,16 @@ router.get('/board', (req, res) => {
         mix_staff: session.mix_staff_name,
         duration_minutes: session.duration_minutes,
         last_round_at: lastRound?.occurred_at ?? null,
-        last_round_temp: lastRound?.temperature ?? null,
+        latest_temp: lastTemp ? { value: lastTemp.temperature, occurred_at: lastTemp.occurred_at } : null,
+        latest_bp: lastBp
+          ? {
+            systolic: lastBp.bp_systolic,
+            diastolic: lastBp.bp_diastolic,
+            pulse: lastBp.pulse,
+            occurred_at: lastBp.occurred_at,
+          }
+          : null,
+        latest_pulse: lastPulse ? { value: lastPulse.pulse, occurred_at: lastPulse.occurred_at } : null,
         note_count: noteCountStmt.get(session.id).c,
         special_note: session.special_note,
       },
