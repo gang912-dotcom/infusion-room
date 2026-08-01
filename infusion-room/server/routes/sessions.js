@@ -20,7 +20,7 @@ function getSessionOr404(id, res) {
 
 // ─── assign — 라인실에서 베드 배정 ─────────────────────────────────
 router.post('/sessions/assign', (req, res) => {
-  const { bed_code, chart_no, patient_name, line_staff_id } = req.body ?? {}
+  const { bed_code, chart_no, patient_name, line_staff_id, special_note: specialNote } = req.body ?? {}
   if (!bed_code || !chart_no || !patient_name || !line_staff_id) {
     return res.status(400).json({ error: 'bed_code, chart_no, patient_name, line_staff_id가 모두 필요합니다' })
   }
@@ -51,10 +51,12 @@ router.post('/sessions/assign', (req, res) => {
 
   let sessionId
   try {
+    // 특이사항은 이 방문 단위 자유기재. 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
+    const trimmedNote = typeof specialNote === 'string' ? specialNote.trim() : ''
     const info = db.prepare(
-      `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(bed.id, patient.id, now, req.account.id, lineStaff.id)
+      `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, special_note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(bed.id, patient.id, now, req.account.id, lineStaff.id, trimmedNote || null)
     sessionId = info.lastInsertRowid
   } catch (err) {
     if (isUniqueConstraintError(err)) {
@@ -237,7 +239,7 @@ router.post('/sessions/:id/end', (req, res) => {
 // ─── history — 종료된 세션 목록(이용기록) ───────────────────────────
 router.get('/history', (req, res) => {
   const rows = db.prepare(`
-    SELECT s.id, s.started_at, s.ended_at, s.deleted,
+    SELECT s.id, s.started_at, s.ended_at, s.deleted, s.special_note,
            b.room, b.number AS bed_number,
            p.chart_no, p.name AS patient_name
     FROM sessions s
@@ -254,12 +256,24 @@ router.patch('/sessions/:id', (req, res) => {
   const session = getSessionOr404(req.params.id, res)
   if (!session) return
 
-  const { deleted } = req.body ?? {}
-  if (typeof deleted !== 'boolean') {
-    return res.status(400).json({ error: 'deleted(boolean)가 필요합니다' })
+  const { deleted, special_note: specialNote } = req.body ?? {}
+  if (deleted === undefined && specialNote === undefined) {
+    return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
 
-  db.prepare('UPDATE sessions SET deleted = ? WHERE id = ?').run(deleted ? 1 : 0, session.id)
+  const fields = []
+  const params = []
+  if (typeof deleted === 'boolean') { fields.push('deleted = ?'); params.push(deleted ? 1 : 0) }
+  if (specialNote !== undefined) {
+    const trimmed = typeof specialNote === 'string' ? specialNote.trim() : ''
+    fields.push('special_note = ?')
+    params.push(trimmed || null)
+  }
+  params.push(session.id)
+
+  db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+  // 특이사항은 카드·상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
+  if (specialNote !== undefined) bumpRevision(db)
   res.json({ ok: true })
 })
 

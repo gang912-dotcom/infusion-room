@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 
   cancelled        INTEGER NOT NULL DEFAULT 0,
   cancel_reason    TEXT,
-  deleted          INTEGER NOT NULL DEFAULT 0
+  deleted          INTEGER NOT NULL DEFAULT 0,
+  special_note     TEXT   -- 이 방문(세션)의 특이사항. 등록 시 자유기재, 나중에 편집 가능.
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active

@@ -16,13 +16,20 @@ router.get('/patients/lookup', (req, res) => {
     return res.json({ found: false, chart_no: normalized })
   }
 
-  const activeCautions = db.prepare(
-    `SELECT category, content FROM patient_notes
-     WHERE patient_id = ? AND active = 1 AND deleted = 0 AND category IN ('warning', 'caution')
-     ORDER BY CASE category WHEN 'warning' THEN 0 WHEN 'caution' THEN 1 ELSE 2 END`,
-  ).all(patient.id)
+  // 등록 모달의 특이사항 칸을 채워줄 값 — 이 환자의 직전 방문에 적힌 특이사항.
+  // 매 방문 새로 받되(세션 단위 1회성) 지난 내용이 떠서 다시 타이핑할 필요가 없게 하는 편의.
+  const last = db.prepare(
+    `SELECT special_note FROM sessions
+     WHERE patient_id = ? AND special_note IS NOT NULL AND deleted = 0
+     ORDER BY assigned_at DESC LIMIT 1`,
+  ).get(patient.id)
 
-  res.json({ found: true, chart_no: patient.chart_no, name: patient.name, active_cautions: activeCautions })
+  res.json({
+    found: true,
+    chart_no: patient.chart_no,
+    name: patient.name,
+    last_special_note: last?.special_note ?? null,
+  })
 })
 
 // 환자 조회 화면에서 특정 환자의 상세(이용이력·라운딩·특이사항·주의사항)를 열 때 프론트가 부른다.

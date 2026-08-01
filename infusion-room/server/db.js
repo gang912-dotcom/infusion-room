@@ -21,5 +21,8 @@ const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all().map((c) =
 if (!sessionColumns.includes('deleted')) {
   db.exec('ALTER TABLE sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
 }
+if (!sessionColumns.includes('special_note')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN special_note TEXT')
+}
 
 export default db

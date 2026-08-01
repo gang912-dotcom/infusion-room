@@ -7,7 +7,7 @@ const router = Router()
 const bedsStmt = db.prepare('SELECT id, code, room, number FROM beds WHERE is_active = 1 ORDER BY sort_order')
 
 const activeSessionStmt = db.prepare(`
-  SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes,
+  SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note,
          p.chart_no, p.name AS patient_name,
          ls.name AS line_staff_name, ms.name AS mix_staff_name
   FROM sessions s
@@ -24,12 +24,6 @@ const lastRoundStmt = db.prepare(`
 `)
 
 const noteCountStmt = db.prepare('SELECT COUNT(*) c FROM session_notes WHERE session_id = ? AND deleted = 0')
-
-// warning/caution만 카드 경고 대상 (info는 제외 — 프론트 getCardNoteLines와 동일 기준)
-const cautionCountStmt = db.prepare(`
-  SELECT COUNT(*) c FROM patient_notes
-  WHERE patient_id = ? AND active = 1 AND deleted = 0 AND category IN ('warning', 'caution')
-`)
 
 const settingsStmt = db.prepare('SELECT key, value FROM settings')
 
@@ -81,7 +75,7 @@ router.get('/board', (req, res) => {
         last_round_at: lastRound?.occurred_at ?? null,
         last_round_temp: lastRound?.temperature ?? null,
         note_count: noteCountStmt.get(session.id).c,
-        active_caution_count: cautionCountStmt.get(session.patient_id).c,
+        special_note: session.special_note,
       },
     }
   })
