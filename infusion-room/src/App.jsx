@@ -519,10 +519,6 @@ function OccurredAtPicker({ valueMs, onChange, nowMs }) {
   const d = new Date(valueMs)
   const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 
-  function adjust(deltaMin) {
-    onChange(valueMs + deltaMin * 60000)
-  }
-
   function handleTimeInput(e) {
     const [h, m] = e.target.value.split(':').map(Number)
     if (Number.isNaN(h) || Number.isNaN(m)) return
@@ -543,17 +539,6 @@ function OccurredAtPicker({ valueMs, onChange, nowMs }) {
         />
         <button type="button" className="occurred-at__now" onClick={() => onChange(nowMs)}>
           지금
-        </button>
-      </div>
-      <div className="occurred-at__pulls">
-        <button type="button" className="occurred-at__pull" onClick={() => adjust(-5)}>
-          -5분
-        </button>
-        <button type="button" className="occurred-at__pull" onClick={() => adjust(-15)}>
-          -15분
-        </button>
-        <button type="button" className="occurred-at__pull" onClick={() => adjust(-30)}>
-          -30분
         </button>
       </div>
     </div>

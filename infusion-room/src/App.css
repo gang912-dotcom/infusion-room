@@ -1243,35 +1243,6 @@
   border-color: rgba(59, 130, 246, 0.6);
 }
 
-.occurred-at__pulls {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.occurred-at__pull {
-  min-height: 36px;
-  padding: 6px;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 600;
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, transform 0.1s;
-}
-
-.occurred-at__pull:active {
-  transform: scale(0.98);
-}
-
-.occurred-at__pull:hover {
-  background: rgba(245, 158, 11, 0.22);
-  border-color: rgba(245, 158, 11, 0.6);
-}
-
 .duration {
   display: flex;
   flex-direction: column;
@@ -3891,8 +3862,7 @@
 .app .history-search__reset,
 .app .patient-detail__back,
 .app .stats-range__btn,
-.app .occurred-at__now,
-.app .occurred-at__pull{ min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
+.app .occurred-at__now{ min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
 .app .dm-admin-edit-actions__buttons{ gap:8px; }
 /* 작은 편집/파괴 알약 — 탭 높이 40+ 확보 + 인접 간격 */
 .app .btn-move-bed,
@@ -3937,7 +3907,6 @@
 .app .patient-list__item:focus-visible,
 .app .room-section__header:focus-visible,
 .app .occurred-at__now:focus-visible,
-.app .occurred-at__pull:focus-visible,
 .app .modal__close:focus-visible,
 .app .patient-search__clear:focus-visible,
 .app .theme-toggle:focus-visible,
@@ -4065,18 +4034,12 @@
 
 /* ==========================================================================
    patch17 · 특이사항 기록 모달 저대비 요소 가독성 개선 (라이트 테마 전용)
-   -5분/-15분/-30분 버튼(#fbbf24)과 '조치' 칩(#4ade80)이 밝은색 고정이라
-   라이트 배경에선 대비가 ~1.5:1로 거의 안 보였다. 다크는 멀쩡하므로
-   라이트 테마에서만 글자·배경·테두리를 짙게 눌러 WCAG 4.5:1 이상 확보.
-   대비는 '흰 배경'이 아니라 자기 12% 틴트가 깔린 배경(rgb 246,234,225) 기준으로
-   재봐야 한다 — 원안의 #b45309는 그 기준에서 4.26:1로 미달이라 #a84d08로 내렸다.
-   (실측: #a84d08 = 4.78:1, #157347 = 4.95:1)
+   '조치' 칩(#4ade80)이 밝은색 고정이라 라이트 배경에선 대비가 ~1.5:1로 거의
+   안 보였다. 다크는 멀쩡하므로 라이트 테마에서만 짙게 눌러 4.5:1 이상 확보.
+   대비는 '흰 배경'이 아니라 자기 12% 틴트가 깔린 배경 기준으로 재야 한다.
+   (실측: #157347 = 4.95:1)
+   ※ 함께 손봤던 -5/-15/-30분 버튼은 2단계에서 픽커와 함께 제거됐다.
    ========================================================================== */
-:root[data-theme='light'] .app .occurred-at__pull{
-  color: #a84d08;
-  background: rgba(180, 83, 9, 0.12);
-  border-color: rgba(180, 83, 9, 0.5);
-}
 :root[data-theme='light'] .app .chip--action{
   color: #157347;
   background: rgba(21, 115, 71, 0.12);
