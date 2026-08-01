@@ -84,6 +84,10 @@ function mapBoardToBeds(board) {
       sessionId: s.id,
       assignedAt: s.assigned_at,
       specialNote: s.special_note ?? null,
+      // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다
+      latestTemp: s.latest_temp ?? null,
+      latestBp: s.latest_bp ?? null,
+      latestPulse: s.latest_pulse ?? null,
       lineStaff: s.line_staff,
       mixStaff: s.mix_staff,
       overdue: status === 'reserved' && serverNow - s.assigned_at > assignTimeoutMs,
@@ -306,10 +310,10 @@ export async function loadRounds() {
   return rows.map(mapRoundRow)
 }
 
-export async function createRound({ sessionId, occurredAt, temperature, state, memo }) {
+export async function createRound({ sessionId, occurredAt, state, memo }) {
   return apiFetch(`/sessions/${sessionId}/rounds`, {
     method: 'POST',
-    body: JSON.stringify({ occurred_at: occurredAt, temperature, state, memo }),
+    body: JSON.stringify({ occurred_at: occurredAt, state, memo }),
   })
 }
 
@@ -318,10 +322,10 @@ export async function toggleRoundDeleted(id, deleted) {
 }
 
 // 기록 편집(베드 상세 오른쪽 패널). 서버는 전달된 필드만 반영한다.
-export async function editRound(id, { occurredAt, temperature, state, memo }) {
+export async function editRound(id, { occurredAt, state, memo }) {
   return apiFetch(`/rounds/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ occurred_at: occurredAt, temperature, state, memo }),
+    body: JSON.stringify({ occurred_at: occurredAt, state, memo }),
   })
 }
 
@@ -499,4 +503,49 @@ export async function getAdminMessages(params = {}) {
   const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v != null))
   const q = new URLSearchParams(clean).toString()
   return apiFetch(`/admin/messages${q ? `?${q}` : ''}`)
+}
+
+// ─── 바이탈(체온·혈압·맥박) ─────────────────────────────────────────
+// 라운딩과 별개로 자유 빈도 기록. 한 번에 잰 항목만 담기고 나머지는 NULL.
+function mapVitalsRow(row) {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    occurredAt: new Date(row.occurred_at).toISOString(),
+    temperature: row.temperature,
+    bpSystolic: row.bp_systolic,
+    bpDiastolic: row.bp_diastolic,
+    pulse: row.pulse,
+    createdAt: new Date(row.created_at).toISOString(),
+    deleted: !!row.deleted,
+  }
+}
+
+export async function loadVitals() {
+  const rows = await apiFetch('/vitals')
+  return rows.map(mapVitalsRow)
+}
+
+export async function createVitals(sessionId, { occurredAt, temperature, bpSystolic, bpDiastolic, pulse }) {
+  return apiFetch(`/sessions/${sessionId}/vitals`, {
+    method: 'POST',
+    body: JSON.stringify({
+      occurred_at: occurredAt,
+      temperature,
+      bp_systolic: bpSystolic,
+      bp_diastolic: bpDiastolic,
+      pulse,
+    }),
+  })
+}
+
+export async function editVitals(id, patch) {
+  const body = {}
+  if (patch.occurredAt !== undefined) body.occurred_at = patch.occurredAt
+  if (patch.temperature !== undefined) body.temperature = patch.temperature
+  if (patch.bpSystolic !== undefined) body.bp_systolic = patch.bpSystolic
+  if (patch.bpDiastolic !== undefined) body.bp_diastolic = patch.bpDiastolic
+  if (patch.pulse !== undefined) body.pulse = patch.pulse
+  if (patch.deleted !== undefined) body.deleted = patch.deleted
+  return apiFetch(`/vitals/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 }

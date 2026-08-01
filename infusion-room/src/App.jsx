@@ -9,6 +9,7 @@ import {
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadRounds, createRound, editRound, toggleRoundDeleted,
+  loadVitals, createVitals, editVitals,
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
   assignBed, editSessionSpecialNote, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
@@ -279,12 +280,23 @@ function getRoundStatus(bed, latestRound, now) {
   return { status: 'due', minutes: elapsedMin }
 }
 
-// 카드에 얹을 체온: 마지막 라운딩 체온이 mild/high면 { temp, tone }, 정상·미측정이면 null.
-function getCardRoundTemp(latestRound) {
-  if (!latestRound) return null
-  const tone = getRoundTempTone(latestRound.temperature)
-  if (!tone) return null
-  return { temp: latestRound.temperature, tone }
+// 카드 우상단 바이탈 — 서버가 준 '필드별 최신'을 표시 문자열로. 잰 항목만 채운다.
+// 체온은 열이면(mild/high) 색조를 얹고, 정상이면 색 없이 값만 보여준다(전과 달리 항상 표시).
+function getCardVitals(bed) {
+  const temp = bed.latestTemp?.value
+  const bp = bed.latestBp
+  const pulseOnly = bed.latestPulse?.value
+  let bpText = null
+  if (bp?.systolic != null && bp?.diastolic != null) {
+    bpText = `${bp.systolic}/${bp.diastolic}${bp.pulse != null ? `(${bp.pulse})` : ''}`
+  } else if (pulseOnly != null) {
+    bpText = `맥박 ${pulseOnly}`
+  }
+  return {
+    temp: temp != null ? `${temp}℃` : null,
+    tone: temp != null ? getRoundTempTone(temp) : null,
+    bp: bpText,
+  }
 }
 
 // 몰아보기 힌트(A-4): 그 방(진행중·미완료 베드만) 안에 라운딩 밀림(due)이 하나라도 있는지.
@@ -798,30 +810,44 @@ function xNoteText(n) {
   const body = [...xLabels(n.symptoms, SYMPTOM_OPTIONS), ...xLabels(n.actions, ACTION_OPTIONS)].join('·')
   return [body, n.memo].filter(Boolean).join(' · ') || '기록'
 }
-// 라운딩 → "양호 · 37.8℃ · 메모"
+// 바이탈 → "37.8℃ · 120/80(79)" — 잰 항목만. 혈압 없이 맥박만이면 "맥박 79".
+function xVitalsText(v) {
+  const parts = []
+  if (v.temperature != null) parts.push(`${v.temperature}℃`)
+  if (v.bpSystolic != null && v.bpDiastolic != null) {
+    parts.push(`${v.bpSystolic}/${v.bpDiastolic}${v.pulse != null ? `(${v.pulse})` : ''}`)
+  } else if (v.pulse != null) {
+    parts.push(`맥박 ${v.pulse}`)
+  }
+  return parts.join(' · ') || '기록'
+}
+// 라운딩 → "양호 · 메모" (체온은 2단계에서 바이탈로 분리됐다)
 function xRoundText(r) {
   const st = ROUND_STATE_OPTIONS.find((o) => o.code === r.state)?.label
-  const temp = r.temperature != null ? `${r.temperature}℃` : null
-  return [st, temp, r.memo].filter(Boolean).join(' · ') || '확인'
+  return [st, r.memo].filter(Boolean).join(' · ') || '확인'
 }
 // 한 세션의 라운딩+특이사항을 시간순 이벤트로 합친다
-function xVisitEvents(sessionId, sessionNotes, rounds) {
+function xVisitEvents(sessionId, sessionNotes, rounds, vitals = []) {
   const evs = []
   sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
     .forEach((n) => evs.push({ t: getNoteOccurredAt(n), kind: '증상', text: xNoteText(n) }))
   rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
     .forEach((r) => evs.push({ t: r.occurredAt, kind: '라운딩', text: xRoundText(r) }))
+  vitals.filter((v) => v.sessionId === sessionId && !v.deleted)
+    .forEach((v) => evs.push({ t: v.occurredAt, kind: '바이탈', text: xVitalsText(v) }))
   return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
 }
 // 위 xVisitEvents와 같은 병합이지만 원본 레코드를 함께 들고 온다 —
 // 베드 상세 오른쪽 패널은 항목마다 수정·삭제를 걸어야 해서 id가 필요하다.
 // (xVisitEvents는 CSV·인쇄에서 쓰이므로 그대로 둔다.)
-function xEditableEvents(sessionId, sessionNotes, rounds) {
+function xEditableEvents(sessionId, sessionNotes, rounds, vitals = []) {
   const evs = []
   sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
     .forEach((n) => evs.push({ key: `n${n.id}`, t: getNoteOccurredAt(n), kind: '증상', text: xNoteText(n), note: n }))
   rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
     .forEach((r) => evs.push({ key: `r${r.id}`, t: r.occurredAt, kind: '라운딩', text: xRoundText(r), round: r }))
+  vitals.filter((v) => v.sessionId === sessionId && !v.deleted)
+    .forEach((v) => evs.push({ key: `v${v.id}`, t: v.occurredAt, kind: '바이탈', text: xVitalsText(v), vital: v }))
   return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
 }
 function xCsvCell(v) {
@@ -845,8 +871,8 @@ function xDownload(filename, content, mime) {
 }
 
 // 날짜별 이용기록 CSV — 한 세션 = 한 행 (특이사항·라운딩은 시각과 함께 요약 셀)
-function buildHistoryCsv(history, sessionNotes, rounds) {
-  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '증상', '라운딩']
+function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
+  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '증상', '라운딩', '바이탈']
   const rows = history.map((h) => {
     const notes = sessionNotes.filter((n) => n.sessionId === h.sessionId && !n.deleted)
       .sort((a, b) => new Date(getNoteOccurredAt(a)) - new Date(getNoteOccurredAt(b)))
@@ -854,13 +880,16 @@ function buildHistoryCsv(history, sessionNotes, rounds) {
     const rds = rounds.filter((r) => r.sessionId === h.sessionId && !r.deleted)
       .sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt))
       .map((r) => `${xTime(r.occurredAt)} ${xRoundText(r)}`).join(' | ')
-    return [h.date, h.room, h.bedNumber, h.patientName, h.chartNumber, h.startTime, h.endTime, h.usedMinutes, notes, rds]
+    const vts = vitals.filter((v) => v.sessionId === h.sessionId && !v.deleted)
+      .sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt))
+      .map((v) => `${xTime(v.occurredAt)} ${xVitalsText(v)}`).join(' | ')
+    return [h.date, h.room, h.bedNumber, h.patientName, h.chartNumber, h.startTime, h.endTime, h.usedMinutes, notes, rds, vts]
   })
   return xToCsv(headers, rows)
 }
 
 // 환자별 CSV — 한 이벤트 = 한 행 (주의사항 → 이용/라운딩/특이사항 타임라인)
-function buildPatientCsv(chartNumber, history, sessionNotes, rounds) {
+function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []) {
   const headers = ['날짜', '시각', '구분', '수액실', '베드', '내용', '비고']
   const rows = []
   const sessions = history.filter((h) => h.chartNumber === chartNumber)
@@ -872,7 +901,7 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds) {
     if (h.specialNote) {
       rows.push([h.date, '', '특이사항', h.room, h.bedNumber, h.specialNote, ''])
     }
-    xVisitEvents(h.sessionId, sessionNotes, rounds).forEach((e) => {
+    xVisitEvents(h.sessionId, sessionNotes, rounds, vitals).forEach((e) => {
       rows.push([h.date, xTime(e.t), e.kind, h.room, h.bedNumber, e.text, ''])
     })
   })
@@ -880,7 +909,7 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds) {
 }
 
 // 환자별 인쇄용 리포트(HTML) — 새 창으로 열고 인쇄/PDF 저장
-function openPatientReport(patientName, chartNumber, history, sessionNotes, rounds) {
+function openPatientReport(patientName, chartNumber, history, sessionNotes, rounds, vitals = []) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
   const sessions = history.filter((h) => h.chartNumber === chartNumber)
     .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date))
@@ -889,7 +918,7 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
   const notesHtml = ''
 
   const visitsHtml = sessions.map((h) => {
-    const events = xVisitEvents(h.sessionId, sessionNotes, rounds)
+    const events = xVisitEvents(h.sessionId, sessionNotes, rounds, vitals)
     const tl = events.length ? `<ul class="tl">${events.map((e) =>
       `<li><span class="t">${esc(xTime(e.t))}</span><span class="k k--${e.kind === '라운딩' ? 'round' : 'note'}">${esc(e.kind)}</span><span class="c">${esc(e.text)}</span></li>`).join('')}</ul>`
       : '<p class="none">증상·라운딩 기록 없음</p>'
@@ -1131,6 +1160,7 @@ function PatientView({
   history,
   sessionNotes,
   rounds = [],
+  vitals = [],
   initialChartNumber,
   onInitialChartConsumed,
 }) {
@@ -1211,7 +1241,7 @@ function PatientView({
 
   function handleExportPatientCsv() {
     if (!selectedPatient) return
-    const csv = buildPatientCsv(selectedPatient.chartNumber, history, sessionNotes, rounds)
+    const csv = buildPatientCsv(selectedPatient.chartNumber, history, sessionNotes, rounds, vitals)
     xDownload(`환자_${selectedPatient.patientName}_${selectedPatient.chartNumber}.csv`, csv, 'text/csv;charset=utf-8')
   }
 
@@ -1219,7 +1249,7 @@ function PatientView({
     if (!selectedPatient) return
     openPatientReport(
       selectedPatient.patientName, selectedPatient.chartNumber,
-      history, sessionNotes, rounds,
+      history, sessionNotes, rounds, vitals,
     )
   }
 
@@ -2403,7 +2433,7 @@ function DataManageView({
 }
 
 // ─── 이용기록 화면 ──────────────────────────────────────────────
-function HistoryView({ history, sessionNotes = [], rounds = [] }) {
+function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [] }) {
   const [searchName, setSearchName] = useState('')
   const [searchChart, setSearchChart] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
@@ -2442,7 +2472,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [] }) {
   }
 
   function handleExportCsv() {
-    const csv = buildHistoryCsv(filtered, sessionNotes, rounds)
+    const csv = buildHistoryCsv(filtered, sessionNotes, rounds, vitals)
     const stamp = new Date().toISOString().slice(0, 10)
     xDownload(`이용기록_${stamp}.csv`, csv, 'text/csv;charset=utf-8')
   }
@@ -2843,6 +2873,7 @@ function App() {
   const [history, setHistory] = useState([])
   const [sessionNotes, setSessionNotes] = useState([])
   const [rounds, setRounds] = useState([])
+  const [vitals, setVitals] = useState([])
   const [activeTab, setActiveTab] = useState('all')
   // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
   useEffect(() => {
@@ -2891,11 +2922,19 @@ function App() {
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
   const [noteMemo, setNoteMemo] = useState('')
+  // 바이탈 기록 모달 — 카드 우상단 버튼과 2단 타임라인 편집이 함께 쓴다.
+  const [vitalsModalBed, setVitalsModalBed] = useState(null)
+  const [editingVitalsId, setEditingVitalsId] = useState(null)
+  const [vitalsOccurredAt, setVitalsOccurredAt] = useState(Date.now())
+  const [vitalsTemp, setVitalsTemp] = useState('')
+  const [vitalsSys, setVitalsSys] = useState('')
+  const [vitalsDia, setVitalsDia] = useState('')
+  const [vitalsPulse, setVitalsPulse] = useState('')
+
   const [roundModalOpen, setRoundModalOpen] = useState(false)
   const [roundModalBedId, setRoundModalBedId] = useState(null)
   const [editingRoundId, setEditingRoundId] = useState(null)
   const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
-  const [roundTemp, setRoundTemp] = useState('')
   const [roundState, setRoundState] = useState(null)
   const [roundMemo, setRoundMemo] = useState('')
 
@@ -3175,7 +3214,7 @@ function App() {
   const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
   // 오른쪽 기록 패널용 — 이번 세션의 특이사항·라운딩만 시각순으로. 과거 세션 것은 안 띄운다.
   const currentBedEvents = isInProgress && currentBed?.sessionId
-    ? xEditableEvents(currentBed.sessionId, sessionNotes, rounds)
+    ? xEditableEvents(currentBed.sessionId, sessionNotes, rounds, vitals)
     : []
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
@@ -3244,12 +3283,13 @@ function App() {
 
   async function refreshRecords() {
     try {
-      const [nextHistory, nextRounds, nextSessionNotes] = await Promise.all([
-        loadHistory(), loadRounds(), loadSessionNotes(),
+      const [nextHistory, nextRounds, nextSessionNotes, nextVitals] = await Promise.all([
+        loadHistory(), loadRounds(), loadSessionNotes(), loadVitals(),
       ])
       setHistory(nextHistory)
       setRounds(nextRounds)
       setSessionNotes(nextSessionNotes)
+      setVitals(nextVitals)
     } catch (err) {
       console.error('기록 갱신 실패', err)
     }
@@ -3573,6 +3613,45 @@ function App() {
     setEditingNoteId(null)
   }
 
+  // record를 주면 편집 모드(prefill), 없으면 신규 기록.
+  function openVitalsModal(bed, record) {
+    const target = bed ?? currentBed
+    if (!target) return
+    setVitalsModalBed(target)
+    setActionError('')
+    setEditingVitalsId(record?.id ?? null)
+    setVitalsOccurredAt(record ? new Date(record.occurredAt).getTime() : now)
+    setVitalsTemp(record?.temperature != null ? String(record.temperature) : '')
+    setVitalsSys(record?.bpSystolic != null ? String(record.bpSystolic) : '')
+    setVitalsDia(record?.bpDiastolic != null ? String(record.bpDiastolic) : '')
+    setVitalsPulse(record?.pulse != null ? String(record.pulse) : '')
+  }
+
+  function closeVitalsModal() {
+    setVitalsModalBed(null)
+    setEditingVitalsId(null)
+  }
+
+  async function handleSaveVitals() {
+    if (!vitalsModalBed?.sessionId) return
+    const toNum = (v) => (v.trim() === '' ? null : Number(v))
+    const payload = {
+      occurredAt: vitalsOccurredAt,
+      temperature: parseTemperature(vitalsTemp),
+      bpSystolic: toNum(vitalsSys),
+      bpDiastolic: toNum(vitalsDia),
+      pulse: toNum(vitalsPulse),
+    }
+    try {
+      if (editingVitalsId) await editVitals(editingVitalsId, payload)
+      else await createVitals(vitalsModalBed.sessionId, payload)
+      await Promise.all([refreshRecords(), refreshBoard()]) // 카드 최신값도 갱신돼야 한다
+      closeVitalsModal()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   function openRoundModal(bed, record) {
     // 라운딩 모달은 selectedBed(베드 상세 트리거)와 별개인 roundModalBedId로 대상을 들고 있음.
     // 카드에서 열 때는 그 베드를, 베드 상세 안 버튼에서 열 때는 인자 없이(이미 열려있는 currentBed) 대상으로 삼음.
@@ -3582,7 +3661,6 @@ function App() {
     setActionError('')
     setEditingRoundId(record?.id ?? null)
     setRoundOccurredAt(record ? new Date(record.occurredAt).getTime() : now)
-    setRoundTemp(record?.temperature != null ? String(record.temperature) : '')
     setRoundState(record?.state ?? null)
     setRoundMemo(record?.memo ?? '')
     setRoundModalOpen(true)
@@ -3599,7 +3677,6 @@ function App() {
     try {
       const payload = {
         occurredAt: roundOccurredAt,
-        temperature: parseTemperature(roundTemp),
         state: roundState,
         memo: roundMemo.trim(),
       }
@@ -3655,9 +3732,10 @@ function App() {
   // 타임라인 항목 삭제 — 특이사항·라운딩 모두 기존 소프트삭제 토글을 재사용한다.
   async function handleDeleteRecord(ev) {
     try {
-      if (ev.round) await toggleRoundDeleted(ev.round.id, true)
+      if (ev.vital) await editVitals(ev.vital.id, { deleted: true })
+      else if (ev.round) await toggleRoundDeleted(ev.round.id, true)
       else await toggleSessionNoteDeleted(ev.note.id, true)
-      await refreshRecords()
+      await Promise.all([refreshRecords(), refreshBoard()])
     } catch (err) {
       setActionError(err.message)
     }
@@ -3779,7 +3857,7 @@ function App() {
       rawRoundStatus?.status === 'soon' && !roomDueMap[bed.room]
         ? { ...rawRoundStatus, status: 'ok' }
         : rawRoundStatus
-    const roundTemp = completed ? null : getCardRoundTemp(latestRound)
+    const vitalsView = getCardVitals(bed)
     const roundText =
       roundStatus?.status === 'ok'
         ? `라운딩 ${roundStatus.minutes}분 후`
@@ -3801,6 +3879,29 @@ function App() {
         onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
       >
         <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
+        {/* 우상단 바이탈 — 잰 항목만 표시. 아무것도 없으면 값 없이 기록 버튼만 남긴다. */}
+        {!completed && (
+          <button
+            type="button"
+            className="bed-card__vitals"
+            onClick={(e) => { e.stopPropagation(); openVitalsModal(bed) }}
+            aria-label="바이탈 기록"
+            title="바이탈 기록"
+          >
+            {vitalsView.temp || vitalsView.bp ? (
+              <>
+                {vitalsView.temp && (
+                  <span className={`bed-card__vitals-temp${vitalsView.tone ? ` bed-card__vitals-temp--${vitalsView.tone}` : ''}`}>
+                    {vitalsView.temp}
+                  </span>
+                )}
+                {vitalsView.bp && <span className="bed-card__vitals-bp">{vitalsView.bp}</span>}
+              </>
+            ) : (
+              <Icon name="thermometer" />
+            )}
+          </button>
+        )}
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
@@ -3814,16 +3915,8 @@ function App() {
             }}
           >
             <Icon name={roundIcon} className="bed-card__round-icon" />
-            <Marquee
-              className="bed-card__round-body"
-              contentKey={`${roundText}|${roundTemp ? roundTemp.temp + roundTemp.tone : ''}`}
-            >
+            <Marquee className="bed-card__round-body" contentKey={roundText}>
               {roundText}
-              {roundTemp && (
-                <span className={`bed-card__round-temp bed-card__round-temp--${roundTemp.tone}`}>
-                  {' · '}{roundTemp.temp}℃
-                </span>
-              )}
             </Marquee>
           </button>
         )}
@@ -4000,12 +4093,13 @@ function App() {
 
       <div className="tab-view" ref={tabViewRef}>
       {activeTab === 'history' ? (
-        <HistoryView history={activeHistory} sessionNotes={sessionNotes} rounds={rounds} />
+        <HistoryView history={activeHistory} sessionNotes={sessionNotes} rounds={rounds} vitals={vitals} />
       ) : activeTab === 'patient' ? (
         <PatientView
           history={activeHistory}
           sessionNotes={sessionNotes}
           rounds={rounds}
+          vitals={vitals}
           initialChartNumber={patientViewSeed}
           onInitialChartConsumed={() => setPatientViewSeed(null)}
         />
@@ -4488,7 +4582,7 @@ function App() {
                             <li key={ev.key} className="rec-item">
                               <div className="rec-item__main">
                                 <span className="rec-item__time">{xTime(ev.t)}</span>
-                                <span className={`rec-kind rec-kind--${ev.round ? 'round' : 'note'}`}>
+                                <span className={`rec-kind rec-kind--${ev.vital ? 'vital' : ev.round ? 'round' : 'note'}`}>
                                   {ev.kind}
                                 </span>
                                 <span className="rec-item__text">{ev.text}</span>
@@ -4499,9 +4593,11 @@ function App() {
                                   <button
                                     type="button"
                                     className="rec-btn"
-                                    onClick={() => (ev.round
-                                      ? openRoundModal(undefined, ev.round)
-                                      : openNoteModal(ev.note))}
+                                    onClick={() => {
+                                      if (ev.vital) openVitalsModal(undefined, ev.vital)
+                                      else if (ev.round) openRoundModal(undefined, ev.round)
+                                      else openNoteModal(ev.note)
+                                    }}
                                     disabled={offline}
                                   >
                                     수정
@@ -4694,6 +4790,79 @@ function App() {
         </div>
       )}
 
+      {/* ── 바이탈 기록 (체온·혈압·맥박) ── */}
+      {vitalsModalBed && (
+        <div className="modal-overlay modal-overlay--top">
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__header-title">
+                <h2>{editingVitalsId ? '바이탈 수정' : '바이탈 기록'}</h2>
+                <span className="modal__header-sub">베드 {vitalsModalBed.number}</span>
+              </div>
+              <button type="button" className="modal__close" onClick={closeVitalsModal} aria-label="닫기">
+                <Icon name="close" />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <OccurredAtPicker valueMs={vitalsOccurredAt} onChange={setVitalsOccurredAt} nowMs={now} />
+
+              <label className="field">
+                <span className="field__label">체온 (선택)</span>
+                <div className="round-temp-input">
+                  <span className="round-temp-input__icon" aria-hidden="true"><Icon name="thermometer" /></span>
+                  <input
+                    type="number" step="0.1" inputMode="decimal"
+                    className="round-temp-input__field"
+                    value={vitalsTemp}
+                    onChange={(e) => setVitalsTemp(e.target.value)}
+                    placeholder="--.-"
+                  />
+                  <span className="round-temp-input__unit">°C</span>
+                </div>
+              </label>
+
+              <div className="field">
+                <span className="field__label">혈압 (선택 · 수축기/이완기 함께)</span>
+                <div className="vitals-bp">
+                  <input
+                    type="number" inputMode="numeric" className="field__input vitals-bp__field"
+                    value={vitalsSys} onChange={(e) => setVitalsSys(e.target.value)}
+                    placeholder="120" aria-label="수축기 혈압"
+                  />
+                  <span className="vitals-bp__sep">/</span>
+                  <input
+                    type="number" inputMode="numeric" className="field__input vitals-bp__field"
+                    value={vitalsDia} onChange={(e) => setVitalsDia(e.target.value)}
+                    placeholder="80" aria-label="이완기 혈압"
+                  />
+                </div>
+              </div>
+
+              <label className="field">
+                <span className="field__label">맥박 (선택)</span>
+                <input
+                  type="number" inputMode="numeric" className="field__input"
+                  value={vitalsPulse} onChange={(e) => setVitalsPulse(e.target.value)}
+                  placeholder="79"
+                />
+              </label>
+
+              {actionError && <p role="alert" className="field__error">{actionError}</p>}
+
+              <button
+                type="button"
+                className="btn-register"
+                onClick={handleSaveVitals}
+                disabled={offline || (!vitalsTemp.trim() && !vitalsSys.trim() && !vitalsDia.trim() && !vitalsPulse.trim())}
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {roundModalHeld && roundModalBed && (
         <div className={`modal-overlay modal-overlay--top${roundModalClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -4765,30 +4934,6 @@ function App() {
                 <h3 className="round-input__title">새 라운딩 기록</h3>
 
                 <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} nowMs={now} />
-
-                <label className="field">
-                  <span className="field__label">체온 (선택 · 안 재면 비움 ---)</span>
-                  <div className="round-temp-input">
-                    <span className="round-temp-input__icon" aria-hidden="true"><Icon name="thermometer" /></span>
-                    <input
-                      type="number"
-                      step="0.1"
-                      inputMode="decimal"
-                      className="round-temp-input__field"
-                      value={roundTemp}
-                      onChange={(e) => setRoundTemp(e.target.value)}
-                      placeholder="--.-"
-                    />
-                    <span className="round-temp-input__unit">°C</span>
-                  </div>
-                  {(() => {
-                    const n = parseTemperature(roundTemp)
-                    if (n != null && (n < 30 || n > 45)) {
-                      return <span className="round-temp-input__warn">체온 범위를 확인하세요</span>
-                    }
-                    return null
-                  })()}
-                </label>
 
                 <div className="field">
                   <span className="field__label">환자 상태 (선택)</span>
