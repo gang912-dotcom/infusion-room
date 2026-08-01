@@ -111,14 +111,9 @@ const ACTION_OPTIONS = [
 
 
 
-// ─── 라운딩(정기 순회 체크) 표준 어휘 · 설정 상수 ──────────────────
-const ROUND_STATE_OPTIONS = [
-  { code: 'good', label: '양호' },
-  { code: 'sleeping', label: '수면 중' },
-  { code: 'discomfort', label: '불편감 호소' },
-  { code: 'fever', label: '발열' },
-]
-
+// ─── 라운딩(정기 순회 체크) 설정 상수 ──────────────────────────────
+// 상태 칩(양호/수면 중/…)은 제거됐다 — 라운딩은 시각 + 메모만.
+// round_states 테이블·rounds.state 컬럼은 방치(마이그레이션 없음).
 const ROUND_INTERVAL_MIN = 30 // 라운딩 간격(분)
 const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
 
@@ -807,10 +802,9 @@ function xVitalsText(v) {
   }
   return parts.join(' · ') || '기록'
 }
-// 라운딩 → "양호 · 메모" (체온은 2단계에서 바이탈로 분리됐다)
+// 라운딩 → 메모만. 체온은 바이탈로 분리, 상태 칩은 제거됐다.
 function xRoundText(r) {
-  const st = ROUND_STATE_OPTIONS.find((o) => o.code === r.state)?.label
-  return [st, r.memo].filter(Boolean).join(' · ') || '확인'
+  return r.memo || '확인'
 }
 // 한 세션의 라운딩+특이사항을 시간순 이벤트로 합친다
 function xVisitEvents(sessionId, sessionNotes, rounds, vitals = []) {
@@ -2923,7 +2917,6 @@ function App() {
   const [roundModalBedId, setRoundModalBedId] = useState(null)
   const [editingRoundId, setEditingRoundId] = useState(null)
   const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
-  const [roundState, setRoundState] = useState(null)
   const [roundMemo, setRoundMemo] = useState('')
 
   // ─── 쪽지 ──────────────────────────────────────────────────────
@@ -3677,7 +3670,6 @@ function App() {
     setActionError('')
     setEditingRoundId(record?.id ?? null)
     setRoundOccurredAt(record ? new Date(record.occurredAt).getTime() : now)
-    setRoundState(record?.state ?? null)
     setRoundMemo(record?.memo ?? '')
     setRoundModalOpen(true)
   }
@@ -3693,7 +3685,6 @@ function App() {
     try {
       const payload = {
         occurredAt: roundOccurredAt,
-        state: roundState,
         memo: roundMemo.trim(),
       }
       if (editingRoundId) await editRound(editingRoundId, payload)
@@ -4921,31 +4912,11 @@ function App() {
                   return (
                     <ul className="round-history__list">
                       {list.map((r) => {
-                        const stateLabel = ROUND_STATE_OPTIONS.find((o) => o.code === r.state)?.label
-                        const tone = getRoundTempTone(r.temperature)
-                        const isEmpty = !r.state && r.temperature == null && !r.memo
+                        // 상태·체온은 각각 제거·바이탈 분리됐다. 라운딩은 시각 + 메모만.
                         return (
                           <li key={r.id} className="round-history__item">
                             <span className="round-history__time">{formatHour24(r.occurredAt)}</span>
-                            <span className="round-history__detail">
-                              {isEmpty ? (
-                                '확인함'
-                              ) : (
-                                <>
-                                  {stateLabel && <span>{stateLabel}</span>}
-                                  {stateLabel && <span className="round-history__sep"> · </span>}
-                                  {r.temperature != null ? (
-                                    <span className={`round-temp${tone ? ` round-temp--${tone}` : ''}`}>
-                                      {r.temperature}°C{tone ? <> <Icon name="arrow-up" /></> : ''}
-                                    </span>
-                                  ) : (
-                                    <span className="round-temp round-temp--none">체온 ---</span>
-                                  )}
-                                  {r.memo && <span className="round-history__sep"> · </span>}
-                                  {r.memo && <span>{r.memo}</span>}
-                                </>
-                              )}
-                            </span>
+                            <span className="round-history__detail">{r.memo || '확인함'}</span>
                           </li>
                         )
                       })}
@@ -4958,24 +4929,6 @@ function App() {
                 <h3 className="round-input__title">새 라운딩 기록</h3>
 
                 <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} nowMs={now} />
-
-                <div className="field">
-                  <span className="field__label">환자 상태 (선택)</span>
-                  <div className="chip-group">
-                    {ROUND_STATE_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        className={`chip${roundState === opt.code ? ' chip--active' : ''}`}
-                        onClick={() =>
-                          setRoundState((prev) => (prev === opt.code ? null : opt.code))
-                        }
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
                 <label className="field">
                   <span className="field__label">메모 (선택)</span>

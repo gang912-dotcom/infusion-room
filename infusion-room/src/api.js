@@ -310,10 +310,10 @@ export async function loadRounds() {
   return rows.map(mapRoundRow)
 }
 
-export async function createRound({ sessionId, occurredAt, state, memo }) {
+export async function createRound({ sessionId, occurredAt, memo }) {
   return apiFetch(`/sessions/${sessionId}/rounds`, {
     method: 'POST',
-    body: JSON.stringify({ occurred_at: occurredAt, state, memo }),
+    body: JSON.stringify({ occurred_at: occurredAt, memo }),
   })
 }
 
@@ -322,10 +322,10 @@ export async function toggleRoundDeleted(id, deleted) {
 }
 
 // 기록 편집(베드 상세 오른쪽 패널). 서버는 전달된 필드만 반영한다.
-export async function editRound(id, { occurredAt, state, memo }) {
+export async function editRound(id, { occurredAt, memo }) {
   return apiFetch(`/rounds/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ occurred_at: occurredAt, state, memo }),
+    body: JSON.stringify({ occurred_at: occurredAt, memo }),
   })
 }
 
