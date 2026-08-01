@@ -549,3 +549,9 @@ export async function editVitals(id, patch) {
   if (patch.deleted !== undefined) body.deleted = patch.deleted
   return apiFetch(`/vitals/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 }
+
+// 직전 방문 증상 상기(3단계) — 이 환자의 전 세션 노트를 그대로 받아 클라에서 직전 세션만 추린다.
+// 전용 엔드포인트를 새로 만들지 않고 기존 조회를 재사용한다(노트가 많아지면 그때 서버로 옮겨도 됨).
+export async function getPatientSessionNotes(patientId) {
+  return apiFetch(`/patients/${patientId}/session-notes`)
+}

@@ -4295,3 +4295,16 @@
 
 /* 미열 앰버(#c77400)가 라이트 카드 배경에서 3.54:1로 미달이라 진하게. (실측 5.01:1) */
 :root[data-theme='light'] .app .bed-card__vitals-temp--mild{ color:#a35f00 }
+
+/* 직전 방문 증상 상기(3단계) — 읽기전용 한 줄. 편집 UI가 아님이 드러나게 옅은 톤. */
+.prev-visit{
+  margin:0; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  padding:8px 10px; border-radius:10px;
+  background:var(--card-bg); border:1px dashed var(--card-border);
+}
+.prev-visit__label{
+  font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0;
+}
+.prev-visit__text{
+  font-size:13px; line-height:1.5; color:var(--text-secondary); word-break:break-word;
+}

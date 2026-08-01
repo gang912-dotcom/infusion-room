@@ -10,6 +10,7 @@ import {
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadRounds, createRound, editRound, toggleRoundDeleted,
   loadVitals, createVitals, editVitals,
+  getPatientSessionNotes,
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
   assignBed, editSessionSpecialNote, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
@@ -2859,6 +2860,8 @@ function App() {
   const [sessionNotes, setSessionNotes] = useState([])
   const [rounds, setRounds] = useState([])
   const [vitals, setVitals] = useState([])
+  // 직전 방문 증상(읽기전용 상기용). 진행중 상세를 열 때만 채운다.
+  const [prevVisitSymptoms, setPrevVisitSymptoms] = useState([])
   const [activeTab, setActiveTab] = useState('all')
   // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
   useEffect(() => {
@@ -3203,6 +3206,34 @@ function App() {
     : []
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
+
+  // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
+  // 상기용이라 실패해도 조용히 비운다(모달 동작을 막으면 안 됨).
+  const prevVisitPatientId = isInProgress ? currentBed?.patientId : null
+  const prevVisitSessionId = isInProgress ? currentBed?.sessionId : null
+  useEffect(() => {
+    if (!prevVisitPatientId || !prevVisitSessionId) return undefined
+    let cancelled = false
+    getPatientSessionNotes(prevVisitPatientId)
+      .then((notes) => {
+        if (cancelled) return
+        // id가 방문 순서(autoincrement)라 현재보다 작은 것 중 가장 큰 세션 = 직전 방문
+        const prevSessionId = notes
+          .map((n) => n.session_id)
+          .filter((sid) => sid < prevVisitSessionId)
+          .reduce((max, sid) => (sid > max ? sid : max), -Infinity)
+        const labels = [...new Set(
+          notes.filter((n) => n.session_id === prevSessionId && !n.deleted)
+            .flatMap((n) => n.symptoms ?? []),
+        )].map((code) => SYMPTOM_OPTIONS.find((o) => o.code === code)?.label).filter(Boolean)
+        setPrevVisitSymptoms(labels)
+      })
+      .catch(() => { if (!cancelled) setPrevVisitSymptoms([]) })
+    return () => {
+      cancelled = true
+      setPrevVisitSymptoms([])
+    }
+  }, [prevVisitPatientId, prevVisitSessionId])
 
   // 초상화 클릭 — 이미 떠 있으면 즉시 다음 줄로 갈아끼운다(타이머도 다시 시작).
   function handleBossClick() {
@@ -4486,6 +4517,14 @@ function App() {
                 {/* ── 오른쪽: 이 환자의 기록 (진행중일 때만) ── */}
                 {isInProgress && (
                   <div className="bed-detail-2col__right">
+                    {/* 직전 방문 증상 상기 — 읽기전용. 없으면 아무것도 안 뜬다. */}
+                    {prevVisitSymptoms.length > 0 && (
+                      <p className="prev-visit">
+                        <span className="prev-visit__label">지난 방문</span>
+                        <span className="prev-visit__text">{prevVisitSymptoms.join(' · ')}</span>
+                      </p>
+                    )}
+
                     {/* (A) 이 방문의 특이사항 — 자유텍스트 한 칸, 인라인 편집 */}
                     <section className="rec-block">
                       <div className="rec-block__head">
