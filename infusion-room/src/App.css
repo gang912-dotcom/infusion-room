@@ -4308,3 +4308,84 @@
 .prev-visit__text{
   font-size:13px; line-height:1.5; color:var(--text-secondary); word-break:break-word;
 }
+
+/* 바이탈 빈 상태 — 아이콘만으로는 '누르는 것'인지 모른다. 알약 버튼으로 티나게. */
+.bed-card__vitals--empty{
+  flex-direction:row; align-items:center; gap:4px;
+  padding:4px 8px;
+  background:color-mix(in srgb, var(--status-occupied) 12%, transparent);
+  border-color:color-mix(in srgb, var(--status-occupied) 40%, transparent);
+  color:var(--status-occupied);
+}
+.bed-card__vitals--empty:hover{
+  background:color-mix(in srgb, var(--status-occupied) 20%, transparent);
+}
+.bed-card__vitals-cta{ font-size:11px; font-weight:700; white-space:nowrap }
+/* 바이탈 버튼이 이름·차트 줄 위에 절대배치되므로 그 줄에 자리를 비워둔다.
+   (버튼은 완료 카드엔 안 뜨므로 진행중 계열에만 적용) */
+.bed-card--occupied .bed-card__patient,
+.bed-card--occupied .bed-card__chart,
+.bed-card--warning .bed-card__patient,
+.bed-card--warning .bed-card__chart{ padding-right:76px }
+
+/* ==========================================================================
+   호버 확대 — 마우스 환경에서만. 터치(아이패드)에서 주면 탭 후 확대가
+   눌러붙는(sticky hover) 문제가 생기므로 (hover:hover)+(pointer:fine)로 가둔다.
+   닫기(×)·취소 링크·입력창·쪽지 카드 본체는 제외(어색하거나 오조작 유발).
+   ========================================================================== */
+@media (hover:hover) and (pointer:fine){
+  .app .btn-register,
+  .app .btn-round-entry,
+  .app .btn-detail-confirm,
+  .app .btn-move-bed,
+  .app .btn-edit-patient,
+  .app .btn-confirm,
+  .app .chip,
+  .app .tab,
+  .app .duration__btn,
+  .app .occurred-at__now,
+  .app .export-btn,
+  .app .dm-note-btn,
+  .app .dm-mode-btn,
+  .app .stats-range__btn,
+  .app .rec-btn,
+  .app .msg-card__btn,
+  .app .bed-card__vitals,
+  .app .header-msg-btn{
+    transition:transform .12s ease, background-color .2s, border-color .2s, color .2s;
+  }
+  .app .btn-register:hover:not(:disabled),
+  .app .btn-round-entry:hover:not(:disabled),
+  .app .btn-detail-confirm:hover:not(:disabled),
+  .app .btn-move-bed:hover:not(:disabled),
+  .app .btn-edit-patient:hover:not(:disabled),
+  .app .btn-confirm:hover:not(:disabled),
+  .app .chip:hover:not(:disabled),
+  .app .tab:hover:not(:disabled),
+  .app .duration__btn:hover:not(:disabled),
+  .app .occurred-at__now:hover:not(:disabled),
+  .app .export-btn:hover:not(:disabled),
+  .app .dm-note-btn:hover:not(:disabled),
+  .app .dm-mode-btn:hover:not(:disabled),
+  .app .stats-range__btn:hover:not(:disabled),
+  .app .rec-btn:hover:not(:disabled),
+  .app .msg-card__btn:hover:not(:disabled),
+  .app .bed-card__vitals:hover,
+  .app .header-msg-btn:hover{
+    transform:scale(1.03);
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .app .btn-register:hover, .app .btn-round-entry:hover, .app .btn-detail-confirm:hover,
+  .app .btn-move-bed:hover, .app .btn-edit-patient:hover, .app .btn-confirm:hover,
+  .app .chip:hover, .app .tab:hover, .app .duration__btn:hover, .app .occurred-at__now:hover,
+  .app .export-btn:hover, .app .dm-note-btn:hover, .app .dm-mode-btn:hover,
+  .app .stats-range__btn:hover, .app .rec-btn:hover, .app .msg-card__btn:hover,
+  .app .bed-card__vitals:hover, .app .header-msg-btn:hover{
+    transform:none;
+  }
+}
+
+/* 빈 상태 알약 라벨 — 라이트에서 초록(#248a3d)이 자기 12% 틴트 위에서 3.34:1로 미달.
+   실측으로 #166028(5.84:1) 선택. */
+:root[data-theme='light'] .app .bed-card__vitals--empty{ color:#166028 }

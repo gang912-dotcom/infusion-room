@@ -3890,7 +3890,7 @@ function App() {
         {!completed && (
           <button
             type="button"
-            className="bed-card__vitals"
+            className={`bed-card__vitals${vitalsView.temp || vitalsView.bp ? '' : ' bed-card__vitals--empty'}`}
             onClick={(e) => { e.stopPropagation(); openVitalsModal(bed) }}
             aria-label="바이탈 기록"
             title="바이탈 기록"
@@ -3905,7 +3905,11 @@ function App() {
                 {vitalsView.bp && <span className="bed-card__vitals-bp">{vitalsView.bp}</span>}
               </>
             ) : (
-              <Icon name="thermometer" />
+              /* 값이 없을 때는 아이콘만으로는 눌러야 하는 줄 모른다 — 라벨을 붙여 알약 버튼으로 */
+              <>
+                <Icon name="thermometer" />
+                <span className="bed-card__vitals-cta">바이탈</span>
+              </>
             )}
           </button>
         )}
