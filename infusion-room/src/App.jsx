@@ -8,11 +8,10 @@ import {
   getBoard, readBoardCache,
   loadHistory, toggleHistoryDeleted,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
-  loadPatientNotes, createPatientNote, togglePatientNoteDeleted,
   loadRounds, createRound, editRound, toggleRoundDeleted,
-  editSessionNote, editPatientNote,
+  editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
-  assignBed, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  assignBed, editSessionSpecialNote, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
@@ -108,17 +107,7 @@ const ACTION_OPTIONS = [
   { code: 'observe', label: '경과관찰' },
 ]
 
-const NOTE_CATEGORY_OPTIONS = [
-  { code: 'warning', label: '경고' },
-  { code: 'caution', label: '주의' },
-  { code: 'info', label: '참고' },
-]
 
-const NOTE_SOURCE_OPTIONS = [
-  { code: 'patient_report', label: '환자 진술' },
-  { code: 'clinic_relay', label: '진료실 전달' },
-  { code: 'direct_obs', label: '직접 관찰' },
-]
 
 // ─── 라운딩(정기 순회 체크) 표준 어휘 · 설정 상수 ──────────────────
 const ROUND_STATE_OPTIONS = [
@@ -513,7 +502,7 @@ function formatStaleness(lastSyncAt, nowMs) {
 }
 
 // 공용 발생시각 선택 컴포넌트: 기본값 지금, 당김 버튼(-5/-15/-30분), 시:분 직접입력.
-// 특이사항 기록 폼과 라운딩 모달(A-2) 양쪽에서 재사용한다.
+// 증상 기록 폼과 라운딩 모달(A-2) 양쪽에서 재사용한다.
 function OccurredAtPicker({ valueMs, onChange, nowMs }) {
   const d = new Date(valueMs)
   const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -653,39 +642,20 @@ function inRange(entry, from, to) {
   return true
 }
 
-// ─── 브리핑 팝업 데이터 헬퍼 ─────────────────────────────────────
-const NOTE_CATEGORY_RANK = { warning: 0, caution: 1, info: 2 }
-
 // occurredAt이 없는 기존(레거시) session_note는 createdAt으로 대체
 function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
 
-function getActivePatientNotes(patientNotes, chartNumber) {
-  return patientNotes
-    .filter((n) => n.chartNumber === chartNumber && n.active && !n.deleted)
-    .sort((a, b) => (NOTE_CATEGORY_RANK[a.category] ?? 3) - (NOTE_CATEGORY_RANK[b.category] ?? 3))
-}
-
-// 베드 카드용 특이사항 다줄 요약: 경고(patient_note) → 주의(patient_note) → 금일(session_note) 순,
-// 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로 (info는 카드에서 계속 제외)
-function getCardNoteLines(patientNotes, sessionNotes, bed) {
-  const relevantPatientNotes = patientNotes.filter(
-    (n) =>
-      n.chartNumber === bed.chartNumber &&
-      n.active &&
-      !n.deleted &&
-      (n.category === 'warning' || n.category === 'caution'),
-  )
-  const warnings = relevantPatientNotes.filter((n) => n.category === 'warning')
-  const cautions = relevantPatientNotes.filter((n) => n.category === 'caution')
+// 베드 카드용 요약 다줄: 이 방문의 특이사항 → 금일 증상(session_note) 순,
+// 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로
+function getCardNoteLines(sessionNotes, bed) {
   const todayNotes = getSessionNotesBySessionId(sessionNotes, bed.sessionId).sort(
     (a, b) => new Date(getNoteOccurredAt(b)) - new Date(getNoteOccurredAt(a)),
   )
 
   const allLines = [
-    ...warnings.map((n) => ({ tone: 'danger', icon: 'alert', text: n.content })),
-    ...cautions.map((n) => ({ tone: 'caution', icon: 'alert', text: n.content })),
+    ...(bed.specialNote ? [{ tone: 'danger', icon: 'alert', text: bed.specialNote }] : []),
     ...todayNotes.map((n) => ({
       tone: 'neutral',
       icon: 'clock',
@@ -812,13 +782,6 @@ function summarizeSessionNotesForTable(notes) {
     .join(', ')
 }
 
-function getPatientVisitInfo(history, chartNumber) {
-  const visits = history
-    .filter((h) => h.chartNumber === chartNumber && !h.deleted)
-    .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date))
-  return { count: visits.length, lastVisitDate: visits[0]?.date ?? null }
-}
-
 // ─── 데이터 추출 (CSV · 인쇄 리포트) ──────────────────────────────
 // 서버/DB는 안 건드리고, 이미 불러온 history·rounds·sessionNotes·patientNotes만 조합한다.
 function xLabels(codes, options) {
@@ -845,7 +808,7 @@ function xRoundText(r) {
 function xVisitEvents(sessionId, sessionNotes, rounds) {
   const evs = []
   sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
-    .forEach((n) => evs.push({ t: getNoteOccurredAt(n), kind: '특이사항', text: xNoteText(n) }))
+    .forEach((n) => evs.push({ t: getNoteOccurredAt(n), kind: '증상', text: xNoteText(n) }))
   rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
     .forEach((r) => evs.push({ t: r.occurredAt, kind: '라운딩', text: xRoundText(r) }))
   return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
@@ -856,7 +819,7 @@ function xVisitEvents(sessionId, sessionNotes, rounds) {
 function xEditableEvents(sessionId, sessionNotes, rounds) {
   const evs = []
   sessionNotes.filter((n) => n.sessionId === sessionId && !n.deleted)
-    .forEach((n) => evs.push({ key: `n${n.id}`, t: getNoteOccurredAt(n), kind: '특이사항', text: xNoteText(n), note: n }))
+    .forEach((n) => evs.push({ key: `n${n.id}`, t: getNoteOccurredAt(n), kind: '증상', text: xNoteText(n), note: n }))
   rounds.filter((r) => r.sessionId === sessionId && !r.deleted)
     .forEach((r) => evs.push({ key: `r${r.id}`, t: r.occurredAt, kind: '라운딩', text: xRoundText(r), round: r }))
   return evs.sort((a, b) => new Date(a.t) - new Date(b.t))
@@ -883,7 +846,7 @@ function xDownload(filename, content, mime) {
 
 // 날짜별 이용기록 CSV — 한 세션 = 한 행 (특이사항·라운딩은 시각과 함께 요약 셀)
 function buildHistoryCsv(history, sessionNotes, rounds) {
-  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '특이사항', '라운딩']
+  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '증상', '라운딩']
   const rows = history.map((h) => {
     const notes = sessionNotes.filter((n) => n.sessionId === h.sessionId && !n.deleted)
       .sort((a, b) => new Date(getNoteOccurredAt(a)) - new Date(getNoteOccurredAt(b)))
@@ -897,19 +860,18 @@ function buildHistoryCsv(history, sessionNotes, rounds) {
 }
 
 // 환자별 CSV — 한 이벤트 = 한 행 (주의사항 → 이용/라운딩/특이사항 타임라인)
-function buildPatientCsv(chartNumber, history, sessionNotes, rounds, patientNotes) {
+function buildPatientCsv(chartNumber, history, sessionNotes, rounds) {
   const headers = ['날짜', '시각', '구분', '수액실', '베드', '내용', '비고']
   const rows = []
-  getActivePatientNotes(patientNotes, chartNumber).forEach((n) => {
-    const cat = NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label || ''
-    const src = NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label || ''
-    rows.push(['', '', `주의사항(${cat})`, '', '', n.content, src ? `근거: ${src}` : ''])
-  })
   const sessions = history.filter((h) => h.chartNumber === chartNumber)
     .sort((a, b) => parseDateStr(a.date) - parseDateStr(b.date))
   sessions.forEach((h) => {
     rows.push([h.date, h.startTime, '이용', h.room, h.bedNumber,
       `수액 이용 (${formatDuration(h.usedMinutes)})`, `${h.startTime}~${h.endTime}`])
+    // 특이사항은 방문 단위라 그 방문 행 바로 아래에 붙인다.
+    if (h.specialNote) {
+      rows.push([h.date, '', '특이사항', h.room, h.bedNumber, h.specialNote, ''])
+    }
     xVisitEvents(h.sessionId, sessionNotes, rounds).forEach((e) => {
       rows.push([h.date, xTime(e.t), e.kind, h.room, h.bedNumber, e.text, ''])
     })
@@ -918,28 +880,25 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, patientNote
 }
 
 // 환자별 인쇄용 리포트(HTML) — 새 창으로 열고 인쇄/PDF 저장
-function openPatientReport(patientName, chartNumber, history, sessionNotes, rounds, patientNotes) {
+function openPatientReport(patientName, chartNumber, history, sessionNotes, rounds) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
-  const notes = getActivePatientNotes(patientNotes, chartNumber)
   const sessions = history.filter((h) => h.chartNumber === chartNumber)
     .sort((a, b) => parseDateStr(b.date) - parseDateStr(a.date))
   const printedAt = new Date().toLocaleString('ko-KR')
 
-  const notesHtml = notes.length ? `
-    <section><h2>환자 주의사항</h2><ul class="notes">${notes.map((n) => {
-      const cat = NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label || ''
-      const src = NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label || ''
-      return `<li><b class="cat cat--${esc(n.category)}">${esc(cat)}</b> ${esc(n.content)}${src ? ` <span class="src">근거: ${esc(src)}</span>` : ''}</li>`
-    }).join('')}</ul></section>` : ''
+  const notesHtml = ''
 
   const visitsHtml = sessions.map((h) => {
     const events = xVisitEvents(h.sessionId, sessionNotes, rounds)
     const tl = events.length ? `<ul class="tl">${events.map((e) =>
       `<li><span class="t">${esc(xTime(e.t))}</span><span class="k k--${e.kind === '라운딩' ? 'round' : 'note'}">${esc(e.kind)}</span><span class="c">${esc(e.text)}</span></li>`).join('')}</ul>`
-      : '<p class="none">특이사항·라운딩 기록 없음</p>'
+      : '<p class="none">증상·라운딩 기록 없음</p>'
+    // 특이사항은 방문 단위라 그 방문 블록 안에 표시한다.
+    const sn = h.specialNote ? `<p class="special">특이사항: ${esc(h.specialNote)}</p>` : ''
     return `<section class="visit">
       <h3>${esc(h.date)} · ${esc(h.room)} ${esc(h.bedNumber)}번</h3>
       <p class="meta">${esc(h.startTime)} ~ ${esc(h.endTime)} · 이용 ${esc(formatDuration(h.usedMinutes))}</p>
+      ${sn}
       ${tl}
     </section>`
   }).join('')
@@ -1170,7 +1129,6 @@ function StatsView({ history }) {
 // ─── 환자 조회 화면 ─────────────────────────────────────────────
 function PatientView({
   history,
-  patientNotes,
   sessionNotes,
   rounds = [],
   initialChartNumber,
@@ -1253,7 +1211,7 @@ function PatientView({
 
   function handleExportPatientCsv() {
     if (!selectedPatient) return
-    const csv = buildPatientCsv(selectedPatient.chartNumber, history, sessionNotes, rounds, patientNotes)
+    const csv = buildPatientCsv(selectedPatient.chartNumber, history, sessionNotes, rounds)
     xDownload(`환자_${selectedPatient.patientName}_${selectedPatient.chartNumber}.csv`, csv, 'text/csv;charset=utf-8')
   }
 
@@ -1261,7 +1219,7 @@ function PatientView({
     if (!selectedPatient) return
     openPatientReport(
       selectedPatient.patientName, selectedPatient.chartNumber,
-      history, sessionNotes, rounds, patientNotes,
+      history, sessionNotes, rounds,
     )
   }
 
@@ -1270,9 +1228,6 @@ function PatientView({
     ? [...selectedPatient.entries].sort((a, b) => Number(b.id) - Number(a.id))
     : []
 
-  const selectedPatientNotes = selectedPatient
-    ? getActivePatientNotes(patientNotes, selectedPatient.chartNumber)
-    : []
 
   const selectedPatientRecentNotes = selectedPatient
     ? getRecentSessionNotes(sessionNotes, selectedPatient.chartNumber, 5)
@@ -1381,32 +1336,11 @@ function PatientView({
             </div>
           </div>
 
-          {/* 환자 주의사항 */}
-          {selectedPatientNotes.length > 0 && (
-            <div className="patient-notes">
-              <h3 className="patient-history__title">환자 주의사항</h3>
-              <ul className="briefing__note-list">
-                {selectedPatientNotes.map((n) => (
-                  <li key={n.id} className="briefing__note">
-                    <div className="briefing__note-head">
-                      <span className={`badge badge--${n.category}`}>
-                        {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
-                      </span>
-                      <span className="briefing__note-content">{n.content}</span>
-                    </div>
-                    <p className="briefing__note-source">
-                      근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
-          {/* 최근 방문 타임라인 (금일 특이사항) */}
+          {/* 최근 방문 타임라인 (금일 증상) */}
           {selectedPatientRecentNotes.length > 0 && (
             <div className="patient-notes">
-              <h3 className="patient-history__title">최근 방문 특이사항</h3>
+              <h3 className="patient-history__title">최근 방문 증상</h3>
               <ul className="briefing__history-list">
                 {selectedPatientRecentNotes.map((n) => (
                   <li key={n.id}>{formatSessionNoteLine(n)}</li>
@@ -1442,7 +1376,7 @@ function PatientView({
                     <th>시작시간</th>
                     <th>종료시간</th>
                     <th>이용시간</th>
-                    <th>특이사항</th>
+                    <th>증상</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2042,8 +1976,6 @@ function DataManageView({
   onUpdateHistory,
   sessionNotes,
   onUpdateSessionNotes,
-  patientNotes,
-  onUpdatePatientNotes,
   account,
   offline,
 }) {
@@ -2062,10 +1994,9 @@ function DataManageView({
   // 휴지통 모드
   const [trashMode, setTrashMode] = useState(false)
 
-  // 특이사항 데이터 관리
+  // 증상 데이터 관리
   const [noteSearchChart, setNoteSearchChart] = useState('')
   const [sessionNoteTrash, setSessionNoteTrash] = useState(false)
-  const [patientNoteTrash, setPatientNoteTrash] = useState(false)
 
   // ── 데이터 현황 ──
   const totalAll = allHistory.length
@@ -2168,12 +2099,10 @@ function DataManageView({
   // "N건 선택됨" 라벨이 안 뜨고 선택삭제 버튼이 항상 활성으로 보이던 버그를 고침)
   const checkedCount = filtered.filter((e) => checkedIds.has(e.id)).length
 
-  // ── 특이사항 데이터 관리 ──
+  // ── 증상 데이터 관리 ──
   function findPatientNameByChart(chartNumber) {
     return (
-      allHistory.find((h) => h.chartNumber === chartNumber)?.patientName ??
-      patientNotes.find((n) => n.chartNumber === chartNumber)?.patientName ??
-      ''
+      allHistory.find((h) => h.chartNumber === chartNumber)?.patientName ?? ''
     )
   }
 
@@ -2184,19 +2113,8 @@ function DataManageView({
     .filter((n) => !trimmedNoteSearch || n.chartNumber.includes(trimmedNoteSearch))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-  const patientNoteList = patientNotes
-    .filter((n) => (patientNoteTrash ? n.deleted : !n.deleted))
-    .filter((n) => !trimmedNoteSearch || n.chartNumber.includes(trimmedNoteSearch))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-
   function handleToggleSessionNoteDeleted(id, deletedValue) {
     onUpdateSessionNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, deleted: deletedValue } : n)),
-    )
-  }
-
-  function handleTogglePatientNoteDeleted(id, deletedValue) {
-    onUpdatePatientNotes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, deleted: deletedValue } : n)),
     )
   }
@@ -2374,9 +2292,9 @@ function DataManageView({
         </div>
       )}
 
-      {/* ── 특이사항 데이터 관리 ── */}
+      {/* ── 증상 데이터 관리 ── */}
       <div className="dm-note-manage">
-        <h3 className="dm-note-manage__title">특이사항 데이터 관리</h3>
+        <h3 className="dm-note-manage__title">증상 데이터 관리</h3>
 
         <label className="dm-search__field dm-note-manage__search">
           <span className="dm-search__label">차트번호로 검색</span>
@@ -2389,10 +2307,10 @@ function DataManageView({
           />
         </label>
 
-        {/* 금일 특이사항 관리 */}
+        {/* 금일 증상 관리 */}
         <div className="dm-note-section">
           <div className="dm-note-section__header">
-            <h4>금일 특이사항 ({sessionNoteList.length})</h4>
+            <h4>금일 증상 ({sessionNoteList.length})</h4>
             <button
               type="button"
               className={`dm-mode-btn dm-mode-btn--trash${sessionNoteTrash ? ' dm-mode-btn--active' : ''}`}
@@ -2404,7 +2322,7 @@ function DataManageView({
 
           {sessionNoteList.length === 0 ? (
             <div className="dm-empty">
-              {sessionNoteTrash ? '삭제된 금일 특이사항이 없습니다.' : '금일 특이사항이 없습니다.'}
+              {sessionNoteTrash ? '삭제된 금일 증상이 없습니다.' : '금일 증상이 없습니다.'}
             </div>
           ) : (
             <div className="dm-table-wrap">
@@ -2445,67 +2363,6 @@ function DataManageView({
           )}
         </div>
 
-        {/* 환자 주의사항 관리 */}
-        <div className="dm-note-section">
-          <div className="dm-note-section__header">
-            <h4>환자 주의사항 ({patientNoteList.length})</h4>
-            <button
-              type="button"
-              className={`dm-mode-btn dm-mode-btn--trash${patientNoteTrash ? ' dm-mode-btn--active' : ''}`}
-              onClick={() => setPatientNoteTrash((prev) => !prev)}
-            >
-              <Icon name="trash" /> {patientNoteTrash ? '삭제됨 보는 중' : '삭제됨 보기'}
-            </button>
-          </div>
-
-          {patientNoteList.length === 0 ? (
-            <div className="dm-empty">
-              {patientNoteTrash ? '삭제된 환자 주의사항이 없습니다.' : '환자 주의사항이 없습니다.'}
-            </div>
-          ) : (
-            <div className="dm-table-wrap">
-              <table className="dm-table">
-                <thead>
-                  <tr>
-                    <th>등록일</th>
-                    <th>차트번호</th>
-                    <th>환자명</th>
-                    <th>분류</th>
-                    <th>내용</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patientNoteList.map((n) => (
-                    <tr key={n.id}>
-                      <td>{new Date(n.createdAt).toLocaleDateString('ko-KR')}</td>
-                      <td>{n.chartNumber}</td>
-                      <td>{n.patientName}</td>
-                      <td>
-                        <span className={`badge badge--${n.category}`}>
-                          {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
-                        </span>
-                      </td>
-                      <td>{n.content}</td>
-                      <td className="dm-note-manage__action">
-                        <button
-                          type="button"
-                          className="dm-note-btn"
-                          onClick={() =>
-                            handleTogglePatientNoteDeleted(n.id, !patientNoteTrash)
-                          }
-                          disabled={offline}
-                        >
-                          {patientNoteTrash ? '복구' : '삭제'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── 관리자 설정 (admin 롤 전용) ── */}
@@ -2985,7 +2842,6 @@ function App() {
   const [actionError, setActionError] = useState('')
   const [history, setHistory] = useState([])
   const [sessionNotes, setSessionNotes] = useState([])
-  const [patientNotes, setPatientNotes] = useState([])
   const [rounds, setRounds] = useState([])
   const [activeTab, setActiveTab] = useState('all')
   // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
@@ -3011,6 +2867,11 @@ function App() {
   const [cleanupReopenBed, setCleanupReopenBed] = useState(null)
   const [patientName, setPatientName] = useState('')
   const [chartNumber, setChartNumber] = useState('')
+  // 이 방문의 특이사항(등록 모달 입력값). 재방문이면 조회 시 지난 값이 채워진다.
+  const [specialNote, setSpecialNote] = useState('')
+  // 2단 상세 오른쪽의 특이사항 인라인 편집
+  const [specialNoteEditing, setSpecialNoteEditing] = useState(false)
+  const [specialNoteDraft, setSpecialNoteDraft] = useState('')
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
   const [now, setNow] = useState(Date.now())
   const [editPatientModal, setEditPatientModal] = useState(false)
@@ -3023,18 +2884,13 @@ function App() {
   const [movingBed, setMovingBed] = useState(null)
   const [moveBedAlert, setMoveBedAlert] = useState('')
   const [noteModalOpen, setNoteModalOpen] = useState(false)
-  const [noteTab, setNoteTab] = useState('session')
   // 기록 편집 — null이면 신규 작성, id가 있으면 그 레코드를 수정하는 모드.
   // 폼(특이사항·주의사항·라운딩)은 신규와 편집이 같은 것을 쓰고 저장 시점만 갈린다.
   const [editingNoteId, setEditingNoteId] = useState(null)
-  const [editingPatientNoteId, setEditingPatientNoteId] = useState(null)
   const [noteOccurredAt, setNoteOccurredAt] = useState(() => Date.now())
   const [noteSymptoms, setNoteSymptoms] = useState([])
   const [noteActions, setNoteActions] = useState([])
   const [noteMemo, setNoteMemo] = useState('')
-  const [noteCategory, setNoteCategory] = useState('info')
-  const [noteContent, setNoteContent] = useState('')
-  const [noteSource, setNoteSource] = useState('patient_report')
   const [roundModalOpen, setRoundModalOpen] = useState(false)
   const [roundModalBedId, setRoundModalBedId] = useState(null)
   const [editingRoundId, setEditingRoundId] = useState(null)
@@ -3042,7 +2898,6 @@ function App() {
   const [roundTemp, setRoundTemp] = useState('')
   const [roundState, setRoundState] = useState(null)
   const [roundMemo, setRoundMemo] = useState('')
-  const [briefingOpen, setBriefingOpen] = useState(false)
 
   // ─── 쪽지 ──────────────────────────────────────────────────────
   // 받은 쪽지(살아있는 것만). 서버 폴링 결과로 갱신하되 카드의 드래그 위치(pos)는 보존한다.
@@ -3068,7 +2923,6 @@ function App() {
     function onKey(e) {
       if (e.key !== 'Escape') return
       if (composeOpen) setComposeOpen(false)
-      else if (briefingOpen) setBriefingOpen(false)
       else if (noteModalOpen) setNoteModalOpen(false)
       else if (roundModalOpen) setRoundModalOpen(false)
       else if (removePatientConfirm) setRemovePatientConfirm(false)
@@ -3080,7 +2934,7 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composeOpen, briefingOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
+  }, [composeOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
 
   // 쪽지 10분 휘발 — 폴링(≤3초)으로도 빠지지만, 정확히 10:00에 사라지게 하는 보조 타이머.
   useEffect(() => {
@@ -3304,7 +3158,6 @@ function App() {
   const [noteModalHeld, noteModalClosing] = useModalExit(noteModalOpen)
   const [roundModalHeld, roundModalClosing] = useModalExit(roundModalOpen)
   const [roundModalBedIdHeld] = useModalExit(roundModalBedId)
-  const [briefingHeld, briefingClosing] = useModalExit(briefingOpen)
 
   // currentBed는 붙잡힌 selectedBed에서 만든다 — 닫히는 동안 환자명·차트번호가 사라지면
   // 모달이 빈 껍데기로 줄어드는 게 보인다. 그 위에 겹치는 모달들(등록취소 확인·정보수정·특이사항)도
@@ -3319,9 +3172,6 @@ function App() {
   const isVacant = currentBed?.status === 'vacant'
   const isReserved = currentBed?.status === 'reserved'
   const isInProgress = currentBed?.status === 'in-progress'
-  const currentBedActiveNotes = currentBed
-    ? getActivePatientNotes(patientNotes, currentBed.chartNumber)
-    : []
   const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
   // 오른쪽 기록 패널용 — 이번 세션의 특이사항·라운딩만 시각순으로. 과거 세션 것은 안 띄운다.
   const currentBedEvents = isInProgress && currentBed?.sessionId
@@ -3394,13 +3244,12 @@ function App() {
 
   async function refreshRecords() {
     try {
-      const [nextHistory, nextRounds, nextSessionNotes, nextPatientNotes] = await Promise.all([
-        loadHistory(), loadRounds(), loadSessionNotes(), loadPatientNotes(),
+      const [nextHistory, nextRounds, nextSessionNotes] = await Promise.all([
+        loadHistory(), loadRounds(), loadSessionNotes(),
       ])
       setHistory(nextHistory)
       setRounds(nextRounds)
       setSessionNotes(nextSessionNotes)
-      setPatientNotes(nextPatientNotes)
     } catch (err) {
       console.error('기록 갱신 실패', err)
     }
@@ -3455,24 +3304,6 @@ function App() {
     }
   }
 
-  async function updatePatientNotesWithSync(updater) {
-    const prevArr = patientNotes
-    const nextArr = typeof updater === 'function' ? updater(prevArr) : updater
-    setPatientNotes(nextArr)
-    const prevById = new Map(prevArr.map((n) => [n.id, n]))
-    const changed = nextArr.filter((n) => {
-      const old = prevById.get(n.id)
-      return old && (old.deleted !== n.deleted || old.active !== n.active)
-    })
-    try {
-      await Promise.all(
-        changed.map((n) => togglePatientNoteDeleted(n.id, { deleted: n.deleted, active: n.active })),
-      )
-    } catch (err) {
-      setActionError(err.message)
-    }
-  }
-
   async function handleChartNumberBlur() {
     const trimmed = chartNumber.trim()
     if (!trimmed) {
@@ -3484,6 +3315,10 @@ function App() {
       setLookupInfo(result)
       if (result.found && !patientName.trim()) {
         setPatientName(result.name)
+      }
+      // 지난 방문의 특이사항을 채워준다. 이미 뭔가 입력한 상태면 덮지 않는다.
+      if (result.last_special_note && !specialNote.trim()) {
+        setSpecialNote(result.last_special_note)
       }
     } catch {
       setLookupInfo(null)
@@ -3499,6 +3334,7 @@ function App() {
       setChartNumber('')
       setLineStaffId('')
       setLookupInfo(null)
+      setSpecialNote('')
     }
     if (bed.status === 'reserved') {
       setDurationMinutes(DEFAULT_DURATION)
@@ -3720,30 +3556,21 @@ function App() {
     setEditStartOpen(false)
   }
 
-  // record를 주면 그 값으로 폼을 채운 '편집 모드', 안 주면 기존처럼 빈 폼(신규 작성).
-  function openNoteModal(tab, record) {
+  // record를 주면 그 값으로 폼을 채운 '편집 모드', 안 주면 빈 폼(신규 작성).
+  function openNoteModal(record) {
     if (!currentBed) return
-    setNoteTab(tab)
     setActionError('')
-    if (tab === 'patient') {
-      setEditingPatientNoteId(record?.id ?? null)
-      setNoteCategory(record?.category ?? 'info')
-      setNoteContent(record?.content ?? '')
-      setNoteSource(record?.source ?? 'patient_report')
-    } else {
-      setEditingNoteId(record?.id ?? null)
-      setNoteOccurredAt(record ? new Date(getNoteOccurredAt(record)).getTime() : now)
-      setNoteSymptoms(record?.symptoms ?? [])
-      setNoteActions(record?.actions ?? [])
-      setNoteMemo(record?.memo ?? '')
-    }
+    setEditingNoteId(record?.id ?? null)
+    setNoteOccurredAt(record ? new Date(getNoteOccurredAt(record)).getTime() : now)
+    setNoteSymptoms(record?.symptoms ?? [])
+    setNoteActions(record?.actions ?? [])
+    setNoteMemo(record?.memo ?? '')
     setNoteModalOpen(true)
   }
 
   function closeNoteModal() {
     setNoteModalOpen(false)
     setEditingNoteId(null)
-    setEditingPatientNoteId(null)
   }
 
   function openRoundModal(bed, record) {
@@ -3809,11 +3636,17 @@ function App() {
     }
   }
 
-  // 주의사항 '해제' = 비활성화(soft). 기록은 남고 목록에서만 빠진다.
-  async function handleDeactivatePatientNote(note) {
+  function startSpecialNoteEdit() {
+    setSpecialNoteDraft(currentBed?.specialNote ?? '')
+    setSpecialNoteEditing(true)
+  }
+
+  async function handleSaveSpecialNote() {
+    if (!currentBed?.sessionId) return
     try {
-      await togglePatientNoteDeleted(note.id, { active: false })
-      await refreshRecords()
+      await editSessionSpecialNote(currentBed.sessionId, specialNoteDraft.trim())
+      await refreshBoard() // 특이사항은 board payload에 실려 오므로 보드를 다시 받아야 반영된다
+      setSpecialNoteEditing(false)
     } catch (err) {
       setActionError(err.message)
     }
@@ -3830,20 +3663,6 @@ function App() {
     }
   }
 
-  async function handleSavePatientNote() {
-    if (!currentBed || !noteContent.trim()) return
-
-    try {
-      const payload = { category: noteCategory, source: noteSource, content: noteContent.trim() }
-      if (editingPatientNoteId) await editPatientNote(editingPatientNoteId, payload)
-      else await createPatientNote({ patientId: currentBed.patientId, ...payload })
-      await refreshRecords()
-      closeNoteModal()
-    } catch (err) {
-      setActionError(err.message)
-    }
-  }
-
   async function handleRegister() {
     if (!patientName.trim() || !chartNumber.trim() || !selectedBed || !lineStaffId) return
     setActionError('')
@@ -3853,12 +3672,15 @@ function App() {
         chartNo: chartNumber.trim(),
         patientName: patientName.trim(),
         lineStaffId: Number(lineStaffId),
+        specialNote: specialNote.trim(),
       })
       stopLockAndRelease(selectedBed.id) // 배정 완료 — 등록 잠금 해제
       await refreshBoard()
       setDurationMinutes(DEFAULT_DURATION)
       setMixStaffId('')
-      setBriefingOpen(true)
+      // 배정 후에는 아무 팝업도 자동으로 열지 않는다.
+      // 다음 단계(믹스 담당자·투여 시작)는 사용자가 카드를 다시 눌러서 진행한다.
+      closeModal()
     } catch (err) {
       setActionError(err.message)
     }
@@ -3877,24 +3699,6 @@ function App() {
     } catch (err) {
       setActionError(err.message)
     }
-  }
-
-  function handleBriefingDismiss() {
-    setBriefingOpen(false)
-    closeModal()
-  }
-
-  function handleAddNoteFromBriefing() {
-    setBriefingOpen(false)
-    openNoteModal('patient')
-  }
-
-  function handleGoFullHistory() {
-    if (!currentBed) return
-    setBriefingOpen(false)
-    closeModal()
-    setPatientViewSeed(currentBed.chartNumber)
-    setActiveTab('patient')
   }
 
   function renderBedCard(bed) {
@@ -3943,6 +3747,13 @@ function App() {
           <p className="bed-card__number">{bed.number}</p>
           <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
           <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+          {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
+          {bed.specialNote && (
+            <p className="bed-card__caution bed-card__caution--danger">
+              <Icon name="alert" />
+              <Marquee contentKey={bed.specialNote}>{bed.specialNote}</Marquee>
+            </p>
+          )}
           <div className="bed-card__spacer" />
           {bed.overdue && (
             <p className="bed-card__overdue-label"><Icon name="alert" /> 환자 미도착</p>
@@ -3957,7 +3768,7 @@ function App() {
     const displayProgress = completed ? 100 : progress
     const category = completed ? 'completed' : isWarning ? 'warning' : 'occupied'
     const chipLabel = completed ? '완료' : isWarning ? '곧 완료' : '진행중'
-    const noteLines = getCardNoteLines(patientNotes, sessionNotes, bed)
+    const noteLines = getCardNoteLines(sessionNotes, bed)
 
     // 라운딩 줄 (완료/정리 상태 카드에는 표시 안 함)
     const latestRound = completed ? null : getLatestSessionRound(rounds, bed.sessionId)
@@ -4193,7 +4004,6 @@ function App() {
       ) : activeTab === 'patient' ? (
         <PatientView
           history={activeHistory}
-          patientNotes={patientNotes}
           sessionNotes={sessionNotes}
           rounds={rounds}
           initialChartNumber={patientViewSeed}
@@ -4207,8 +4017,6 @@ function App() {
           onUpdateHistory={updateHistoryWithSync}
           sessionNotes={sessionNotes}
           onUpdateSessionNotes={updateSessionNotesWithSync}
-          patientNotes={patientNotes}
-          onUpdatePatientNotes={updatePatientNotesWithSync}
           account={account}
           offline={offline}
         />
@@ -4378,13 +4186,6 @@ function App() {
                     {lookupInfo.found ? `등록된 환자입니다 (${lookupInfo.name})` : '신규 환자입니다'}
                   </p>
                 )}
-                {lookupInfo?.found && lookupInfo.active_cautions?.length > 0 && (
-                  <div className="field__cautions">
-                    {lookupInfo.active_cautions.map((c, i) => (
-                      <span key={i} className={`badge badge--${c.category}`}>{c.content}</span>
-                    ))}
-                  </div>
-                )}
 
                 <label className="field">
                   <span className="field__label">라인 담당자</span>
@@ -4398,6 +4199,18 @@ function App() {
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
+                </label>
+
+                {/* 이 방문의 특이사항 — 매 방문 받되, 재방문이면 지난 방문 내용이 채워진다(수정 가능). */}
+                <label className="field">
+                  <span className="field__label">특이사항</span>
+                  <textarea
+                    className="field__input special-note__input"
+                    value={specialNote}
+                    onChange={(e) => setSpecialNote(e.target.value)}
+                    rows={2}
+                    placeholder="부작용·임신·혈관통 등 이 환자의 주의점"
+                  />
                 </label>
 
                 {actionError && <p role="alert" className="field__error">{actionError}</p>}
@@ -4542,25 +4355,11 @@ function App() {
                   </div>
                 )}
 
-                {/* 진행중에는 주의사항이 오른쪽 기록 패널로 간다(지속 정보라 거기 속함). */}
-                {!isInProgress && currentBedActiveNotes.length > 0 && (
+                {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
+                {!isInProgress && currentBed.specialNote && (
                   <div className="bed-detail-notes">
-                    <h3 className="bed-detail-notes__title">환자 주의사항</h3>
-                    <ul className="briefing__note-list">
-                      {currentBedActiveNotes.map((n) => (
-                        <li key={n.id} className="briefing__note">
-                          <div className="briefing__note-head">
-                            <span className={`badge badge--${n.category}`}>
-                              {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
-                            </span>
-                            <span className="briefing__note-content">{n.content}</span>
-                          </div>
-                          <p className="briefing__note-source">
-                            근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
+                    <h3 className="bed-detail-notes__title">특이사항</h3>
+                    <p className="special-note__text">{currentBed.specialNote}</p>
                   </div>
                 )}
 
@@ -4576,7 +4375,7 @@ function App() {
                   />
                 )}
 
-                {/* 라운딩·특이사항 기록 버튼은 오른쪽 기록 패널 헤더로 옮겼다. */}
+                {/* 라운딩·증상 기록 버튼은 오른쪽 기록 패널 헤더로 옮겼다. */}
 
                 {isInProgress && (
                   <button
@@ -4608,57 +4407,53 @@ function App() {
                 {/* ── 오른쪽: 이 환자의 기록 (진행중일 때만) ── */}
                 {isInProgress && (
                   <div className="bed-detail-2col__right">
-                    {/* (A) 환자 주의사항 — 세션을 넘어 유지되는 지속 정보 */}
+                    {/* (A) 이 방문의 특이사항 — 자유텍스트 한 칸, 인라인 편집 */}
                     <section className="rec-block">
                       <div className="rec-block__head">
-                        <h3 className="rec-block__title">환자 주의사항</h3>
-                        <button
-                          type="button"
-                          className="dm-note-btn"
-                          onClick={() => openNoteModal('patient')}
-                          disabled={offline}
-                        >
-                          + 추가
-                        </button>
+                        <h3 className="rec-block__title">특이사항</h3>
+                        {!specialNoteEditing && (
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            onClick={startSpecialNoteEdit}
+                            disabled={offline}
+                          >
+                            {currentBed.specialNote ? '수정' : '추가'}
+                          </button>
+                        )}
                       </div>
-                      {currentBedActiveNotes.length === 0 ? (
-                        <p className="rec-empty">등록된 주의사항이 없습니다</p>
+                      {specialNoteEditing ? (
+                        <div className="special-note__edit">
+                          <textarea
+                            className="field__input special-note__input"
+                            value={specialNoteDraft}
+                            onChange={(e) => setSpecialNoteDraft(e.target.value)}
+                            rows={3}
+                            aria-label="특이사항"
+                            autoFocus
+                          />
+                          <div className="rec-item__actions">
+                            <button
+                              type="button"
+                              className="rec-btn"
+                              onClick={() => setSpecialNoteEditing(false)}
+                            >
+                              취소
+                            </button>
+                            <button
+                              type="button"
+                              className="rec-btn rec-btn--primary"
+                              onClick={handleSaveSpecialNote}
+                              disabled={offline}
+                            >
+                              저장
+                            </button>
+                          </div>
+                        </div>
+                      ) : currentBed.specialNote ? (
+                        <p className="special-note__text">{currentBed.specialNote}</p>
                       ) : (
-                        <ul className="rec-list">
-                          {currentBedActiveNotes.map((n) => (
-                            <li key={n.id} className="rec-item">
-                              <div className="rec-item__main">
-                                <span className={`badge badge--${n.category}`}>
-                                  {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
-                                </span>
-                                <span className="rec-item__text">{n.content}</span>
-                              </div>
-                              <div className="rec-item__foot">
-                                <span className="rec-item__sub">
-                                  근거: {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
-                                </span>
-                                <div className="rec-item__actions">
-                                  <button
-                                    type="button"
-                                    className="rec-btn"
-                                    onClick={() => openNoteModal('patient', n)}
-                                    disabled={offline}
-                                  >
-                                    수정
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rec-btn rec-btn--danger"
-                                    onClick={() => handleDeactivatePatientNote(n)}
-                                    disabled={offline}
-                                  >
-                                    해제
-                                  </button>
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                        <p className="rec-empty">적어둔 특이사항이 없습니다</p>
                       )}
                     </section>
 
@@ -4678,10 +4473,10 @@ function App() {
                           <button
                             type="button"
                             className="dm-note-btn"
-                            onClick={() => openNoteModal('session')}
+                            onClick={() => openNoteModal()}
                             disabled={offline}
                           >
-                            특이사항
+                            증상
                           </button>
                         </div>
                       </div>
@@ -4706,7 +4501,7 @@ function App() {
                                     className="rec-btn"
                                     onClick={() => (ev.round
                                       ? openRoundModal(undefined, ev.round)
-                                      : openNoteModal('session', ev.note))}
+                                      : openNoteModal(ev.note))}
                                     disabled={offline}
                                   >
                                     수정
@@ -4820,7 +4615,7 @@ function App() {
         <div className={`modal-overlay modal-overlay--top${noteModalClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <h2>특이사항 기록</h2>
+              <h2>증상 기록</h2>
               <button
                 type="button"
                 className="modal__close"
@@ -4831,24 +4626,7 @@ function App() {
               </button>
             </div>
 
-            <div className="note-segment">
-              <button
-                type="button"
-                className={`note-segment__btn${noteTab === 'session' ? ' note-segment__btn--active' : ''}`}
-                onClick={() => setNoteTab('session')}
-              >
-                금일 특이사항
-              </button>
-              <button
-                type="button"
-                className={`note-segment__btn${noteTab === 'patient' ? ' note-segment__btn--active' : ''}`}
-                onClick={() => setNoteTab('patient')}
-              >
-                환자 주의사항
-              </button>
-            </div>
-
-            {noteTab === 'session' ? (
+            {(
               <div className="modal__body">
                 <OccurredAtPicker valueMs={noteOccurredAt} onChange={setNoteOccurredAt} nowMs={now} />
                 <p className="note-elapsed">
@@ -4907,60 +4685,6 @@ function App() {
                   className="btn-register"
                   onClick={handleSaveSessionNote}
                   disabled={offline || (noteSymptoms.length === 0 && noteActions.length === 0 && !noteMemo.trim())}
-                >
-                  저장
-                </button>
-              </div>
-            ) : (
-              <div className="modal__body">
-                <div className="field">
-                  <span className="field__label">분류</span>
-                  <div className="chip-group">
-                    {NOTE_CATEGORY_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        className={`chip chip--category-${opt.code}${noteCategory === opt.code ? ' chip--active' : ''}`}
-                        onClick={() => setNoteCategory(opt.code)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="field">
-                  <span className="field__label">내용</span>
-                  <input
-                    type="text"
-                    className="field__input"
-                    value={noteContent}
-                    onChange={(e) => setNoteContent(e.target.value)}
-                    placeholder="예: 특정 항생제 부작용 이력"
-                  />
-                </label>
-
-                <div className="field">
-                  <span className="field__label">출처</span>
-                  <div className="chip-group">
-                    {NOTE_SOURCE_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        className={`chip${noteSource === opt.code ? ' chip--active' : ''}`}
-                        onClick={() => setNoteSource(opt.code)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn-register"
-                  onClick={handleSavePatientNote}
-                  disabled={offline || !noteContent.trim()}
                 >
                   저장
                 </button>
@@ -5117,129 +4841,6 @@ function App() {
         </div>
       )}
 
-      {briefingHeld && currentBed && (() => {
-        const chartNumber = currentBed.chartNumber
-        const activeNotes = getActivePatientNotes(patientNotes, chartNumber)
-        const recentSessionNotes = getRecentSessionNotes(sessionNotes, chartNumber, 5)
-        const { count: pastVisitCount, lastVisitDate } = getPatientVisitInfo(
-          activeHistory,
-          chartNumber,
-        )
-        const isFirstVisit =
-          pastVisitCount === 0 && activeNotes.length === 0 && recentSessionNotes.length === 0
-
-        return (
-          <div className={`modal-overlay modal-overlay--top${briefingClosing ? ' modal-overlay--closing' : ''}`}>
-            <div className="modal modal--briefing" onClick={(e) => e.stopPropagation()}>
-              <div className="modal__header">
-                <div className="briefing__identity">
-                  <h2>{currentBed.patientName}</h2>
-                  <p className="briefing__sub">
-                    {chartNumber}
-                    {!isFirstVisit && ` · ${pastVisitCount + 1}번째 방문`}
-                    {!isFirstVisit && lastVisitDate && ` · 최근 방문 ${lastVisitDate}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="modal__close"
-                  onClick={handleBriefingDismiss}
-                  aria-label="닫기"
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
-
-              {isFirstVisit ? (
-                <div className="modal__body briefing__empty">
-                  <p className="briefing__empty-message">
-                    첫 방문입니다.
-                    <br />
-                    특이사항이 있으면 지금 등록하세요.
-                  </p>
-                  <div className="briefing__empty-actions">
-                    <button
-                      type="button"
-                      className="btn-skip-note"
-                      onClick={handleBriefingDismiss}
-                    >
-                      주의사항 없음
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-add-note"
-                      onClick={handleAddNoteFromBriefing}
-                    >
-                      주의사항 등록
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="modal__body">
-                  {activeNotes.length > 0 && (
-                    <div className="briefing__section">
-                      <h3 className="briefing__section-title">환자 주의사항</h3>
-                      <ul className="briefing__note-list">
-                        {activeNotes.map((n) => (
-                          <li key={n.id} className="briefing__note">
-                            <div className="briefing__note-head">
-                              <span className={`badge badge--${n.category}`}>
-                                {NOTE_CATEGORY_OPTIONS.find((o) => o.code === n.category)?.label}
-                              </span>
-                              <span className="briefing__note-content">{n.content}</span>
-                            </div>
-                            <p className="briefing__note-source">
-                              근거:{' '}
-                              {NOTE_SOURCE_OPTIONS.find((o) => o.code === n.source)?.label}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {recentSessionNotes.length > 0 && (
-                    <div className="briefing__section">
-                      <h3 className="briefing__section-title">최근 이용 이력</h3>
-                      <ul className="briefing__history-list">
-                        {recentSessionNotes.map((n) => (
-                          <li key={n.id}>{formatSessionNoteLine(n)}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="briefing__actions">
-                    <div className="briefing__actions-left">
-                      <button
-                        type="button"
-                        className="btn-briefing-secondary"
-                        onClick={handleAddNoteFromBriefing}
-                      >
-                        주의사항 추가
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-briefing-secondary"
-                        onClick={handleGoFullHistory}
-                      >
-                        전체 기록
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-register briefing__confirm"
-                      onClick={handleBriefingDismiss}
-                    >
-                      확인하고 수액 시작
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ── 받은 쪽지 카드 (누적·드래그) ── */}
       {inboxMessages.length > 0 && (

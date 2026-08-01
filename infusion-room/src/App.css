@@ -4289,3 +4289,14 @@
    (대비는 흰 배경이 아니라 틴트가 깔린 실제 배경 기준으로 계산 — patch17·쪽지 배지와 같은 함정) */
 :root[data-theme='light'] .app .rec-kind--note{ color:#70420a }
 :root[data-theme='light'] .app .rec-kind--round{ color:#145a26 }
+
+/* 방문 특이사항 — 등록 모달 입력칸 / 상세의 표시·인라인 편집 */
+.special-note__input{ box-sizing:border-box; width:100%; resize:vertical; font:inherit; line-height:1.5; min-height:60px; max-height:30vh }
+.special-note__text{
+  margin:0; font-size:13px; line-height:1.5; color:var(--text-primary);
+  white-space:pre-wrap; word-break:break-word;
+  background:var(--card-bg); border:1px solid var(--card-border);
+  border-radius:10px; padding:10px 12px;
+}
+.special-note__edit{ display:flex; flex-direction:column; gap:8px }
+.rec-btn--primary{ background:var(--status-occupied); border-color:transparent; color:#fff }

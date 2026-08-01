@@ -83,6 +83,7 @@ function mapBoardToBeds(board) {
       durationMinutes: s.duration_minutes,
       sessionId: s.id,
       assignedAt: s.assigned_at,
+      specialNote: s.special_note ?? null,
       lineStaff: s.line_staff,
       mixStaff: s.mix_staff,
       overdue: status === 'reserved' && serverNow - s.assigned_at > assignTimeoutMs,
@@ -169,12 +170,21 @@ export function logPatientDetailView(chartNo) {
     .catch((err) => console.error('환자 조회 로그 기록 실패', err))
 }
 
-export async function assignBed({ bedCode, chartNo, patientName, lineStaffId }) {
+export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote }) {
   return apiFetch('/sessions/assign', {
     method: 'POST',
     body: JSON.stringify({
       bed_code: bedCode, chart_no: chartNo, patient_name: patientName, line_staff_id: lineStaffId,
+      special_note: specialNote,
     }),
+  })
+}
+
+// 이 방문의 특이사항 편집(2단 상세 오른쪽 패널).
+export async function editSessionSpecialNote(sessionId, specialNote) {
+  return apiFetch(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ special_note: specialNote }),
   })
 }
 
@@ -261,6 +271,7 @@ function mapHistoryRow(row) {
     startTime: new Date(row.started_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     endTime: new Date(row.ended_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     usedMinutes: Math.round((row.ended_at - row.started_at) / 60000),
+    specialNote: row.special_note ?? null,
     deleted: !!row.deleted,
   }
 }
