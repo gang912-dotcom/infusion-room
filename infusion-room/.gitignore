@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 server/data/*.db*
+# 열린 채로 지워진 SQLite 보조파일(-shm/-wal)이 남기는 흔적 — 서버를 강제 종료하면 생긴다.
+# 데이터가 아니라 찌꺼기이므로 추적하지 않는다.
+server/data/.fuse_hidden*
 server/.env
 
 # Editor directories and files
