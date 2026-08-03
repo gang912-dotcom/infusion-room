@@ -31,6 +31,11 @@ if (!sessionColumns.includes('visit_symptom')) {
   db.exec('ALTER TABLE sessions ADD COLUMN visit_symptom TEXT')
 }
 
+// 발침 담당 — 종료(라인 제거) 시 기록한다. 라인·믹스 담당과 같은 staff 참조.
+if (!sessionColumns.includes('end_staff_id')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN end_staff_id INTEGER REFERENCES staff(id)')
+}
+
 // 종료 시 얼린 기록지 데이터(JSON). 종료 후 원본을 고쳐도 공식본은 이 값이 남는다.
 if (!sessionColumns.includes('record_snapshot')) {
   db.exec('ALTER TABLE sessions ADD COLUMN record_snapshot TEXT')

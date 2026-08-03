@@ -11,12 +11,18 @@ const sessionStmt = db.prepare(`
   SELECT s.*,
          p.chart_no, p.name AS patient_name,
          b.room, b.number AS bed_number,
-         ls.name AS line_staff_name, ms.name AS mix_staff_name
+         ls.name AS line_staff_name, ms.name AS mix_staff_name,
+         es.name AS end_staff_name,
+         pm.note AS patient_memo
   FROM sessions s
   JOIN patients p ON p.id = s.patient_id
   JOIN beds b ON b.id = s.bed_id
   JOIN staff ls ON ls.id = s.line_staff_id
   LEFT JOIN staff ms ON ms.id = s.mix_staff_id
+  -- 발침 담당은 이 기능 이전에 종료된 세션엔 없다(LEFT JOIN → NULL).
+  LEFT JOIN staff es ON es.id = s.end_staff_id
+  -- 환자 메모는 차트번호 기준. 종료 시점의 값이 스냅샷에 그대로 굳는다.
+  LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
   WHERE s.id = ?
 `)
 
@@ -87,9 +93,12 @@ export function buildSessionRecord(sessionId) {
     line_staff_name: s.line_staff_name,
     mix_staff_id: s.mix_staff_id,
     mix_staff_name: s.mix_staff_name,
+    end_staff_id: s.end_staff_id,
+    end_staff_name: s.end_staff_name,
 
     visit_symptom: s.visit_symptom,
     special_note: s.special_note,
+    patient_memo: s.patient_memo,
 
     // 체크된 항목만. 라벨은 이 시점 값으로 문자열로 굳는다 — 나중에 관리자가
     // 라벨을 바꿔도 과거 기록지는 그대로다.

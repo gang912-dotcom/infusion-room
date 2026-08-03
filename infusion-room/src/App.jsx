@@ -3698,6 +3698,8 @@ function App() {
   }, [activeTab])
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
+  // 발침 담당(라인 제거 직원) — 종료 확인 모달에서 고른다. 필수.
+  const [endStaffId, setEndStaffId] = useState('')
   // 베드 상세에서 종료를 누른 경우, 종료를 취소하면 되돌아갈 베드. (완료 카드 직접 클릭이면 null)
   const [cleanupReopenBed, setCleanupReopenBed] = useState(null)
   const [patientName, setPatientName] = useState('')
@@ -4296,6 +4298,7 @@ function App() {
       return
     }
     if (bed.status === 'completed') {
+      setEndStaffId('') // 종료 확인마다 발침 담당을 새로 고르게 한다
       setCleanupBed(bed)
       return
     }
@@ -4329,6 +4332,7 @@ function App() {
     if (!currentBed) return
     setCleanupReopenBed(currentBed)
     setSelectedBed(null)
+    setEndStaffId('') // 종료할 때마다 새로 고르게 한다(직전 선택이 남아 오선택되면 안 됨)
     setCleanupBed(currentBed)
   }
 
@@ -4345,7 +4349,7 @@ function App() {
     if (!cleanupBed) return
     const endTime = now
     try {
-      await endSession(cleanupBed.sessionId, endTime)
+      await endSession(cleanupBed.sessionId, endTime, Number(endStaffId))
       await refreshBoard()
       await refreshRecords()
       closeModal()
@@ -5196,6 +5200,21 @@ function App() {
               <p className="confirm__message">
                 이용을 종료하시겠습니까?
               </p>
+              {/* 발침 담당 — 라인을 제거한 직원. 고르기 전엔 '예'가 안 눌린다. */}
+              <label className="field confirm__field">
+                <span className="field__label">발침 담당</span>
+                <select
+                  className="field__input"
+                  value={endStaffId}
+                  onChange={(e) => setEndStaffId(e.target.value)}
+                >
+                  <option value="" disabled>선택</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              {actionError && <p role="alert" className="field__error">{actionError}</p>}
               <div className="confirm__actions">
                 <button
                   type="button"
@@ -5208,7 +5227,7 @@ function App() {
                   type="button"
                   className="btn-confirm btn-confirm--yes"
                   onClick={handleCleanupYes}
-                  disabled={offline}
+                  disabled={offline || !endStaffId}
                 >
                   예
                 </button>

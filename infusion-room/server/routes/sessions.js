@@ -248,6 +248,13 @@ router.post('/sessions/:id/end', (req, res) => {
     return res.status(400).json({ error: '시작되지 않은 세션은 종료할 수 없습니다. 배정 취소를 사용하세요' })
   }
 
+  // 발침 담당(라인 제거 직원)은 라인·믹스 담당과 같은 필수 항목이다.
+  const endStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1')
+    .get(req.body?.end_staff_id)
+  if (!endStaff) {
+    return res.status(400).json({ error: '발침 담당을 선택해주세요' })
+  }
+
   const now = Date.now()
   const endedAt = req.body?.ended_at !== undefined ? Number(req.body.ended_at) : now
   try {
@@ -259,7 +266,9 @@ router.post('/sessions/:id/end', (req, res) => {
   // 종료 처리와 스냅샷 저장을 한 트랜잭션에 묶는다 — 종료됐는데 공식본이 없는 상태가
   // 생기면 안 된다. 조립은 즉석 조회와 같은 함수를 쓴다(미리보기와 종료본이 어긋나지 않게).
   db.transaction(() => {
-    db.prepare('UPDATE sessions SET ended_at = ?, ended_by = ? WHERE id = ?').run(endedAt, req.account.id, session.id)
+    db.prepare('UPDATE sessions SET ended_at = ?, ended_by = ?, end_staff_id = ? WHERE id = ?')
+      .run(endedAt, req.account.id, endStaff.id, session.id)
+    // 스냅샷은 end_staff_id가 들어간 뒤에 만들어야 발침 담당이 함께 굳는다.
     const record = buildSessionRecord(session.id)
     db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?').run(JSON.stringify(record), session.id)
   })()

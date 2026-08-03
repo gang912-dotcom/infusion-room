@@ -4614,3 +4614,10 @@
   border-left: 4px solid var(--status-warning);
   border-radius: 8px;
 }
+
+/* 종료 확인 모달의 발침 담당 선택 — 확인 문구와 버튼 사이. */
+.confirm__field {
+  width: 100%;
+  margin: 4px 0 12px;
+  text-align: left;
+}

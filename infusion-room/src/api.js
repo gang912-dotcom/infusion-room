@@ -317,10 +317,14 @@ export function releaseBedLock(bedCode) {
     .catch((err) => console.error('등록 잠금 해제 실패', err))
 }
 
-export async function endSession(sessionId, endedAt) {
+// 발침 담당(endStaffId)은 필수다 — 서버가 없으면 400을 준다.
+export async function endSession(sessionId, endedAt, endStaffId) {
   return apiFetch(`/sessions/${sessionId}/end`, {
     method: 'POST',
-    body: JSON.stringify(endedAt !== undefined ? { ended_at: endedAt } : {}),
+    body: JSON.stringify({
+      ...(endedAt !== undefined ? { ended_at: endedAt } : {}),
+      end_staff_id: endStaffId,
+    }),
   })
 }
 
