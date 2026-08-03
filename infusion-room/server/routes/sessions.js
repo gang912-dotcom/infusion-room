@@ -248,11 +248,11 @@ router.post('/sessions/:id/end', (req, res) => {
     return res.status(400).json({ error: '시작되지 않은 세션은 종료할 수 없습니다. 배정 취소를 사용하세요' })
   }
 
-  // 발침 담당(라인 제거 직원)은 라인·믹스 담당과 같은 필수 항목이다.
+  // 라인 제거 담당자는 라인·믹스 담당과 같은 필수 항목이다.
   const endStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1')
     .get(req.body?.end_staff_id)
   if (!endStaff) {
-    return res.status(400).json({ error: '발침 담당을 선택해주세요' })
+    return res.status(400).json({ error: '라인 제거 담당자를 선택해주세요' })
   }
 
   const now = Date.now()
@@ -268,7 +268,7 @@ router.post('/sessions/:id/end', (req, res) => {
   db.transaction(() => {
     db.prepare('UPDATE sessions SET ended_at = ?, ended_by = ?, end_staff_id = ? WHERE id = ?')
       .run(endedAt, req.account.id, endStaff.id, session.id)
-    // 스냅샷은 end_staff_id가 들어간 뒤에 만들어야 발침 담당이 함께 굳는다.
+    // 스냅샷은 end_staff_id가 들어간 뒤에 만들어야 라인 제거 담당자가 함께 굳는다.
     const record = buildSessionRecord(session.id)
     db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?').run(JSON.stringify(record), session.id)
   })()
@@ -290,7 +290,7 @@ router.get('/history', (req, res) => {
     JOIN patients p ON p.id = s.patient_id
     LEFT JOIN staff ls ON ls.id = s.line_staff_id
     LEFT JOIN staff ms ON ms.id = s.mix_staff_id
-    -- 발침 담당은 이 기능 이전 종료분엔 없다. 환자 메모는 차트번호 기준(현재값).
+    -- 라인 제거 담당자는 이 기능 이전 종료분엔 없다. 환자 메모는 차트번호 기준(현재값).
     LEFT JOIN staff es ON es.id = s.end_staff_id
     LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
     WHERE s.ended_at IS NOT NULL

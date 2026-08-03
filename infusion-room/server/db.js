@@ -31,7 +31,7 @@ if (!sessionColumns.includes('visit_symptom')) {
   db.exec('ALTER TABLE sessions ADD COLUMN visit_symptom TEXT')
 }
 
-// 발침 담당 — 종료(라인 제거) 시 기록한다. 라인·믹스 담당과 같은 staff 참조.
+// 라인 제거 담당자 — 종료 시 라인을 뽑은 직원을 기록한다. 라인·믹스 담당과 같은 staff 참조.
 if (!sessionColumns.includes('end_staff_id')) {
   db.exec('ALTER TABLE sessions ADD COLUMN end_staff_id INTEGER REFERENCES staff(id)')
 }

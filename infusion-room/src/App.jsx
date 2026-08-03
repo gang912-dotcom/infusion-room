@@ -885,7 +885,7 @@ function xOrdersText(orders = []) {
 function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
   const headers = [
     '날짜', '진료실', '수액실', '베드', '환자명', '차트번호',
-    '라인담당', '믹스담당', '발침담당',
+    '라인담당', '믹스담당', '라인 제거',
     '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항', '환자메모', '수액처방',
     '증상', '라운딩', '바이탈',
   ]
@@ -923,7 +923,7 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
       h.examRoom ? `${h.examRoom}진료실` : null,
       h.lineStaff ? `라인 ${h.lineStaff}` : null,
       h.mixStaff ? `믹스 ${h.mixStaff}` : null,
-      h.endStaff ? `발침 ${h.endStaff}` : null,
+      h.endStaff ? `라인 제거 ${h.endStaff}` : null,
     ].filter(Boolean).join(' · ')
     rows.push([h.date, h.startTime, '이용', h.room, h.bedNumber,
       `수액 이용 (${formatDuration(h.usedMinutes)})`,
@@ -966,6 +966,19 @@ function openRecordSheet(record) {
     value ? `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>` : ''
   )
 
+  // 담당자 행 — 다른 필드와 같은 라벨+값 인라인이되, 값 자리에 서명 이미지를
+  // 이름 글자 크기로 넣는다(하단 서명블록을 대체).
+  // 서명이 없으면 이름 텍스트로 폴백하고, 담당자 자체가 없으면(기존 종료분의 라인 제거 담당자,
+  // 아직 시작 전인 믹스담당 등) '—'로 둔다 — 행을 숨기면 빈 자리인지 미지정인지 알 수 없다.
+  const staffRow = (label, name, signature) => {
+    const value = !name
+      ? '—'
+      : signature
+        ? `<img class="sign-inline" src="${esc(signature)}" alt="${esc(name)} 서명">`
+        : esc(name)
+    return `<tr><th>${esc(label)}</th><td>${value}</td></tr>`
+  }
+
   const ordersHtml = record.orders.length
     ? `<ul class="orders">${record.orders.map((o) =>
       `<li>${esc(o.label)}${o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : ''}</li>`).join('')}</ul>`
@@ -996,12 +1009,6 @@ function openRecordSheet(record) {
       `<li><span class="tt">${esc(t(e.t))}</span><span class="kk">${esc(e.kind)}</span><span class="cc">${esc(e.text)}</span></li>`).join('')}</ul>`
     : '<p class="none">라운딩·증상 기록 없음</p>'
 
-  const signCell = (name, signature) => `<div class="sign">
-      <div class="sign__role">${esc(name.role)}</div>
-      <div class="sign__img">${signature ? `<img src="${esc(signature)}" alt="${esc(name.value)} 서명">` : ''}</div>
-      <div class="sign__name">${esc(name.value || '—')}</div>
-    </div>`
-
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <title>수액 간호 기록지 — ${esc(record.patient_name)}(${esc(record.chart_no)})</title>
   <style>
@@ -1031,12 +1038,9 @@ function openRecordSheet(record) {
     .tt{font-variant-numeric:tabular-nums;font-weight:700;min-width:46px}
     .kk{font-size:11px;padding:1px 6px;border:1px solid #bbb;border-radius:8px;flex:none;color:#444}
     .none{color:#999;font-size:13px;margin:0}
-    .signs{display:flex;gap:28px;margin-top:10px}
-    .sign{flex:1;text-align:center}
-    .sign__role{font-size:12px;color:#555;font-weight:700;margin-bottom:4px}
-    .sign__img{height:52px;display:flex;align-items:flex-end;justify-content:center}
-    .sign__img img{max-height:52px;max-width:100%;object-fit:contain}
-    .sign__name{border-top:1px solid #333;margin-top:4px;padding-top:4px;font-size:14px;font-weight:600}
+    /* 담당자 서명 — 이름 글자가 차지하던 만큼(본문 14px 기준 약 20px)만 쓴다.
+       폭이 긴 서명은 max-width로 줄여 표 열이 밀리지 않게 한다. */
+    img.sign-inline{height:20px;width:auto;max-width:120px;vertical-align:middle;object-fit:contain}
     .toolbar{position:sticky;top:0;text-align:right;margin-bottom:12px}
     .toolbar button{font:inherit;font-weight:700;padding:8px 16px;border:0;border-radius:8px;
       background:#4c8bf5;color:#fff;cursor:pointer}
@@ -1057,18 +1061,15 @@ function openRecordSheet(record) {
       ${row('차트번호', record.chart_no)}
       ${row('진료실', record.exam_room ? `${record.exam_room}진료실` : '')}
       ${row('수액실', `${roomLabel} ${record.bed_number}번`)}
-      ${row('라인담당', record.line_staff_name)}
-      ${row('믹스담당', record.mix_staff_name)}
+      ${staffRow('라인담당', record.line_staff_name, record.line_signature)}
+      ${staffRow('믹스담당', record.mix_staff_name, record.mix_signature)}
+      ${staffRow('라인 제거', record.end_staff_name, record.end_signature)}
     </table>
 
     <h2>시간</h2>
     <table class="info">
       ${row('시작', t(record.started_at))}
-      ${/* 발침 담당은 종료시간 옆에 함께 — 라인을 뽑은 사람이 곧 종료한 사람이다.
-           이 기능 이전에 종료된 세션은 이름이 없어 시각만 나간다. */ ''}
-      ${row('종료', record.end_staff_name
-        ? `${t(record.ended_at)} (발침 ${record.end_staff_name})`
-        : t(record.ended_at))}
+      ${row('종료', t(record.ended_at))}
       ${row('이용시간', record.used_minutes != null ? formatDuration(record.used_minutes) : '')}
     </table>
 
@@ -1084,12 +1085,6 @@ function openRecordSheet(record) {
 
     <h2>라운딩 · 증상 기록</h2>
     ${timelineHtml}
-
-    <h2>담당자</h2>
-    <div class="signs">
-      ${signCell({ role: '라인담당', value: record.line_staff_name }, record.line_signature)}
-      ${signCell({ role: '믹스담당', value: record.mix_staff_name }, record.mix_signature)}
-    </div>
   </body></html>`
 
   const w = window.open('', '_blank')
@@ -3722,7 +3717,7 @@ function App() {
   }, [activeTab])
   const [selectedBed, setSelectedBed] = useState(null)
   const [cleanupBed, setCleanupBed] = useState(null)
-  // 발침 담당(라인 제거 직원) — 종료 확인 모달에서 고른다. 필수.
+  // 라인 제거 담당자 — 종료 확인 모달에서 고른다. 필수.
   const [endStaffId, setEndStaffId] = useState('')
   // 베드 상세에서 종료를 누른 경우, 종료를 취소하면 되돌아갈 베드. (완료 카드 직접 클릭이면 null)
   const [cleanupReopenBed, setCleanupReopenBed] = useState(null)
@@ -4322,7 +4317,7 @@ function App() {
       return
     }
     if (bed.status === 'completed') {
-      setEndStaffId('') // 종료 확인마다 발침 담당을 새로 고르게 한다
+      setEndStaffId('') // 종료 확인마다 라인 제거 담당자를 새로 고르게 한다
       setCleanupBed(bed)
       return
     }
@@ -5243,9 +5238,9 @@ function App() {
               <p className="confirm__message">
                 이용을 종료하시겠습니까?
               </p>
-              {/* 발침 담당 — 라인을 제거한 직원. 고르기 전엔 '예'가 안 눌린다. */}
+              {/* 라인 제거 — 라인을 뽑은 직원. 고르기 전엔 '예'가 안 눌린다. */}
               <label className="field confirm__field">
-                <span className="field__label">발침 담당</span>
+                <span className="field__label">라인 제거</span>
                 <select
                   className="field__input"
                   value={endStaffId}

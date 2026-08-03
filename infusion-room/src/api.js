@@ -317,7 +317,7 @@ export function releaseBedLock(bedCode) {
     .catch((err) => console.error('등록 잠금 해제 실패', err))
 }
 
-// 발침 담당(endStaffId)은 필수다 — 서버가 없으면 400을 준다.
+// 라인 제거 담당자(endStaffId)은 필수다 — 서버가 없으면 400을 준다.
 export async function endSession(sessionId, endedAt, endStaffId) {
   return apiFetch(`/sessions/${sessionId}/end`, {
     method: 'POST',

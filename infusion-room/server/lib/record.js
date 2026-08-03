@@ -19,7 +19,7 @@ const sessionStmt = db.prepare(`
   JOIN beds b ON b.id = s.bed_id
   JOIN staff ls ON ls.id = s.line_staff_id
   LEFT JOIN staff ms ON ms.id = s.mix_staff_id
-  -- 발침 담당은 이 기능 이전에 종료된 세션엔 없다(LEFT JOIN → NULL).
+  -- 라인 제거 담당자는 이 기능 이전에 종료된 세션엔 없다(LEFT JOIN → NULL).
   LEFT JOIN staff es ON es.id = s.end_staff_id
   -- 환자 메모는 차트번호 기준. 종료 시점의 값이 스냅샷에 그대로 굳는다.
   LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
@@ -134,5 +134,6 @@ export function attachSignatures(record) {
     ...record,
     line_signature: record.line_staff_id ? signatureStmt.get(record.line_staff_id)?.signature ?? null : null,
     mix_signature: record.mix_staff_id ? signatureStmt.get(record.mix_staff_id)?.signature ?? null : null,
+    end_signature: record.end_staff_id ? signatureStmt.get(record.end_staff_id)?.signature ?? null : null,
   }
 }
