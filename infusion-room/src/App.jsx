@@ -25,6 +25,7 @@ import {
   getSessionRecord, getPatientMemo, savePatientMemo,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
+  deleteAdminMessage, deleteAdminBroadcast,
 } from './api'
 
 // 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
@@ -2593,7 +2594,8 @@ function StaffManageSection({ offline }) {
 }
 
 // ─── 관리자 설정 — 운영 설정값 ────────────────────────────────────
-// 쪽지 로그 — 관리자 전용 읽기 전용 감사 화면. 직원 화면의 10분 휘발과 무관하게 전부 남는다.
+// 쪽지 로그 — 관리자 전용 감사 화면. 직원 화면의 10분 휘발과 무관하게 전부 남는다.
+// 내용 수정은 없고 삭제만 된다(완전 삭제, 되돌릴 수 없음).
 function formatMessageStamp(ts) {
   const d = new Date(ts)
   const date = d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -2611,6 +2613,9 @@ function MessageLogSection() {
   // (react-hooks/set-state-in-effect 베이스라인을 넘기지 않기 위해서이기도 하다).
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // 삭제 후 목록을 다시 받기 위한 트리거. 필터·페이지가 그대로여도 갱신되게 한다.
+  const [reloadKey, setReloadKey] = useState(0)
+  const [busyId, setBusyId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -2619,7 +2624,22 @@ function MessageLogSection() {
       .catch((err) => { if (!cancelled) setError(err.message ?? '쪽지 로그를 불러오지 못했습니다') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [from, to, offset])
+  }, [from, to, offset, reloadKey])
+
+  // 완전 삭제라 되돌릴 수 없다 — 무엇을 지우는지 밝혀 한 번 확인받는다.
+  async function handleDelete(label, run) {
+    if (!window.confirm(`${label}\n\n완전히 삭제됩니다. 되돌릴 수 없습니다. 계속할까요?`)) return
+    setBusyId(label)
+    setError('')
+    try {
+      await run()
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setError(err.message ?? '삭제하지 못했습니다')
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   // 전체발송은 broadcast_id로 묶어 한 건처럼 보여준다(펼치면 개별 대상).
   const groups = []
@@ -2673,6 +2693,17 @@ function MessageLogSection() {
                   <span className="msg-log__time">{formatMessageStamp(g.row.created_at)}</span>
                   <span className="msg-log__who">{g.row.from_name} → {g.row.to_name}</span>
                   {g.row.read_at && <span className="msg-log__read">읽음</span>}
+                  <button
+                    type="button"
+                    className="dm-note-btn msg-log__del"
+                    disabled={busyId !== null}
+                    onClick={() => handleDelete(
+                      `${g.row.from_name} → ${g.row.to_name} 쪽지 1건`,
+                      () => deleteAdminMessage(g.row.id),
+                    )}
+                  >
+                    삭제
+                  </button>
                 </div>
                 <p className="msg-log__content">{g.row.content}</p>
               </li>
@@ -2682,6 +2713,17 @@ function MessageLogSection() {
                   <span className="msg-log__time">{formatMessageStamp(g.rows[0].created_at)}</span>
                   <span className="msg-log__who">{g.rows[0].from_name} → </span>
                   <span className="msg-log__badge">전체발송 ({g.rows.length}명)</span>
+                  <button
+                    type="button"
+                    className="dm-note-btn msg-log__del"
+                    disabled={busyId !== null}
+                    onClick={() => handleDelete(
+                      `${g.rows[0].from_name}의 전체발송 (수신 ${g.rows.length}명)`,
+                      () => deleteAdminBroadcast(g.id),
+                    )}
+                  >
+                    삭제
+                  </button>
                 </div>
                 <p className="msg-log__content">{g.rows[0].content}</p>
                 <details className="msg-log__targets">

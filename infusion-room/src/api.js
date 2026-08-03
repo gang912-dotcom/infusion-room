@@ -631,6 +631,16 @@ export async function getAdminMessages(params = {}) {
   return apiFetch(`/admin/messages${q ? `?${q}` : ''}`)
 }
 
+// 쪽지 로그 삭제 — 소프트 삭제가 아니라 완전 삭제라 되돌릴 수 없다.
+export async function deleteAdminMessage(id) {
+  return apiFetch(`/admin/messages/${id}`, { method: 'DELETE' })
+}
+
+// 전체발송은 수신자마다 row가 있어 묶음 단위로 지운다(화면도 한 건으로 보여준다).
+export async function deleteAdminBroadcast(broadcastId) {
+  return apiFetch(`/admin/messages/broadcast/${encodeURIComponent(broadcastId)}`, { method: 'DELETE' })
+}
+
 // ─── 바이탈(체온·혈압·맥박) ─────────────────────────────────────────
 // 라운딩과 별개로 자유 빈도 기록. 한 번에 잰 항목만 담기고 나머지는 NULL.
 function mapVitalsRow(row) {

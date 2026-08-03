@@ -207,7 +207,9 @@ CREATE TABLE IF NOT EXISTS bed_locks (
 
 -- ─── 쪽지 메신저 ─────────────────────────────────────────────────────
 -- 계정 간 1:1 쪽지. 직원 화면은 발송 후 10분만 노출(휘발), 이 테이블은 영구 보관(관리자 감사).
--- 삭제 개념 없음 — 휘발은 "조회에서 제외"일 뿐 row는 남는다.
+-- 휘발은 "조회에서 제외"일 뿐 row는 남는다.
+-- 단, 관리자는 데이터 관리 화면에서 로그를 완전 삭제할 수 있다(사용자 결정).
+-- 소프트 삭제가 아니라 실제 DELETE라 되돌릴 수 없다 — 지운 행위는 access_logs에 남는다.
 CREATE TABLE IF NOT EXISTS messages (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   from_account INTEGER NOT NULL REFERENCES accounts(id),

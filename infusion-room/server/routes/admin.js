@@ -139,8 +139,9 @@ router.patch('/staff/:id', (req, res) => {
   res.json({ ok: true })
 })
 
-// ─── 쪽지 로그 (읽기 전용 감사) ─────────────────────────────────────
-// 직원 화면의 10분 휘발과 무관하게 주고받은 전부를 보여준다. 편집·삭제 없음.
+// ─── 쪽지 로그 (감사) ───────────────────────────────────────────────
+// 직원 화면의 10분 휘발과 무관하게 주고받은 전부를 보여준다.
+// 내용 수정은 없고 삭제만 가능하다 — 본문을 고칠 수 있으면 감사 기록의 의미가 없어지므로.
 router.get('/messages', (req, res) => {
   const { from, to, account, limit = 200, offset = 0 } = req.query ?? {}
 
@@ -178,6 +179,29 @@ router.get('/messages', (req, res) => {
 })
 
 // ─── settings ───────────────────────────────────────────────────────
+// 전체발송 묶음 삭제 — 화면이 broadcast_id로 묶어 '한 건'으로 보여주므로 삭제도 묶음 단위다.
+// 수신자마다 row가 하나씩이라 개별로 지우게 하면 8명이면 8번을 눌러야 한다.
+// (경로가 3세그먼트라 아래 '/messages/:id'와 겹치지 않는다.)
+router.delete('/messages/broadcast/:broadcastId', (req, res) => {
+  const info = db.prepare('DELETE FROM messages WHERE broadcast_id = ?').run(req.params.broadcastId)
+  if (info.changes === 0) {
+    return res.status(404).json({ error: '존재하지 않는 전체발송입니다' })
+  }
+  logAccess(req, ACTIONS.MESSAGE_DELETE, { targetType: 'message_broadcast' })
+  res.json({ ok: true, deleted: info.changes })
+})
+
+// 개별 쪽지 삭제 — 소프트 삭제가 아니라 실제 DELETE라 되돌릴 수 없다(사용자 결정).
+// 감사 기록을 지우는 행위라 access_logs에 남긴다.
+router.delete('/messages/:id', (req, res) => {
+  const msg = db.prepare('SELECT id FROM messages WHERE id = ?').get(req.params.id)
+  if (!msg) return res.status(404).json({ error: '존재하지 않는 쪽지입니다' })
+
+  db.prepare('DELETE FROM messages WHERE id = ?').run(msg.id)
+  logAccess(req, ACTIONS.MESSAGE_DELETE, { targetType: 'message', targetId: msg.id })
+  res.json({ ok: true })
+})
+
 router.get('/settings', (req, res) => {
   res.json(db.prepare('SELECT key, value, updated_at FROM settings ORDER BY key').all())
 })

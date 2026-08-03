@@ -4649,3 +4649,6 @@
 
 .btn-extend:hover { border-color: var(--status-occupied); }
 .btn-extend:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 쪽지 로그 삭제 버튼 — 메타 줄 오른쪽 끝으로 밀어 내용과 겹치지 않게. */
+.msg-log__del { margin-left: auto; }

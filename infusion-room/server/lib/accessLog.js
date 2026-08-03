@@ -7,6 +7,8 @@ export const ACTIONS = {
   LOGIN: 'login',
   PATIENT_VIEW: 'patient_view',
   ACCOUNT_CHANGE: 'account_change',
+  // 쪽지 로그는 감사 기록인데 관리자가 지울 수 있게 됐다 — 지운 행위 자체는 남겨야 한다.
+  MESSAGE_DELETE: 'message_delete',
   // 아직 앱에 내보내기 기능이 없다. 기능이 생기면 그 자리에서 이 값으로 기록하면 된다.
   EXPORT: 'export',
 }
