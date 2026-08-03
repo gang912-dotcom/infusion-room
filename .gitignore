@@ -4,3 +4,7 @@
 /tools/
 /logs/
 .DS_Store
+
+# Claude Code 플러그인(oh-my-claudecode) 작업 상태 — 도구 캐시지 프로젝트 파일이 아니다.
+# 작업 디렉토리를 옮겨 다니면 하위 폴더에도 생기므로 경로를 고정하지 않는다.
+.omc/
