@@ -13,7 +13,7 @@ import {
   getPatientSessionNotes,
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
-  assignBed, editSessionSpecialNote, editSessionExamRoom, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  assignBed, editSessionSpecialNote, editSessionExamRoom, editSessionVisitSymptom, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
@@ -2856,6 +2856,10 @@ function App() {
   const [lineStaffId, setLineStaffId] = useState('')
   // 등록 시 선택하는 진료실. 선택 안 하면 '' → 서버에 NULL로 저장된다.
   const [examRoom, setExamRoom] = useState('')
+  // 내원당시증상 — 예약 상세(투여 시작 폼)와 진행중 상세가 같은 상태를 쓴다.
+  // 두 화면이 동시에 뜨지 않으므로 하나면 충분하다. 저장 경로만 다르다
+  // (예약=투여 시작에 실려 나감 / 진행중=PATCH).
+  const [visitSymptom, setVisitSymptom] = useState('')
   const [mixStaffId, setMixStaffId] = useState('')
   const [lookupInfo, setLookupInfo] = useState(null)
   const [actionError, setActionError] = useState('')
@@ -3238,6 +3242,36 @@ function App() {
     </label>
   )
 
+  // 내원당시증상 — 원장님 차트의 주 증상(내원 사유). 케어 중 관찰하는 '증상'(session_notes)과 다른 것이다.
+  // 스펙 지시로 placeholder·예시 문구를 넣지 않는다.
+  const visitSymptomField = currentBed && (
+    <label className="field">
+      <span className="field__label">내원당시증상</span>
+      <textarea
+        className="field__input"
+        value={visitSymptom}
+        onChange={(e) => setVisitSymptom(e.target.value)}
+        rows={2}
+        aria-label="내원당시증상"
+      />
+    </label>
+  )
+
+  // 진행중 상세에서의 편집 — 예약 때는 '투여 시작'에 실려 나가므로 저장 버튼이 필요 없다.
+  // 값이 실제로 달라졌을 때만 버튼을 띄운다(trim 기준이라 공백만 친 경우는 안 뜬다).
+  const visitSymptomDirty = !!currentBed && visitSymptom.trim() !== (currentBed.visitSymptom ?? '')
+
+  async function handleSaveVisitSymptom() {
+    if (!currentBed?.sessionId) return
+    setActionError('')
+    try {
+      await editSessionVisitSymptom(currentBed.sessionId, visitSymptom)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
   // 상기용이라 실패해도 조용히 비운다(모달 동작을 막으면 안 됨).
   const prevVisitPatientId = isInProgress ? currentBed?.patientId : null
@@ -3428,6 +3462,9 @@ function App() {
       setDurationMinutes(DEFAULT_DURATION)
       setMixStaffId('')
     }
+    // 내원당시증상은 예약(입력)·진행중(조회·편집) 둘 다 쓰므로 여기서 함께 채운다.
+    // 빈 베드는 세션 자체가 없어 항상 ''.
+    setVisitSymptom(bed.visitSymptom ?? '')
   }
 
   // 등록 잠금: 빈 베드 모달을 여는 동안 잠금을 걸고 30초마다 하트비트로 유지한다.
@@ -3818,6 +3855,7 @@ function App() {
       await startSession(currentBed.sessionId, {
         mixStaffId: Number(mixStaffId),
         durationMinutes,
+        visitSymptom,
       })
       await refreshBoard()
       closeModal()
@@ -4422,6 +4460,8 @@ function App() {
                   </select>
                 </label>
 
+                {visitSymptomField}
+
                 <DurationControls
                   minutes={durationMinutes}
                   onAdjust={adjustDuration}
@@ -4522,6 +4562,22 @@ function App() {
                 )}
 
                 {isInProgress && examRoomField}
+
+                {isInProgress && (
+                  <>
+                    {visitSymptomField}
+                    {visitSymptomDirty && (
+                      <button
+                        type="button"
+                        className="rec-btn"
+                        onClick={handleSaveVisitSymptom}
+                        disabled={offline}
+                      >
+                        내원당시증상 저장
+                      </button>
+                    )}
+                  </>
+                )}
 
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (

@@ -27,5 +27,8 @@ if (!sessionColumns.includes('special_note')) {
 if (!sessionColumns.includes('exam_room')) {
   db.exec('ALTER TABLE sessions ADD COLUMN exam_room TEXT')
 }
+if (!sessionColumns.includes('visit_symptom')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN visit_symptom TEXT')
+}
 
 export default db

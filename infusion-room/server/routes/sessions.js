@@ -126,7 +126,7 @@ router.post('/sessions/:id/start', (req, res) => {
   if (session.cancelled) return res.status(400).json({ error: '취소된 배정입니다' })
   if (session.started_at !== null) return res.status(400).json({ error: '이미 시작된 세션입니다' })
 
-  const { mix_staff_id, duration_minutes } = req.body ?? {}
+  const { mix_staff_id, duration_minutes, visit_symptom: visitSymptom } = req.body ?? {}
   const mixStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1').get(mix_staff_id)
   if (!mixStaff) return res.status(400).json({ error: '유효하지 않은 믹스 담당자입니다' })
 
@@ -143,9 +143,11 @@ router.post('/sessions/:id/start', (req, res) => {
     return res.status(err.status).json({ error: err.message })
   }
 
+  // 내원당시증상은 믹스 담당자가 투여 시작 시 적는다. 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
+  const trimmedSymptom = typeof visitSymptom === 'string' ? visitSymptom.trim() : ''
   db.prepare(
-    'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ? WHERE id = ?',
-  ).run(startedAt, req.account.id, mixStaff.id, duration_minutes, session.id)
+    'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ?, visit_symptom = ? WHERE id = ?',
+  ).run(startedAt, req.account.id, mixStaff.id, duration_minutes, trimmedSymptom || null, session.id)
   bumpRevision(db)
   res.json({ ok: true })
 })
@@ -275,8 +277,11 @@ router.patch('/sessions/:id', (req, res) => {
   const session = getSessionOr404(req.params.id, res)
   if (!session) return
 
-  const { deleted, special_note: specialNote, exam_room: examRoom } = req.body ?? {}
-  if (deleted === undefined && specialNote === undefined && examRoom === undefined) {
+  const {
+    deleted, special_note: specialNote, exam_room: examRoom, visit_symptom: visitSymptom,
+  } = req.body ?? {}
+  if (deleted === undefined && specialNote === undefined
+      && examRoom === undefined && visitSymptom === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
 
@@ -294,11 +299,16 @@ router.patch('/sessions/:id', (req, res) => {
     params.push(trimmed || null)
   }
   if (examRoom !== undefined) { fields.push('exam_room = ?'); params.push(normalizedExamRoom) }
+  if (visitSymptom !== undefined) {
+    const trimmed = typeof visitSymptom === 'string' ? visitSymptom.trim() : ''
+    fields.push('visit_symptom = ?')
+    params.push(trimmed || null)
+  }
   params.push(session.id)
 
   db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`).run(...params)
-  // 특이사항·진료실은 카드·상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
-  if (specialNote !== undefined || examRoom !== undefined) bumpRevision(db)
+  // 특이사항·진료실·내원당시증상은 상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
+  if (specialNote !== undefined || examRoom !== undefined || visitSymptom !== undefined) bumpRevision(db)
   res.json({ ok: true })
 })
 

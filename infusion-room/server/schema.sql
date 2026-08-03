@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   cancel_reason    TEXT,
   deleted          INTEGER NOT NULL DEFAULT 0,
   special_note     TEXT,  -- 이 방문(세션)의 특이사항. 등록 시 자유기재, 나중에 편집 가능.
-  exam_room        TEXT   -- 진료실 번호('1'|'2'|'3'|'6'|'7'). 미선택이면 NULL.
+  exam_room        TEXT,  -- 진료실 번호('1'|'2'|'3'|'6'|'7'). 미선택이면 NULL.
+  visit_symptom    TEXT   -- 내원당시증상(주 증상, 내원 사유). 자유 텍스트. 미입력이면 NULL.
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active

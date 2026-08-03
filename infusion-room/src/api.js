@@ -85,6 +85,7 @@ function mapBoardToBeds(board) {
       assignedAt: s.assigned_at,
       specialNote: s.special_note ?? null,
       examRoom: s.exam_room ?? null,
+      visitSymptom: s.visit_symptom ?? null,
       // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다
       latestTemp: s.latest_temp ?? null,
       latestBp: s.latest_bp ?? null,
@@ -193,6 +194,14 @@ export async function editSessionExamRoom(sessionId, examRoom) {
   })
 }
 
+// 내원당시증상 편집(오입력·나중 보완) — 진행중 상세에서 호출.
+export async function editSessionVisitSymptom(sessionId, visitSymptom) {
+  return apiFetch(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ visit_symptom: visitSymptom }),
+  })
+}
+
 // 이 방문의 특이사항 편집(2단 상세 오른쪽 패널).
 export async function editSessionSpecialNote(sessionId, specialNote) {
   return apiFetch(`/sessions/${sessionId}`, {
@@ -201,11 +210,12 @@ export async function editSessionSpecialNote(sessionId, specialNote) {
   })
 }
 
-export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt }) {
+export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt, visitSymptom }) {
   return apiFetch(`/sessions/${sessionId}/start`, {
     method: 'POST',
     body: JSON.stringify({
       mix_staff_id: mixStaffId, duration_minutes: durationMinutes, started_at: startedAt,
+      visit_symptom: visitSymptom,
     }),
   })
 }
