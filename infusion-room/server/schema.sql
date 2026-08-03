@@ -260,3 +260,21 @@ CREATE TABLE IF NOT EXISTS session_orders (
   dose       TEXT,               -- 용량항목이면 '110'/'5g', 증류수면 mL 자유텍스트, 단순체크면 NULL
   PRIMARY KEY (session_id, item_code)
 );
+
+-- ─── 묶음처방 ─────────────────────────────────────────────────────────
+-- 자주 쓰는 처방 묶음. 처방 확인 모달의 '묶음 버튼'이 이걸로 체크를 채운다.
+-- 세션에는 묶음 자체를 저장하지 않는다 — 항상 개별 item_code로 저장하므로
+-- 묶음을 지워도 과거 기록은 안 깨진다.
+CREATE TABLE IF NOT EXISTS order_bundles (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,          -- 버튼에 뜨는 묶음 이름(예: '감기 기본')
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active  INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS order_bundle_items (
+  bundle_id INTEGER NOT NULL REFERENCES order_bundles(id),
+  item_code TEXT    NOT NULL,           -- order_items.code
+  dose      TEXT,                       -- 용량항목이면 '110'/'5g', 자유입력이면 기본값(또는 NULL)
+  PRIMARY KEY (bundle_id, item_code)
+);

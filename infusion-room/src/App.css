@@ -4516,3 +4516,56 @@
 }
 
 .order-item__unit { font-size: 12px; color: var(--text-muted); }
+
+/* ─── 처방 확인 — 묶음 버튼 줄 ──────────────────────────────────────
+   누르면 현재 체크를 통째로 바꾸는 버튼이라, 체크리스트 위에 따로 떼어 놓는다. */
+.order-bundles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.order-bundles__label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+.order-bundle-btn {
+  min-height: 44px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.order-bundle-btn:hover { border-color: var(--status-occupied); }
+
+/* 관리자 항목 추가 폼의 '자유입력' 체크 — 체크리스트와 같은 이유로 테마를 고정한다. */
+.order-admin-free {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.order-admin-free input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--status-occupied);
+}
+
+:root[data-theme='light'] .order-admin-free input[type='checkbox'] { color-scheme: light; }
+:root[data-theme='dark'] .order-admin-free input[type='checkbox'] { color-scheme: dark; }

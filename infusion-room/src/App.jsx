@@ -14,7 +14,9 @@ import {
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
   assignBed, editSessionSpecialNote, editSessionExamRoom, startSession,
-  getOrderItems, getPrescription, savePrescription, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  getOrderItems, getPrescription, savePrescription, getOrderBundles,
+  listOrderItemsAdmin, createOrderItem, updateOrderItem, deleteOrderItem,
+  listOrderBundlesAdmin, createOrderBundle, updateOrderBundle, deleteOrderBundle, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
@@ -1428,6 +1430,466 @@ function PatientView({
   )
 }
 
+// ─── 수액 Order 체크리스트 (공용) ──────────────────────────────────
+// 처방 확인 모달과 관리자 묶음 편집 폼이 같은 것을 쓴다. "이 묶음에 뭐가 들어가나"를
+// 실제 처방을 체크하는 것과 똑같은 조작으로 고르게 하려는 것(3b 스펙 4.2).
+//
+// checks 형태: { [code]: dose } — 키가 있으면 체크됨. 단순 항목은 dose가 ''.
+function OrderChecklist({ items, checks, onToggle, onDose, onFreeText }) {
+  // 그룹 순서는 GROUP_ORDER를 따르되, 거기 없는 group_key가 DB에 생기면 뒤에 붙인다 —
+  // 관리자가 새 그룹을 만들었을 때 화면에서 조용히 사라지면 안 된다.
+  const byGroup = new Map()
+  items.forEach((item) => {
+    if (!byGroup.has(item.group_key)) byGroup.set(item.group_key, [])
+    byGroup.get(item.group_key).push(item)
+  })
+  const known = GROUP_ORDER.filter((g) => byGroup.has(g))
+  const extra = [...byGroup.keys()].filter((g) => !GROUP_ORDER.includes(g))
+  const groups = [...known, ...extra].map((group) => ({ group, items: byGroup.get(group) }))
+
+  return (
+    <div className="order-groups">
+      {groups.map(({ group, items: groupItems }) => (
+        <section key={group} className="order-group">
+          <h3 className="order-group__title">{group}</h3>
+          <ul className="order-group__list">
+            {groupItems.map((item) => (
+              <li key={item.code} className="order-item">
+                {item.free_text ? (
+                  /* 증류수 — 체크박스가 아니라 mL 자유입력. 값이 있으면 체크로 본다. */
+                  <label className="order-item__free">
+                    <span className="order-item__label">{item.label}</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="order-item__free-input"
+                      value={checks[item.code] ?? ''}
+                      onChange={(e) => onFreeText(item.code, e.target.value)}
+                      aria-label={`${item.label} mL`}
+                    />
+                    <span className="order-item__unit">mL</span>
+                  </label>
+                ) : item.dose_options ? (
+                  /* 용량 항목 — 용량 버튼이 곧 체크다. 용량 없이 체크되는 상태가 없다. */
+                  <div className="order-item__dosed">
+                    <span className="order-item__label">{item.label}</span>
+                    <div className="order-item__doses">
+                      {item.dose_options.map((dose) => (
+                        <button
+                          key={dose}
+                          type="button"
+                          className={`order-dose${checks[item.code] === dose ? ' order-dose--on' : ''}`}
+                          onClick={() => onDose(item.code, dose)}
+                          aria-pressed={checks[item.code] === dose}
+                        >
+                          {dose}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <label className="order-item__check">
+                    <input
+                      type="checkbox"
+                      checked={item.code in checks}
+                      onChange={() => onToggle(item.code)}
+                    />
+                    <span className="order-item__label">{item.label}</span>
+                  </label>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 수액 Order 항목 관리 ────────────────────────────
+// code는 화면에 안 보인다. 내부 식별자이고 수정도 불가하므로 관리자가 알 필요가 없다.
+function OrderItemManageSection({ offline }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ label: '', group: GROUP_ORDER[0], doses: '', freeText: false })
+
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ label: '', group: '', doses: '', freeText: false })
+
+  function reload() {
+    listOrderItemsAdmin()
+      .then((rows) => { setItems(rows); setError('') })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [offline])
+
+  // 기존 그룹 + GROUP_ORDER를 합쳐 선택지로. 새 그룹은 직접 입력으로 만든다.
+  const groupChoices = [...new Set([...GROUP_ORDER, ...items.map((i) => i.group_key)])]
+
+  async function handleAdd() {
+    setError('')
+    try {
+      await createOrderItem({
+        label: form.label.trim(),
+        group_key: form.group.trim(),
+        dose_options: form.doses.trim() ? form.doses.split(',') : null,
+        free_text: form.freeText,
+        sort_order: items.filter((i) => i.group_key === form.group.trim()).length,
+      })
+      setForm({ label: '', group: GROUP_ORDER[0], doses: '', freeText: false })
+      setShowAdd(false)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function startEdit(item) {
+    setEditingId(item.id)
+    setEditForm({
+      label: item.label,
+      group: item.group_key,
+      doses: item.dose_options ? item.dose_options.join(',') : '',
+      freeText: item.free_text,
+    })
+  }
+
+  async function handleEditSave(id) {
+    setBusyId(id)
+    setError('')
+    try {
+      await updateOrderItem(id, {
+        label: editForm.label.trim(),
+        group_key: editForm.group.trim(),
+        dose_options: editForm.doses.trim() ? editForm.doses.split(',') : null,
+        free_text: editForm.freeText,
+      })
+      setEditingId(null)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleToggleActive(item) {
+    setBusyId(item.id)
+    setError('')
+    try {
+      await updateOrderItem(item.id, { is_active: !item.is_active })
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // 참조가 있으면 서버가 409를 준다 — 그때 비활성 전환을 권한다(이력 보존).
+  async function handleDelete(item) {
+    setBusyId(item.id)
+    setError('')
+    try {
+      await deleteOrderItem(item.id)
+      reload()
+    } catch (err) {
+      if (item.is_active && window.confirm(`${err.message}\n\n지금 비활성으로 숨길까요?`)) {
+        try {
+          await updateOrderItem(item.id, { is_active: false })
+          reload()
+        } catch (e2) {
+          setError(e2.message)
+        }
+      } else {
+        setError(err.message)
+      }
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleMove(item, dir) {
+    const sameGroup = items.filter((i) => i.group_key === item.group_key)
+    const idx = sameGroup.findIndex((i) => i.id === item.id)
+    const target = sameGroup[idx + dir]
+    if (!target) return
+    setBusyId(item.id)
+    setError('')
+    try {
+      await Promise.all([
+        updateOrderItem(item.id, { sort_order: target.sort_order }),
+        updateOrderItem(target.id, { sort_order: item.sort_order }),
+      ])
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function kindLabel(item) {
+    if (item.free_text) return '자유입력'
+    if (item.dose_options) return item.dose_options.join(' / ')
+    return '체크'
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>수액 Order 항목 ({items.length})</h4>
+        <button type="button" className="dm-mode-btn" onClick={() => setShowAdd((v) => !v)} disabled={offline}>
+          {showAdd ? '취소' : '+ 항목 추가'}
+        </button>
+      </div>
+
+      {error && <p role="alert" className="field__error">{error}</p>}
+
+      {showAdd && (
+        <div className="dm-admin-add-form">
+          <label className="field">
+            <span className="field__label">라벨</span>
+            <input className="field__input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="field__label">그룹 (새 그룹은 직접 입력)</span>
+            <input className="field__input" list="order-group-choices" value={form.group}
+              onChange={(e) => setForm({ ...form, group: e.target.value })} />
+            <datalist id="order-group-choices">
+              {groupChoices.map((g) => <option key={g} value={g} />)}
+            </datalist>
+          </label>
+          <label className="field">
+            <span className="field__label">용량 선택지 (쉼표로 구분, 없으면 비움)</span>
+            <input className="field__input" value={form.doses} onChange={(e) => setForm({ ...form, doses: e.target.value })} />
+          </label>
+          <label className="order-admin-free">
+            <input type="checkbox" checked={form.freeText} onChange={(e) => setForm({ ...form, freeText: e.target.checked })} />
+            <span>자유입력 항목 (증류수처럼 숫자를 직접 적는 칸)</span>
+          </label>
+          <button type="button" className="btn-register" disabled={offline || !form.label.trim() || !form.group.trim()} onClick={handleAdd}>
+            추가
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : (
+        <div className="dm-table-wrap">
+          <table className="dm-table">
+            <thead>
+              <tr><th>그룹</th><th>라벨</th><th>입력 방식</th><th>상태</th><th></th></tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    {editingId === item.id ? (
+                      <input className="field__input" list="order-group-choices" value={editForm.group}
+                        onChange={(e) => setEditForm({ ...editForm, group: e.target.value })} />
+                    ) : item.group_key}
+                  </td>
+                  <td>
+                    {editingId === item.id ? (
+                      <input className="field__input" value={editForm.label}
+                        onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} />
+                    ) : item.label}
+                  </td>
+                  <td>
+                    {editingId === item.id ? (
+                      <input className="field__input" value={editForm.doses} placeholder="110,180,100"
+                        onChange={(e) => setEditForm({ ...editForm, doses: e.target.value })} />
+                    ) : kindLabel(item)}
+                  </td>
+                  <td>
+                    <span className={`badge ${item.is_active ? 'badge--info' : 'badge--warning'}`}>
+                      {item.is_active ? '사용' : '숨김'}
+                    </span>
+                  </td>
+                  <td className="dm-note-manage__action">
+                    {editingId === item.id ? (
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === item.id} onClick={() => handleEditSave(item.id)}>저장</button>
+                        <button type="button" className="dm-note-btn" onClick={() => setEditingId(null)}>취소</button>
+                      </div>
+                    ) : (
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === item.id} aria-label="위로 이동" onClick={() => handleMove(item, -1)}>▲</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === item.id} aria-label="아래로 이동" onClick={() => handleMove(item, 1)}>▼</button>
+                        <button type="button" className="dm-note-btn" onClick={() => startEdit(item)} disabled={offline}>수정</button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === item.id} onClick={() => handleToggleActive(item)}>
+                          {item.is_active ? '숨김' : '사용'}
+                        </button>
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === item.id} onClick={() => handleDelete(item)}>삭제</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 묶음처방 관리 ────────────────────────────────────
+// 포함 항목은 처방 확인과 같은 체크리스트로 고른다(OrderChecklist 재사용).
+function OrderBundleManageSection({ offline }) {
+  const [bundles, setBundles] = useState([])
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+
+  // editingId === 'new'면 추가 폼, 숫자면 그 묶음 수정 폼, null이면 닫힘.
+  const [editingId, setEditingId] = useState(null)
+  const [name, setName] = useState('')
+  const [checks, setChecks] = useState({})
+
+  function reload() {
+    Promise.all([listOrderBundlesAdmin(), getOrderItems()])
+      .then(([rows, itemRows]) => { setBundles(rows); setItems(itemRows); setError('') })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [offline])
+
+  function openNew() {
+    setEditingId('new')
+    setName('')
+    setChecks({})
+  }
+
+  function openEdit(bundle) {
+    setEditingId(bundle.id)
+    setName(bundle.name)
+    const next = {}
+    bundle.items.forEach((it) => { next[it.code] = it.dose ?? '' })
+    setChecks(next)
+  }
+
+  async function handleSave() {
+    setError('')
+    const payload = {
+      name: name.trim(),
+      items: Object.entries(checks).map(([code, dose]) => (dose === '' ? { code } : { code, dose })),
+    }
+    try {
+      if (editingId === 'new') await createOrderBundle({ ...payload, sort_order: bundles.length })
+      else await updateOrderBundle(editingId, payload)
+      setEditingId(null)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // 묶음은 세션 기록과 무관해서(세션은 개별 code로 저장) 지워도 과거 기록이 안 깨진다.
+  async function handleDelete(bundle) {
+    if (!window.confirm(`'${bundle.name}' 묶음을 삭제할까요?`)) return
+    setBusyId(bundle.id)
+    setError('')
+    try {
+      await deleteOrderBundle(bundle.id)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function summary(bundle) {
+    const labelOf = (code) => items.find((i) => i.code === code)?.label ?? code
+    const names = bundle.items.map((it) => labelOf(it.code) + (it.dose ? ` ${it.dose}` : ''))
+    if (names.length === 0) return '(비어 있음)'
+    return names.length <= 4 ? names.join(', ') : `${names.slice(0, 4).join(', ')} 외 ${names.length - 4}`
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>묶음처방 ({bundles.length})</h4>
+        <button type="button" className="dm-mode-btn" onClick={() => (editingId ? setEditingId(null) : openNew())} disabled={offline}>
+          {editingId ? '취소' : '+ 묶음 추가'}
+        </button>
+      </div>
+
+      {error && <p role="alert" className="field__error">{error}</p>}
+
+      {editingId !== null && (
+        <div className="dm-admin-add-form">
+          <label className="field">
+            <span className="field__label">묶음 이름</span>
+            <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <OrderChecklist
+            items={items}
+            checks={checks}
+            onToggle={(code) => setChecks((prev) => {
+              const next = { ...prev }
+              if (code in next) delete next[code]; else next[code] = ''
+              return next
+            })}
+            onDose={(code, dose) => setChecks((prev) => {
+              const next = { ...prev }
+              if (next[code] === dose) delete next[code]; else next[code] = dose
+              return next
+            })}
+            onFreeText={(code, value) => setChecks((prev) => {
+              const next = { ...prev }
+              if (value.trim() === '') delete next[code]; else next[code] = value
+              return next
+            })}
+          />
+          <button type="button" className="btn-register" disabled={offline || !name.trim()} onClick={handleSave}>
+            {editingId === 'new' ? '추가' : '저장'}
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : bundles.length === 0 ? (
+        <div className="dm-empty">등록된 묶음이 없습니다</div>
+      ) : (
+        <div className="dm-table-wrap">
+          <table className="dm-table">
+            <thead>
+              <tr><th>이름</th><th>포함 항목</th><th></th></tr>
+            </thead>
+            <tbody>
+              {bundles.map((bundle) => (
+                <tr key={bundle.id}>
+                  <td>{bundle.name}</td>
+                  <td>{summary(bundle)}</td>
+                  <td className="dm-note-manage__action">
+                    <div className="dm-admin-edit-actions__buttons">
+                      <button type="button" className="dm-note-btn" onClick={() => openEdit(bundle)} disabled={offline}>수정</button>
+                      <button type="button" className="dm-note-btn" disabled={offline || busyId === bundle.id} onClick={() => handleDelete(bundle)}>삭제</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── 관리자 설정 — 계정 관리 ──────────────────────────────────────
 function AccountManageSection({ offline }) {
   const [accounts, setAccounts] = useState([])
@@ -2394,6 +2856,8 @@ function DataManageView({
           <h3 className="dm-note-manage__title">관리자 설정</h3>
           <AccountManageSection offline={offline} />
           <StaffManageSection offline={offline} />
+          <OrderItemManageSection offline={offline} />
+          <OrderBundleManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
           <MessageLogSection />
         </div>
@@ -2861,6 +3325,7 @@ function App() {
   const [staffList, setStaffList] = useState([])
   // 처방 확인 — 오더 항목은 DB가 원본이다(하드코딩 목록 없음).
   const [orderItems, setOrderItems] = useState([])
+  const [orderBundles, setOrderBundles] = useState([])
   const [prescriptionBed, setPrescriptionBed] = useState(null)
   // { [code]: dose } — 키가 있으면 체크된 것. 단순 항목은 dose가 ''.
   const [orderChecks, setOrderChecks] = useState({})
@@ -3034,6 +3499,7 @@ function App() {
     getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
     // 오더 항목은 거의 안 바뀌므로 로그인 후 한 번만 받아 캐시한다(3b에서 관리자가 고치면 재로그인/새로고침).
     getOrderItems().then(setOrderItems).catch((err) => console.error('오더 항목 로딩 실패', err))
+    getOrderBundles().then(setOrderBundles).catch((err) => console.error('묶음처방 로딩 실패', err))
   }, [account])
 
   // 열려 있는 모달(배정/시작 폼, 라운딩, 베드이동, 정리 확인)이 있는 동안은 폴링이
@@ -3257,18 +3723,6 @@ function App() {
 
   // 내원당시증상 입력은 3a단계에서 '처방 확인' 모달로 옮겼다(투여 시작과 분리).
 
-  // 오더 항목을 그룹별로 묶는다. 그룹 순서는 GROUP_ORDER를 따르고, 거기 없는 group_key가
-  // DB에 생기면 뒤에 붙인다 — 관리자가 새 그룹을 만들었을 때 화면에서 조용히 사라지면 안 된다.
-  const orderGroups = (() => {
-    const byGroup = new Map()
-    orderItems.forEach((item) => {
-      if (!byGroup.has(item.group_key)) byGroup.set(item.group_key, [])
-      byGroup.get(item.group_key).push(item)
-    })
-    const known = GROUP_ORDER.filter((g) => byGroup.has(g))
-    const extra = [...byGroup.keys()].filter((g) => !GROUP_ORDER.includes(g))
-    return [...known, ...extra].map((group) => ({ group, items: byGroup.get(group) }))
-  })()
 
   // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
   // 상기용이라 실패해도 조용히 비운다(모달 동작을 막으면 안 됨).
@@ -3767,6 +4221,16 @@ function App() {
       else next[code] = value
       return next
     })
+  }
+
+  // 묶음 적용 = 덮어쓰기(합치기 아님, 사용자 결정). 저장이 아니라 로컬 상태만 바꾼다.
+  // 이미 체크한 게 있으면 한 번 확인한다 — 실수로 눌러 날아가면 되돌릴 방법이 없다.
+  function applyOrderBundle(bundle) {
+    if (Object.keys(orderChecks).length > 0
+        && !window.confirm(`현재 체크를 '${bundle.name}' 묶음으로 바꿀까요?`)) return
+    const next = {}
+    bundle.items.forEach((it) => { next[it.code] = it.dose ?? '' })
+    setOrderChecks(next)
   }
 
   async function handleSavePrescription() {
@@ -5014,61 +5478,31 @@ function App() {
 
             <div className="modal__body">
               {/* 그룹 순서는 GROUP_ORDER, 항목은 전부 DB 응답이다. */}
-              <div className="order-groups">
-                {orderGroups.map(({ group, items }) => (
-                  <section key={group} className="order-group">
-                    <h3 className="order-group__title">{group}</h3>
-                    <ul className="order-group__list">
-                      {items.map((item) => (
-                        <li key={item.code} className="order-item">
-                          {item.free_text ? (
-                            /* 증류수 — 체크박스가 아니라 mL 자유입력. 값이 있으면 체크로 본다. */
-                            <label className="order-item__free">
-                              <span className="order-item__label">{item.label}</span>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                className="order-item__free-input"
-                                value={orderChecks[item.code] ?? ''}
-                                onChange={(e) => setOrderFreeText(item.code, e.target.value)}
-                                aria-label={`${item.label} mL`}
-                              />
-                              <span className="order-item__unit">mL</span>
-                            </label>
-                          ) : item.dose_options ? (
-                            /* 용량 항목 — 용량 버튼이 곧 체크다. 용량 없이 체크되는 상태가 없다. */
-                            <div className="order-item__dosed">
-                              <span className="order-item__label">{item.label}</span>
-                              <div className="order-item__doses">
-                                {item.dose_options.map((dose) => (
-                                  <button
-                                    key={dose}
-                                    type="button"
-                                    className={`order-dose${orderChecks[item.code] === dose ? ' order-dose--on' : ''}`}
-                                    onClick={() => selectOrderDose(item.code, dose)}
-                                    aria-pressed={orderChecks[item.code] === dose}
-                                  >
-                                    {dose}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <label className="order-item__check">
-                              <input
-                                type="checkbox"
-                                checked={item.code in orderChecks}
-                                onChange={() => toggleOrderItem(item.code)}
-                              />
-                              <span className="order-item__label">{item.label}</span>
-                            </label>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ))}
-              </div>
+              {/* 묶음 버튼 — 누르면 현재 체크를 그 묶음으로 '교체'한다(합치기 아님).
+                  로컬 상태만 바꾸고 저장은 아래 '저장'이 담당한다. 묶음이 없으면 줄 자체가 안 뜬다. */}
+              {orderBundles.length > 0 && (
+                <div className="order-bundles">
+                  <span className="order-bundles__label">묶음</span>
+                  {orderBundles.map((bundle) => (
+                    <button
+                      key={bundle.id}
+                      type="button"
+                      className="order-bundle-btn"
+                      onClick={() => applyOrderBundle(bundle)}
+                    >
+                      {bundle.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <OrderChecklist
+                items={orderItems}
+                checks={orderChecks}
+                onToggle={toggleOrderItem}
+                onDose={selectOrderDose}
+                onFreeText={setOrderFreeText}
+              />
 
               {/* 내원당시증상 — 2단계에서 여기로 옮겼다. placeholder·예시 없음. */}
               <label className="field">

@@ -35,6 +35,16 @@ router.get('/order-items', (req, res) => {
   res.json(rows.map(toItemPayload))
 })
 
+// ─── 묶음처방 조회 — 처방 확인 모달의 묶음 버튼 + 관리자 화면이 같이 쓴다 ───
+// 읽기 전용이라 모든 로그인 사용자에게 열려 있다. 편집은 /api/admin 쪽.
+router.get('/order-bundles', (req, res) => {
+  const bundles = db.prepare(
+    'SELECT id, name, sort_order FROM order_bundles WHERE is_active = 1 ORDER BY sort_order, id',
+  ).all()
+  const itemsStmt = db.prepare('SELECT item_code AS code, dose FROM order_bundle_items WHERE bundle_id = ?')
+  res.json(bundles.map((b) => ({ id: b.id, name: b.name, items: itemsStmt.all(b.id) })))
+})
+
 // ─── 처방 조회 — 처방 확인 모달 프리필용 ────────────────────────────
 // board payload에는 일부러 안 싣는다. 40여 항목을 3초 폴링마다 전 베드에 실을 이유가 없다.
 router.get('/sessions/:id/prescription', (req, res) => {

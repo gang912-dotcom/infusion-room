@@ -212,6 +212,46 @@ export async function savePrescription(sessionId, { items, visitSymptom }) {
   })
 }
 
+// 묶음처방 — 처방 확인 모달의 묶음 버튼용(활성 묶음만).
+export async function getOrderBundles() {
+  return apiFetch('/order-bundles')
+}
+
+// ─── 관리자 전용 (서버도 requireAdmin으로 이중 방어) ─────────────────
+// 관리자 목록은 비활성까지 다 준다 — 다시 켜려면 화면에 보여야 한다.
+export async function listOrderItemsAdmin() {
+  return apiFetch('/admin/order-items')
+}
+
+export async function createOrderItem(body) {
+  return apiFetch('/admin/order-items', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function updateOrderItem(id, body) {
+  return apiFetch(`/admin/order-items/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+// 참조가 있으면 서버가 409를 준다 — 화면은 그때 비활성 전환을 권한다.
+export async function deleteOrderItem(id) {
+  return apiFetch(`/admin/order-items/${id}`, { method: 'DELETE' })
+}
+
+export async function listOrderBundlesAdmin() {
+  return apiFetch('/admin/order-bundles')
+}
+
+export async function createOrderBundle(body) {
+  return apiFetch('/admin/order-bundles', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function updateOrderBundle(id, body) {
+  return apiFetch(`/admin/order-bundles/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export async function deleteOrderBundle(id) {
+  return apiFetch(`/admin/order-bundles/${id}`, { method: 'DELETE' })
+}
+
 // 이 방문의 특이사항 편집(2단 상세 오른쪽 패널).
 export async function editSessionSpecialNote(sessionId, specialNote) {
   return apiFetch(`/sessions/${sessionId}`, {
