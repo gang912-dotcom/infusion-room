@@ -280,3 +280,13 @@ CREATE TABLE IF NOT EXISTS order_bundle_items (
   dose      TEXT,                       -- 용량항목이면 '110'/'5g', 자유입력이면 기본값(또는 NULL)
   PRIMARY KEY (bundle_id, item_code)
 );
+
+-- ─── 환자 메모 (차트번호 기준, 방문을 넘어 유지) ──────────────────────
+-- 이름 주의: 이미 은퇴한 patient_notes 테이블이 따로 있다(구 '주의사항' 기능, 스키마가
+-- 전혀 다르고 과거 데이터가 남아 있음). 같은 이름을 쓰면 CREATE IF NOT EXISTS가 조용히
+-- 넘어가고 이후 쿼리가 전부 깨지므로 patient_memos로 새로 만든다.
+CREATE TABLE IF NOT EXISTS patient_memos (
+  chart_no   TEXT PRIMARY KEY,   -- 환자 식별자. 환자당 한 줄.
+  note       TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER
+);

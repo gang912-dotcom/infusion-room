@@ -822,6 +822,14 @@
   color: var(--status-warning);
 }
 
+/* --status-warning은 라이트 테마에서 카드 배경 대비 3.18로 미달이다(실측).
+   바이탈 미열이 같은 문제를 #a35f00으로 풀었지만 그 색은 다른 배경에서 검증된 값이라
+   여기선 4.49로 0.01이 모자랐다 — 브라우저에서 재서 #915400(5.42)으로 내렸다.
+   다크는 이 색을 쓰면 오히려 3.10으로 나빠지므로(원래 색이 9.24) 라이트에만 건다. */
+:root[data-theme='light'] .app .bed-card__caution--caution {
+  color: #915400;
+}
+
 .bed-card__caution--neutral {
   color: var(--text-secondary);
   font-weight: 500;
@@ -4588,4 +4596,21 @@
 /* 파일 input은 버튼으로 대신 연다 — 기본 위젯은 테마·문구를 못 맞춘다. */
 .staff-sign__file {
   display: none;
+}
+
+/* ─── 환자 메모 팝업 (배정 중 표시) ────────────────────────────────── */
+.modal--narrow { max-width: 420px; }
+
+/* 메모는 색이 아니라 왼쪽 굵은 선으로 강조한다 — 틴트 위 색글자는 라이트에서
+   대비가 자주 깨져서(3a 결함②) 본문색을 그대로 두는 쪽이 안전하다. */
+.memo-popup__note {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  background: var(--number-bg);
+  border-left: 4px solid var(--status-warning);
+  border-radius: 8px;
 }

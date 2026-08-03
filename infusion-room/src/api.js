@@ -84,6 +84,8 @@ function mapBoardToBeds(board) {
       sessionId: s.id,
       assignedAt: s.assigned_at,
       specialNote: s.special_note ?? null,
+      // 환자 메모 — 차트번호 기준이라 방문을 넘어 따라온다(특이사항은 방문 단위).
+      patientMemo: s.patient_memo ?? null,
       examRoom: s.exam_room ?? null,
       visitSymptom: s.visit_symptom ?? null,
       // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다
@@ -528,6 +530,19 @@ function mapAdminStaff(row) {
     // 서명 원본은 목록에 안 실린다 — 등록 여부만 오고 원본은 getStaffSignature로.
     hasSignature: !!row.has_signature,
   }
+}
+
+// ─── 환자 메모 (차트번호 기준, 방문을 넘어 유지) ─────────────────────
+// 테이블·경로 이름 주의: patient_notes가 아니라 patient_memos다(전자는 은퇴한 구 기능).
+export async function getPatientMemo(chartNo) {
+  return apiFetch(`/patient-memos/${encodeURIComponent(chartNo)}`)
+}
+
+export async function savePatientMemo(chartNo, note) {
+  return apiFetch(`/patient-memos/${encodeURIComponent(chartNo)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ note }),
+  })
 }
 
 // 기록지 — 종료됐으면 얼린 스냅샷, 아니면 즉석 조립본. 담당자 서명이 함께 온다.

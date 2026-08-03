@@ -9,11 +9,14 @@ const bedsStmt = db.prepare('SELECT id, code, room, number FROM beds WHERE is_ac
 const activeSessionStmt = db.prepare(`
   SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note, s.exam_room, s.visit_symptom,
          p.chart_no, p.name AS patient_name,
-         ls.name AS line_staff_name, ms.name AS mix_staff_name
+         ls.name AS line_staff_name, ms.name AS mix_staff_name,
+         pm.note AS patient_memo
   FROM sessions s
   JOIN patients p ON p.id = s.patient_id
   JOIN staff ls ON ls.id = s.line_staff_id
   LEFT JOIN staff ms ON ms.id = s.mix_staff_id
+  -- 환자 메모는 차트번호 기준이라 세션이 아니라 환자로 붙는다(없으면 NULL).
+  LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
   WHERE s.bed_id = ? AND s.ended_at IS NULL AND s.cancelled = 0
 `)
 
@@ -108,6 +111,7 @@ router.get('/board', (req, res) => {
         latest_pulse: lastPulse ? { value: lastPulse.pulse, occurred_at: lastPulse.occurred_at } : null,
         note_count: noteCountStmt.get(session.id).c,
         special_note: session.special_note,
+        patient_memo: session.patient_memo,
         exam_room: session.exam_room,
         visit_symptom: session.visit_symptom,
       },
