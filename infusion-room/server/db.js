@@ -24,5 +24,8 @@ if (!sessionColumns.includes('deleted')) {
 if (!sessionColumns.includes('special_note')) {
   db.exec('ALTER TABLE sessions ADD COLUMN special_note TEXT')
 }
+if (!sessionColumns.includes('exam_room')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN exam_room TEXT')
+}
 
 export default db

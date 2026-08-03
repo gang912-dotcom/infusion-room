@@ -84,6 +84,7 @@ function mapBoardToBeds(board) {
       sessionId: s.id,
       assignedAt: s.assigned_at,
       specialNote: s.special_note ?? null,
+      examRoom: s.exam_room ?? null,
       // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다
       latestTemp: s.latest_temp ?? null,
       latestBp: s.latest_bp ?? null,
@@ -174,13 +175,21 @@ export function logPatientDetailView(chartNo) {
     .catch((err) => console.error('환자 조회 로그 기록 실패', err))
 }
 
-export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote }) {
+export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote, examRoom }) {
   return apiFetch('/sessions/assign', {
     method: 'POST',
     body: JSON.stringify({
       bed_code: bedCode, chart_no: chartNo, patient_name: patientName, line_staff_id: lineStaffId,
-      special_note: specialNote,
+      special_note: specialNote, exam_room: examRoom,
     }),
+  })
+}
+
+// 진료실 변경(오등록 정정) — 상세에서 호출.
+export async function editSessionExamRoom(sessionId, examRoom) {
+  return apiFetch(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ exam_room: examRoom }),
   })
 }
 

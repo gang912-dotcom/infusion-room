@@ -662,6 +662,23 @@
   font-weight: 500;
 }
 
+/* 진료실 배지 — 카드 왼쪽 아래. 우상단은 상태 칩(top 14~)과 바이탈(top 56~100)이
+   쓰므로 그쪽을 피한다. align-self로 내용만큼만 차지해 바이탈 열까지 뻗지 않는다.
+   틴트 배경 + 상태색 글자는 라이트 테마에서 대비가 자주 깨져, 이미 검증된
+   번호 알약과 같은 중립 색 조합을 쓴다. */
+.bed-card__exam-room {
+  margin: 2px 0 0;
+  align-self: flex-start;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+}
+
 /* ─── 카드 라운딩 줄 (상태별 알약, 클릭 시 라운딩 모달) ────────── */
 .bed-card__round {
   align-self: flex-start;

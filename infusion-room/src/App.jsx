@@ -13,7 +13,7 @@ import {
   getPatientSessionNotes,
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
-  assignBed, editSessionSpecialNote, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  assignBed, editSessionSpecialNote, editSessionExamRoom, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
@@ -119,6 +119,10 @@ const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타�
 
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
 const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
+
+// 진료실 — 연속이 아니다(4·5진료실은 없음). 서버(sessions.js EXAM_ROOMS)와 같은 목록.
+// 관리자 편집은 아직 필요 없어 상수로 둔다.
+const EXAM_ROOMS = ['1', '2', '3', '6', '7']
 
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
 // SF Symbols 풍 단색 라인 아이콘 (currentColor, 1em) — 이모지 대체
@@ -2850,6 +2854,8 @@ function App() {
   const [beds, setBeds] = useState([])
   const [staffList, setStaffList] = useState([])
   const [lineStaffId, setLineStaffId] = useState('')
+  // 등록 시 선택하는 진료실. 선택 안 하면 '' → 서버에 NULL로 저장된다.
+  const [examRoom, setExamRoom] = useState('')
   const [mixStaffId, setMixStaffId] = useState('')
   const [lookupInfo, setLookupInfo] = useState(null)
   const [actionError, setActionError] = useState('')
@@ -3203,6 +3209,35 @@ function App() {
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
 
+  // 진료실 정정(오등록 대비) — 예약·진행중 상세가 같은 것을 쓴다. 고르는 즉시 저장.
+  async function handleChangeExamRoom(value) {
+    if (!currentBed?.sessionId) return
+    setActionError('')
+    try {
+      await editSessionExamRoom(currentBed.sessionId, value)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  const examRoomField = currentBed && (
+    <label className="field">
+      <span className="field__label">진료실</span>
+      <select
+        className="field__input"
+        value={currentBed.examRoom ?? ''}
+        onChange={(e) => handleChangeExamRoom(e.target.value)}
+        disabled={offline}
+      >
+        <option value="">선택</option>
+        {EXAM_ROOMS.map((room) => (
+          <option key={room} value={room}>{room}진료실</option>
+        ))}
+      </select>
+    </label>
+  )
+
   // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
   // 상기용이라 실패해도 조용히 비운다(모달 동작을 막으면 안 됨).
   const prevVisitPatientId = isInProgress ? currentBed?.patientId : null
@@ -3387,6 +3422,7 @@ function App() {
       setLineStaffId('')
       setLookupInfo(null)
       setSpecialNote('')
+      setExamRoom('')
     }
     if (bed.status === 'reserved') {
       setDurationMinutes(DEFAULT_DURATION)
@@ -3761,6 +3797,7 @@ function App() {
         patientName: patientName.trim(),
         lineStaffId: Number(lineStaffId),
         specialNote: specialNote.trim(),
+        examRoom,
       })
       stopLockAndRelease(selectedBed.id) // 배정 완료 — 등록 잠금 해제
       await refreshBoard()
@@ -3835,6 +3872,8 @@ function App() {
           <p className="bed-card__number">{bed.number}</p>
           <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
           <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+          {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
+          {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
           {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
           {bed.specialNote && (
             <p className="bed-card__caution bed-card__caution--danger">
@@ -3919,6 +3958,8 @@ function App() {
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+        {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
+        {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
         {roundStatus && (
           <button
             type="button"
@@ -4309,6 +4350,21 @@ function App() {
                   </select>
                 </label>
 
+                {/* 진료실 — 선택 항목. 미선택이면 카드에 진료실만 안 뜨고 배정은 정상 진행된다. */}
+                <label className="field">
+                  <span className="field__label">진료실</span>
+                  <select
+                    className="field__input"
+                    value={examRoom}
+                    onChange={(e) => setExamRoom(e.target.value)}
+                  >
+                    <option value="">선택</option>
+                    {EXAM_ROOMS.map((room) => (
+                      <option key={room} value={room}>{room}진료실</option>
+                    ))}
+                  </select>
+                </label>
+
                 {/* 이 방문의 특이사항 — 매 방문 받되, 재방문이면 지난 방문 내용이 채워진다(수정 가능). */}
                 <label className="field">
                   <span className="field__label">특이사항</span>
@@ -4349,6 +4405,8 @@ function App() {
                 {currentBed.overdue && (
                   <p role="alert" className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
+
+                {examRoomField}
 
                 <label className="field">
                   <span className="field__label">믹스 담당자</span>
@@ -4462,6 +4520,8 @@ function App() {
                     </div>
                   </div>
                 )}
+
+                {isInProgress && examRoomField}
 
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (

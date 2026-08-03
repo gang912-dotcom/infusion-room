@@ -5,6 +5,16 @@ import { assertInRange, isUniqueConstraintError, normalizeChartNo } from '../lib
 
 const router = Router()
 
+// 진료실 번호 — 연속이 아니다(4·5진료실은 없음). 클라(App.jsx EXAM_ROOMS)와 같은 목록.
+const EXAM_ROOMS = ['1', '2', '3', '6', '7']
+
+// 미선택('')은 NULL로, 목록에 없는 값은 거부한다(호출부에서 400).
+function normalizeExamRoom(value) {
+  if (value === undefined || value === null || value === '') return null
+  const room = String(value)
+  return EXAM_ROOMS.includes(room) ? room : undefined
+}
+
 function getSetting(key) {
   return Number(db.prepare('SELECT value FROM settings WHERE key = ?').get(key).value)
 }
@@ -20,9 +30,18 @@ function getSessionOr404(id, res) {
 
 // ─── assign — 라인실에서 베드 배정 ─────────────────────────────────
 router.post('/sessions/assign', (req, res) => {
-  const { bed_code, chart_no, patient_name, line_staff_id, special_note: specialNote } = req.body ?? {}
+  const {
+    bed_code, chart_no, patient_name, line_staff_id,
+    special_note: specialNote, exam_room: examRoom,
+  } = req.body ?? {}
   if (!bed_code || !chart_no || !patient_name || !line_staff_id) {
     return res.status(400).json({ error: 'bed_code, chart_no, patient_name, line_staff_id가 모두 필요합니다' })
+  }
+
+  // 진료실은 선택 항목이라 미선택은 통과시키되, 목록 밖의 값은 거부한다.
+  const normalizedExamRoom = normalizeExamRoom(examRoom)
+  if (normalizedExamRoom === undefined) {
+    return res.status(400).json({ error: '유효하지 않은 진료실입니다' })
   }
 
   const normalizedChartNo = normalizeChartNo(chart_no)
@@ -54,9 +73,9 @@ router.post('/sessions/assign', (req, res) => {
     // 특이사항은 이 방문 단위 자유기재. 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
     const trimmedNote = typeof specialNote === 'string' ? specialNote.trim() : ''
     const info = db.prepare(
-      `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, special_note)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(bed.id, patient.id, now, req.account.id, lineStaff.id, trimmedNote || null)
+      `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, special_note, exam_room)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(bed.id, patient.id, now, req.account.id, lineStaff.id, trimmedNote || null, normalizedExamRoom)
     sessionId = info.lastInsertRowid
   } catch (err) {
     if (isUniqueConstraintError(err)) {
@@ -256,9 +275,14 @@ router.patch('/sessions/:id', (req, res) => {
   const session = getSessionOr404(req.params.id, res)
   if (!session) return
 
-  const { deleted, special_note: specialNote } = req.body ?? {}
-  if (deleted === undefined && specialNote === undefined) {
+  const { deleted, special_note: specialNote, exam_room: examRoom } = req.body ?? {}
+  if (deleted === undefined && specialNote === undefined && examRoom === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
+  }
+
+  const normalizedExamRoom = normalizeExamRoom(examRoom)
+  if (normalizedExamRoom === undefined) {
+    return res.status(400).json({ error: '유효하지 않은 진료실입니다' })
   }
 
   const fields = []
@@ -269,11 +293,12 @@ router.patch('/sessions/:id', (req, res) => {
     fields.push('special_note = ?')
     params.push(trimmed || null)
   }
+  if (examRoom !== undefined) { fields.push('exam_room = ?'); params.push(normalizedExamRoom) }
   params.push(session.id)
 
   db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`).run(...params)
-  // 특이사항은 카드·상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
-  if (specialNote !== undefined) bumpRevision(db)
+  // 특이사항·진료실은 카드·상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
+  if (specialNote !== undefined || examRoom !== undefined) bumpRevision(db)
   res.json({ ok: true })
 })
 

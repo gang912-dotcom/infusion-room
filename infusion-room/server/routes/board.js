@@ -7,7 +7,7 @@ const router = Router()
 const bedsStmt = db.prepare('SELECT id, code, room, number FROM beds WHERE is_active = 1 ORDER BY sort_order')
 
 const activeSessionStmt = db.prepare(`
-  SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note,
+  SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note, s.exam_room,
          p.chart_no, p.name AS patient_name,
          ls.name AS line_staff_name, ms.name AS mix_staff_name
   FROM sessions s
@@ -108,6 +108,7 @@ router.get('/board', (req, res) => {
         latest_pulse: lastPulse ? { value: lastPulse.pulse, occurred_at: lastPulse.occurred_at } : null,
         note_count: noteCountStmt.get(session.id).c,
         special_note: session.special_note,
+        exam_room: session.exam_room,
       },
     }
   })
