@@ -112,4 +112,25 @@ if (db.prepare('SELECT COUNT(*) c FROM order_items').get().c === 0) {
   })()
 }
 
+// ─── 투여경로(IV/IM/SC) ──────────────────────────────────────────────
+// 위 시드보다 나중에 생긴 항목이라 이미 시드된 운영 DB에는 없다 → 따로 넣는다.
+// sort_order를 음수로 두는 이유: 기존 항목이 0..41을 쓰고 있어 그룹 안 맨 앞에 오게 하려면
+// 재번호 없이 앞으로 밀어야 한다.
+// settings 플래그로 1회만 — 존재 여부로 판단하면 관리자가 지운 항목이 재부팅마다 되살아난다.
+const ROUTE_SEED = [
+  { code: 'route_iv', label: 'IV' },
+  { code: 'route_im', label: 'IM' },
+  { code: 'route_sc', label: 'SC' },
+]
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'order_route_seeded'").get()) {
+  const insRoute = db.prepare(
+    'INSERT OR IGNORE INTO order_items (code, label, group_key, sort_order) VALUES (?, ?, ?, ?)',
+  )
+  const insFlag = db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+  db.transaction(() => {
+    ROUTE_SEED.forEach((r, i) => insRoute.run(r.code, r.label, '투여경로', i - ROUTE_SEED.length))
+    insFlag.run('order_route_seeded', '1', Date.now())
+  })()
+}
+
 export default db

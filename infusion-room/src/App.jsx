@@ -132,7 +132,8 @@ const EXAM_ROOMS = ['1', '2', '3', '6', '7']
 // 처방 확인 체크리스트의 그룹 표시 순서. 항목 자체는 DB(order_items)가 원본이고
 // 여기 있는 건 '그룹을 어떤 순서로 보여줄지'뿐이다(그룹 편집은 범위 밖).
 // DB에 이 목록에 없는 group_key가 생기면 뒤에 붙여서 렌더한다 — 조용히 사라지면 안 되므로.
-const GROUP_ORDER = ['기본', '치료제', 'IM,SC', '독감', '증류수']
+// 투여경로는 n/s보다 먼저 고르는 값이라 맨 앞이다.
+const GROUP_ORDER = ['투여경로', '기본', '치료제', 'IM,SC', '독감', '증류수']
 
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
 // SF Symbols 풍 단색 라인 아이콘 (currentColor, 1em) — 이모지 대체
@@ -1732,7 +1733,8 @@ function OrderItemManageSection({ offline }) {
   const [busyId, setBusyId] = useState(null)
 
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ label: '', group: GROUP_ORDER[0], doses: '', freeText: false })
+  // 새 항목의 기본 그룹은 '기본' — GROUP_ORDER[0]은 투여경로(고정 3개)라 기본값이면 안 된다.
+  const [form, setForm] = useState({ label: '', group: '기본', doses: '', freeText: false })
 
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ label: '', group: '', doses: '', freeText: false })
@@ -1759,7 +1761,7 @@ function OrderItemManageSection({ offline }) {
         free_text: form.freeText,
         sort_order: items.filter((i) => i.group_key === form.group.trim()).length,
       })
-      setForm({ label: '', group: GROUP_ORDER[0], doses: '', freeText: false })
+      setForm({ label: '', group: '기본', doses: '', freeText: false })
       setShowAdd(false)
       reload()
     } catch (err) {
