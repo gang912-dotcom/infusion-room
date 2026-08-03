@@ -126,7 +126,9 @@ router.post('/sessions/:id/start', (req, res) => {
   if (session.cancelled) return res.status(400).json({ error: '취소된 배정입니다' })
   if (session.started_at !== null) return res.status(400).json({ error: '이미 시작된 세션입니다' })
 
-  const { mix_staff_id, duration_minutes, visit_symptom: visitSymptom } = req.body ?? {}
+  // 내원당시증상은 3a단계에서 '처방 확인'(PUT /sessions/:id/prescription)으로 옮겼다.
+  // 투여 시작은 급할 때 먼저 눌러야 하므로 기록 입력과 엮지 않는다.
+  const { mix_staff_id, duration_minutes } = req.body ?? {}
   const mixStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1').get(mix_staff_id)
   if (!mixStaff) return res.status(400).json({ error: '유효하지 않은 믹스 담당자입니다' })
 
@@ -143,11 +145,9 @@ router.post('/sessions/:id/start', (req, res) => {
     return res.status(err.status).json({ error: err.message })
   }
 
-  // 내원당시증상은 믹스 담당자가 투여 시작 시 적는다. 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
-  const trimmedSymptom = typeof visitSymptom === 'string' ? visitSymptom.trim() : ''
   db.prepare(
-    'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ?, visit_symptom = ? WHERE id = ?',
-  ).run(startedAt, req.account.id, mixStaff.id, duration_minutes, trimmedSymptom || null, session.id)
+    'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ? WHERE id = ?',
+  ).run(startedAt, req.account.id, mixStaff.id, duration_minutes, session.id)
   bumpRevision(db)
   res.json({ ok: true })
 })

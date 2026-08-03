@@ -194,11 +194,21 @@ export async function editSessionExamRoom(sessionId, examRoom) {
   })
 }
 
-// 내원당시증상 편집(오입력·나중 보완) — 진행중 상세에서 호출.
-export async function editSessionVisitSymptom(sessionId, visitSymptom) {
-  return apiFetch(`/sessions/${sessionId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ visit_symptom: visitSymptom }),
+// ─── 수액 Order / 처방 확인 ─────────────────────────────────────────
+// 체크리스트 항목은 DB가 원본이다. 화면에 하드코딩된 목록은 없다.
+export async function getOrderItems() {
+  return apiFetch('/order-items')
+}
+
+export async function getPrescription(sessionId) {
+  return apiFetch(`/sessions/${sessionId}/prescription`)
+}
+
+// 오더 체크와 내원당시증상을 한 번에 저장한다(세션 단위 전체 재작성).
+export async function savePrescription(sessionId, { items, visitSymptom }) {
+  return apiFetch(`/sessions/${sessionId}/prescription`, {
+    method: 'PUT',
+    body: JSON.stringify({ items, visit_symptom: visitSymptom }),
   })
 }
 
@@ -210,12 +220,12 @@ export async function editSessionSpecialNote(sessionId, specialNote) {
   })
 }
 
-export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt, visitSymptom }) {
+// 내원당시증상은 3a단계에서 '처방 확인'(savePrescription)으로 옮겼다 — 여기선 안 보낸다.
+export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt }) {
   return apiFetch(`/sessions/${sessionId}/start`, {
     method: 'POST',
     body: JSON.stringify({
       mix_staff_id: mixStaffId, duration_minutes: durationMinutes, started_at: startedAt,
-      visit_symptom: visitSymptom,
     }),
   })
 }

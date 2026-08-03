@@ -237,3 +237,26 @@ CREATE TABLE IF NOT EXISTS vitals (
   deleted      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_vitals_session ON vitals(session_id, occurred_at DESC);
+
+-- ─── 수액 Order 항목 정의 ─────────────────────────────────────────────
+-- 처방 확인 체크리스트의 항목. 하드코딩이 아니라 DB에서 읽어 렌더한다.
+-- 초기 40개는 db.js가 '빈 테이블일 때 1회'만 시드한다(관리자가 지운 항목이 재부팅으로 살아나지 않게).
+CREATE TABLE IF NOT EXISTS order_items (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  code         TEXT    NOT NULL UNIQUE,   -- 내부 식별자(라벨 중복 대비)
+  label        TEXT    NOT NULL,          -- 화면 표기(원내 표기)
+  group_key    TEXT    NOT NULL,          -- '기본'|'치료제'|'IM,SC'|'독감'|'증류수'
+  dose_options TEXT,                      -- 용량 선택지 쉼표구분('110,180,100'), 없으면 NULL
+  free_text    INTEGER NOT NULL DEFAULT 0,-- 1이면 체크박스 대신 자유입력(증류수 mL)
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  is_active    INTEGER NOT NULL DEFAULT 1
+);
+
+-- ─── 세션별 처방(체크 결과) ───────────────────────────────────────────
+-- 체크 = 행 존재, 해제 = 행 삭제. 저장은 세션 단위 전체 재작성(트랜잭션).
+CREATE TABLE IF NOT EXISTS session_orders (
+  session_id INTEGER NOT NULL REFERENCES sessions(id),
+  item_code  TEXT    NOT NULL,   -- order_items.code
+  dose       TEXT,               -- 용량항목이면 '110'/'5g', 증류수면 mL 자유텍스트, 단순체크면 NULL
+  PRIMARY KEY (session_id, item_code)
+);

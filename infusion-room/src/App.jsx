@@ -13,7 +13,8 @@ import {
   getPatientSessionNotes,
   editSessionNote,
   getStaffList, lookupPatient, logPatientDetailView,
-  assignBed, editSessionSpecialNote, editSessionExamRoom, editSessionVisitSymptom, startSession, cancelSession, moveBedSession, adjustSessionDuration, endSession,
+  assignBed, editSessionSpecialNote, editSessionExamRoom, startSession,
+  getOrderItems, getPrescription, savePrescription, cancelSession, moveBedSession, adjustSessionDuration, endSession,
   updateSessionStartedAt,
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
@@ -123,6 +124,11 @@ const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 
 // 진료실 — 연속이 아니다(4·5진료실은 없음). 서버(sessions.js EXAM_ROOMS)와 같은 목록.
 // 관리자 편집은 아직 필요 없어 상수로 둔다.
 const EXAM_ROOMS = ['1', '2', '3', '6', '7']
+
+// 처방 확인 체크리스트의 그룹 표시 순서. 항목 자체는 DB(order_items)가 원본이고
+// 여기 있는 건 '그룹을 어떤 순서로 보여줄지'뿐이다(그룹 편집은 범위 밖).
+// DB에 이 목록에 없는 group_key가 생기면 뒤에 붙여서 렌더한다 — 조용히 사라지면 안 되므로.
+const GROUP_ORDER = ['기본', '치료제', 'IM,SC', '독감', '증류수']
 
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
 // SF Symbols 풍 단색 라인 아이콘 (currentColor, 1em) — 이모지 대체
@@ -2853,6 +2859,11 @@ function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [beds, setBeds] = useState([])
   const [staffList, setStaffList] = useState([])
+  // 처방 확인 — 오더 항목은 DB가 원본이다(하드코딩 목록 없음).
+  const [orderItems, setOrderItems] = useState([])
+  const [prescriptionBed, setPrescriptionBed] = useState(null)
+  // { [code]: dose } — 키가 있으면 체크된 것. 단순 항목은 dose가 ''.
+  const [orderChecks, setOrderChecks] = useState({})
   const [lineStaffId, setLineStaffId] = useState('')
   // 등록 시 선택하는 진료실. 선택 안 하면 '' → 서버에 NULL로 저장된다.
   const [examRoom, setExamRoom] = useState('')
@@ -3021,6 +3032,8 @@ function App() {
     refreshBoard()
     refreshRecords()
     getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
+    // 오더 항목은 거의 안 바뀌므로 로그인 후 한 번만 받아 캐시한다(3b에서 관리자가 고치면 재로그인/새로고침).
+    getOrderItems().then(setOrderItems).catch((err) => console.error('오더 항목 로딩 실패', err))
   }, [account])
 
   // 열려 있는 모달(배정/시작 폼, 라운딩, 베드이동, 정리 확인)이 있는 동안은 폴링이
@@ -3242,35 +3255,20 @@ function App() {
     </label>
   )
 
-  // 내원당시증상 — 원장님 차트의 주 증상(내원 사유). 케어 중 관찰하는 '증상'(session_notes)과 다른 것이다.
-  // 스펙 지시로 placeholder·예시 문구를 넣지 않는다.
-  const visitSymptomField = currentBed && (
-    <label className="field">
-      <span className="field__label">내원당시증상</span>
-      <textarea
-        className="field__input"
-        value={visitSymptom}
-        onChange={(e) => setVisitSymptom(e.target.value)}
-        rows={2}
-        aria-label="내원당시증상"
-      />
-    </label>
-  )
+  // 내원당시증상 입력은 3a단계에서 '처방 확인' 모달로 옮겼다(투여 시작과 분리).
 
-  // 진행중 상세에서의 편집 — 예약 때는 '투여 시작'에 실려 나가므로 저장 버튼이 필요 없다.
-  // 값이 실제로 달라졌을 때만 버튼을 띄운다(trim 기준이라 공백만 친 경우는 안 뜬다).
-  const visitSymptomDirty = !!currentBed && visitSymptom.trim() !== (currentBed.visitSymptom ?? '')
-
-  async function handleSaveVisitSymptom() {
-    if (!currentBed?.sessionId) return
-    setActionError('')
-    try {
-      await editSessionVisitSymptom(currentBed.sessionId, visitSymptom)
-      await refreshBoard()
-    } catch (err) {
-      setActionError(err.message)
-    }
-  }
+  // 오더 항목을 그룹별로 묶는다. 그룹 순서는 GROUP_ORDER를 따르고, 거기 없는 group_key가
+  // DB에 생기면 뒤에 붙인다 — 관리자가 새 그룹을 만들었을 때 화면에서 조용히 사라지면 안 된다.
+  const orderGroups = (() => {
+    const byGroup = new Map()
+    orderItems.forEach((item) => {
+      if (!byGroup.has(item.group_key)) byGroup.set(item.group_key, [])
+      byGroup.get(item.group_key).push(item)
+    })
+    const known = GROUP_ORDER.filter((g) => byGroup.has(g))
+    const extra = [...byGroup.keys()].filter((g) => !GROUP_ORDER.includes(g))
+    return [...known, ...extra].map((group) => ({ group, items: byGroup.get(group) }))
+  })()
 
   // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
   // 상기용이라 실패해도 조용히 비운다(모달 동작을 막으면 안 됨).
@@ -3462,9 +3460,6 @@ function App() {
       setDurationMinutes(DEFAULT_DURATION)
       setMixStaffId('')
     }
-    // 내원당시증상은 예약(입력)·진행중(조회·편집) 둘 다 쓰므로 여기서 함께 채운다.
-    // 빈 베드는 세션 자체가 없어 항상 ''.
-    setVisitSymptom(bed.visitSymptom ?? '')
   }
 
   // 등록 잠금: 빈 베드 모달을 여는 동안 잠금을 걸고 30초마다 하트비트로 유지한다.
@@ -3717,6 +3712,78 @@ function App() {
     setEditingVitalsId(null)
   }
 
+  // ─── 처방 확인 ────────────────────────────────────────────────────
+  // 투여 시작과 독립된 동작이다 — 예약·진행중 어느 쪽에서든 열리고, 순서를 강제하지 않는다
+  // (급하면 투약 먼저 하고 기록은 나중에).
+  async function openPrescriptionModal(bed) {
+    const target = bed ?? currentBed
+    if (!target?.sessionId) return
+    setPrescriptionBed(target)
+    setActionError('')
+    setOrderChecks({})
+    setVisitSymptom('')
+    try {
+      const saved = await getPrescription(target.sessionId)
+      const checks = {}
+      saved.items.forEach((it) => { checks[it.code] = it.dose ?? '' })
+      setOrderChecks(checks)
+      setVisitSymptom(saved.visit_symptom ?? '')
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  function closePrescriptionModal() {
+    setPrescriptionBed(null)
+  }
+
+  // 단순 항목: 있으면 빼고 없으면 넣는다.
+  function toggleOrderItem(code) {
+    setOrderChecks((prev) => {
+      const next = { ...prev }
+      if (code in next) delete next[code]
+      else next[code] = ''
+      return next
+    })
+  }
+
+  // 용량 항목: 용량 버튼 자체가 체크다. 같은 용량을 다시 누르면 해제.
+  // 이렇게 하면 "체크됐는데 용량이 비어 있는" 상태가 구조적으로 생기지 않는다
+  // (기록지에 용량 빈 칸이 나가면 안 되므로).
+  function selectOrderDose(code, dose) {
+    setOrderChecks((prev) => {
+      const next = { ...prev }
+      if (next[code] === dose) delete next[code]
+      else next[code] = dose
+      return next
+    })
+  }
+
+  // 자유입력 항목(증류수 mL): 값이 있으면 체크, 비우면 해제.
+  function setOrderFreeText(code, value) {
+    setOrderChecks((prev) => {
+      const next = { ...prev }
+      if (value.trim() === '') delete next[code]
+      else next[code] = value
+      return next
+    })
+  }
+
+  async function handleSavePrescription() {
+    if (!prescriptionBed?.sessionId) return
+    setActionError('')
+    const items = Object.entries(orderChecks).map(([code, dose]) => (
+      dose === '' ? { code } : { code, dose }
+    ))
+    try {
+      await savePrescription(prescriptionBed.sessionId, { items, visitSymptom })
+      await refreshBoard()
+      closePrescriptionModal()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   async function handleSaveVitals() {
     if (!vitalsModalBed?.sessionId) return
     const toNum = (v) => (v.trim() === '' ? null : Number(v))
@@ -3855,7 +3922,6 @@ function App() {
       await startSession(currentBed.sessionId, {
         mixStaffId: Number(mixStaffId),
         durationMinutes,
-        visitSymptom,
       })
       await refreshBoard()
       closeModal()
@@ -4446,6 +4512,18 @@ function App() {
 
                 {examRoomField}
 
+                {/* 처방 확인은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
+                <div className="rec-block__actions">
+                  <button
+                    type="button"
+                    className="dm-note-btn"
+                    onClick={() => openPrescriptionModal()}
+                    disabled={offline}
+                  >
+                    처방 확인
+                  </button>
+                </div>
+
                 <label className="field">
                   <span className="field__label">믹스 담당자</span>
                   <select
@@ -4459,8 +4537,6 @@ function App() {
                     ))}
                   </select>
                 </label>
-
-                {visitSymptomField}
 
                 <DurationControls
                   minutes={durationMinutes}
@@ -4562,22 +4638,6 @@ function App() {
                 )}
 
                 {isInProgress && examRoomField}
-
-                {isInProgress && (
-                  <>
-                    {visitSymptomField}
-                    {visitSymptomDirty && (
-                      <button
-                        type="button"
-                        className="rec-btn"
-                        onClick={handleSaveVisitSymptom}
-                        disabled={offline}
-                      >
-                        내원당시증상 저장
-                      </button>
-                    )}
-                  </>
-                )}
 
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (
@@ -4694,6 +4754,14 @@ function App() {
                       <div className="rec-block__head">
                         <h3 className="rec-block__title">금일 기록</h3>
                         <div className="rec-block__actions">
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            onClick={() => openPrescriptionModal()}
+                            disabled={offline}
+                          >
+                            처방 확인
+                          </button>
                           <button
                             type="button"
                             className="dm-note-btn"
@@ -4924,6 +4992,107 @@ function App() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 처방 확인 (수액 Order 체크 + 내원당시증상) ── */}
+      {prescriptionBed && (
+        <div className="modal-overlay modal-overlay--top">
+          <div className="modal modal--prescription" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__header-title">
+                <h2>처방 확인</h2>
+                <span className="modal__header-sub">
+                  베드 {prescriptionBed.number} · {prescriptionBed.patientName}
+                </span>
+              </div>
+              <button type="button" className="modal__close" onClick={closePrescriptionModal} aria-label="닫기">
+                <Icon name="close" />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              {/* 그룹 순서는 GROUP_ORDER, 항목은 전부 DB 응답이다. */}
+              <div className="order-groups">
+                {orderGroups.map(({ group, items }) => (
+                  <section key={group} className="order-group">
+                    <h3 className="order-group__title">{group}</h3>
+                    <ul className="order-group__list">
+                      {items.map((item) => (
+                        <li key={item.code} className="order-item">
+                          {item.free_text ? (
+                            /* 증류수 — 체크박스가 아니라 mL 자유입력. 값이 있으면 체크로 본다. */
+                            <label className="order-item__free">
+                              <span className="order-item__label">{item.label}</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                className="order-item__free-input"
+                                value={orderChecks[item.code] ?? ''}
+                                onChange={(e) => setOrderFreeText(item.code, e.target.value)}
+                                aria-label={`${item.label} mL`}
+                              />
+                              <span className="order-item__unit">mL</span>
+                            </label>
+                          ) : item.dose_options ? (
+                            /* 용량 항목 — 용량 버튼이 곧 체크다. 용량 없이 체크되는 상태가 없다. */
+                            <div className="order-item__dosed">
+                              <span className="order-item__label">{item.label}</span>
+                              <div className="order-item__doses">
+                                {item.dose_options.map((dose) => (
+                                  <button
+                                    key={dose}
+                                    type="button"
+                                    className={`order-dose${orderChecks[item.code] === dose ? ' order-dose--on' : ''}`}
+                                    onClick={() => selectOrderDose(item.code, dose)}
+                                    aria-pressed={orderChecks[item.code] === dose}
+                                  >
+                                    {dose}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="order-item__check">
+                              <input
+                                type="checkbox"
+                                checked={item.code in orderChecks}
+                                onChange={() => toggleOrderItem(item.code)}
+                              />
+                              <span className="order-item__label">{item.label}</span>
+                            </label>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+
+              {/* 내원당시증상 — 2단계에서 여기로 옮겼다. placeholder·예시 없음. */}
+              <label className="field">
+                <span className="field__label">내원당시증상</span>
+                <textarea
+                  className="field__input"
+                  value={visitSymptom}
+                  onChange={(e) => setVisitSymptom(e.target.value)}
+                  rows={2}
+                  aria-label="내원당시증상"
+                />
+              </label>
+
+              {actionError && <p role="alert" className="field__error">{actionError}</p>}
+
+              <button
+                type="button"
+                className="btn-register"
+                onClick={handleSavePrescription}
+                disabled={offline}
+              >
+                저장
+              </button>
+            </div>
           </div>
         </div>
       )}

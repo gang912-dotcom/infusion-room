@@ -13,6 +13,7 @@ import staffRouter from './routes/staff.js'
 import bedLocksRouter from './routes/bedLocks.js'
 import messagesRouter from './routes/messages.js'
 import vitalsRouter from './routes/vitals.js'
+import ordersRouter from './routes/orders.js'
 import adminRouter from './routes/admin.js'
 import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
@@ -33,6 +34,7 @@ app.use('/api', staffRouter)
 app.use('/api', bedLocksRouter)
 app.use('/api', messagesRouter)
 app.use('/api', vitalsRouter)
+app.use('/api', ordersRouter)
 app.use('/api/admin', requireAdmin, adminRouter)
 
 // ─── 프론트 정적 서빙 ───────────────────────────────────────────────
