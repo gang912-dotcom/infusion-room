@@ -328,6 +328,11 @@ export async function endSession(sessionId, endedAt, endStaffId) {
   })
 }
 
+// 실수로 종료한 세션을 다시 이용 중으로. 그 사이 베드가 찼으면 서버가 400을 준다.
+export async function restoreSession(sessionId) {
+  return apiFetch(`/sessions/${sessionId}/restore`, { method: 'POST' })
+}
+
 export async function updateSessionPatient(sessionId, { patientName, chartNo }) {
   return apiFetch(`/sessions/${sessionId}/patient`, {
     method: 'PATCH',

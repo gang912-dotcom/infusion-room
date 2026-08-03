@@ -310,6 +310,38 @@ router.get('/history', (req, res) => {
   res.json(rows.map((r) => ({ ...r, orders: ordersBySession.get(r.id) ?? [] })))
 })
 
+// ─── 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 ────────────────
+router.post('/sessions/:id/restore', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+  if (session.ended_at === null) {
+    return res.status(400).json({ error: '종료된 세션이 아닙니다' })
+  }
+  if (session.deleted) {
+    return res.status(400).json({ error: '삭제된 기록은 복귀할 수 없습니다' })
+  }
+
+  // 그 사이 같은 베드에 새 환자가 들어왔으면 되돌릴 자리가 없다.
+  // (DB의 idx_sessions_one_active가 막아주긴 하지만 메시지를 알아볼 수 있게 먼저 걸러낸다.)
+  const occupied = db.prepare(
+    'SELECT 1 FROM sessions WHERE bed_id = ? AND ended_at IS NULL AND cancelled = 0 LIMIT 1',
+  ).get(session.bed_id)
+  if (occupied) {
+    return res.status(400).json({ error: '해당 베드에 다른 환자가 있어 복귀할 수 없습니다' })
+  }
+
+  // duration_minutes는 일부러 남긴다 — 이건 '투여 시작 때 정한 예정 소요시간'이고
+  // 진행바·'N/120분' 표시가 쓴다. 지우면 복귀한 카드의 진행 표시가 깨진다.
+  // (실제 이용시간은 저장하지 않고 ended_at - started_at으로 계산하므로 재종료 때 알아서 맞는다.)
+  db.prepare(`
+    UPDATE sessions
+    SET ended_at = NULL, ended_by = NULL, end_staff_id = NULL, record_snapshot = NULL
+    WHERE id = ?
+  `).run(session.id)
+  bumpRevision(db)
+  res.json({ ok: true })
+})
+
 // ─── 기록지 조회 ────────────────────────────────────────────────────
 // 종료됐으면 얼린 스냅샷을, 아니면 지금 DB로 즉석 조립한 것을 준다.
 // 이 기능 이전에 종료된 세션은 스냅샷이 없으므로 즉석 조립으로 폴백한다(백필 불필요).

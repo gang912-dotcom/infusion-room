@@ -6,7 +6,7 @@ import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
   getBoard, readBoardCache,
-  loadHistory, toggleHistoryDeleted,
+  loadHistory, toggleHistoryDeleted, restoreSession,
   loadSessionNotes, createSessionNote, toggleSessionNoteDeleted,
   loadRounds, createRound, editRound, toggleRoundDeleted,
   loadVitals, createVitals, editVitals,
@@ -3210,7 +3210,7 @@ function DataManageView({
 }
 
 // ─── 이용기록 화면 ──────────────────────────────────────────────
-function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [] }) {
+function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore }) {
   const [searchName, setSearchName] = useState('')
   const [searchChart, setSearchChart] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
@@ -3364,16 +3364,28 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [] }) {
                   <td>{entry.endTime}</td>
                   <td>{formatDuration(entry.usedMinutes)}</td>
                   <td>
-                    {/* 종료된 세션이라 스냅샷(공식본)이 열린다. 이 기능 이전 세션은 즉석 폴백. */}
-                    {entry.sessionId && (
-                      <button
-                        type="button"
-                        className="dm-note-btn"
-                        onClick={() => openRecordFor(entry.sessionId)}
-                      >
-                        기록지
-                      </button>
-                    )}
+                    <div className="dm-admin-edit-actions__buttons">
+                      {/* 종료된 세션이라 스냅샷(공식본)이 열린다. 이 기능 이전 세션은 즉석 폴백. */}
+                      {entry.sessionId && (
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() => openRecordFor(entry.sessionId)}
+                        >
+                          기록지
+                        </button>
+                      )}
+                      {/* 실수로 종료한 것 되돌리기. 베드가 이미 찼으면 서버가 막는다. */}
+                      {entry.sessionId && onRestore && (
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() => onRestore(entry)}
+                        >
+                          복귀
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -4585,6 +4597,19 @@ function App() {
     setOrderChecks(next)
   }
 
+  // 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 되돌린다.
+  // 이용기록 화면에서 부르므로 setActionError(베드 상세용)가 안 보인다 — alert로 알린다.
+  async function handleRestoreSession(entry) {
+    if (!entry?.sessionId) return
+    if (!window.confirm(`${entry.patientName} 환자를 다시 이용 중으로 되돌릴까요?`)) return
+    try {
+      await restoreSession(entry.sessionId)
+      await Promise.all([refreshBoard(), refreshRecords()])
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   // 기록지 열기 — 종료본이면 스냅샷, 아니면 즉석 조립본이 온다(서버가 판단).
   function handleOpenRecord(sessionId) {
     setActionError('')
@@ -5092,7 +5117,13 @@ function App() {
 
       <div className="tab-view" ref={tabViewRef}>
       {activeTab === 'history' ? (
-        <HistoryView history={activeHistory} sessionNotes={sessionNotes} rounds={rounds} vitals={vitals} />
+        <HistoryView
+          history={activeHistory}
+          sessionNotes={sessionNotes}
+          rounds={rounds}
+          vitals={vitals}
+          onRestore={handleRestoreSession}
+        />
       ) : activeTab === 'patient' ? (
         <PatientView
           history={activeHistory}
