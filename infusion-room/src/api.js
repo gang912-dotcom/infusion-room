@@ -345,6 +345,12 @@ function mapHistoryRow(row) {
     endTime: new Date(row.ended_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     usedMinutes: Math.round((row.ended_at - row.started_at) / 60000),
     specialNote: row.special_note ?? null,
+    // 4c — 기록지 필드. CSV 추출이 쓴다(표 화면은 안 씀).
+    examRoom: row.exam_room ?? null,
+    visitSymptom: row.visit_symptom ?? null,
+    lineStaff: row.line_staff_name ?? null,
+    mixStaff: row.mix_staff_name ?? null,
+    orders: row.orders ?? [],
     deleted: !!row.deleted,
   }
 }

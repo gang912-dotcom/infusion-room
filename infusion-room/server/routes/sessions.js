@@ -268,15 +268,34 @@ router.post('/sessions/:id/end', (req, res) => {
 router.get('/history', (req, res) => {
   const rows = db.prepare(`
     SELECT s.id, s.started_at, s.ended_at, s.deleted, s.special_note,
+           s.exam_room, s.visit_symptom, s.duration_minutes,
            b.room, b.number AS bed_number,
-           p.chart_no, p.name AS patient_name
+           p.chart_no, p.name AS patient_name,
+           ls.name AS line_staff_name, ms.name AS mix_staff_name
     FROM sessions s
     JOIN beds b ON b.id = s.bed_id
     JOIN patients p ON p.id = s.patient_id
+    LEFT JOIN staff ls ON ls.id = s.line_staff_id
+    LEFT JOIN staff ms ON ms.id = s.mix_staff_id
     WHERE s.ended_at IS NOT NULL
     ORDER BY s.ended_at DESC
   `).all()
-  res.json(rows)
+
+  // 처방은 세션마다 조회하면 N+1이 된다 — 한 번에 받아 세션별로 묶는다.
+  // 라벨 조인에 is_active 필터를 걸지 않는다(관리자가 숨긴 항목도 이름이 풀려야 한다).
+  const orderRows = db.prepare(`
+    SELECT so.session_id, so.item_code, so.dose, oi.label
+    FROM session_orders so
+    LEFT JOIN order_items oi ON oi.code = so.item_code
+    ORDER BY oi.group_key, oi.sort_order
+  `).all()
+  const ordersBySession = new Map()
+  for (const o of orderRows) {
+    if (!ordersBySession.has(o.session_id)) ordersBySession.set(o.session_id, [])
+    ordersBySession.get(o.session_id).push({ label: o.label ?? o.item_code, dose: o.dose })
+  }
+
+  res.json(rows.map((r) => ({ ...r, orders: ordersBySession.get(r.id) ?? [] })))
 })
 
 // ─── 기록지 조회 ────────────────────────────────────────────────────

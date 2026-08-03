@@ -866,9 +866,24 @@ function xDownload(filename, content, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-// 날짜별 이용기록 CSV — 한 세션 = 한 행 (특이사항·라운딩은 시각과 함께 요약 셀)
+// 수액 처방 요약 셀 — '라벨(용량) · 라벨 · …'. 쉼표는 CSV 열을 밀 수 있어 쓰지 않는다.
+function xOrdersText(orders = []) {
+  return orders.map((o) => (o.dose ? `${o.label}(${o.dose})` : o.label)).join(' · ')
+}
+
+// 날짜별 이용기록 CSV — 한 세션 = 한 행 (다중값은 시각과 함께 요약 셀)
+//
+// 종료 세션엔 record_snapshot(공식본)이 있지만 CSV는 **DB 현재값**으로 뽑는다.
+// CSV는 데이터 아카이브고, 스냅샷은 서명까지 딸린 그 시점의 공식 기록지 전용이다.
+//
+// 열 순서: 스펙의 권장 순서를 따르되 기존 열들의 상대 순서(증상→라운딩→바이탈)는 그대로 뒀다.
+// 권장 순서는 바이탈을 증상 앞에 두는데, 그러면 기존 CSV를 쓰던 엑셀 작업이 밀린다.
 function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
-  const headers = ['날짜', '수액실', '베드', '환자명', '차트번호', '시작', '종료', '이용시간(분)', '증상', '라운딩', '바이탈']
+  const headers = [
+    '날짜', '진료실', '수액실', '베드', '환자명', '차트번호', '라인담당', '믹스담당',
+    '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항', '수액처방',
+    '증상', '라운딩', '바이탈',
+  ]
   const rows = history.map((h) => {
     const notes = sessionNotes.filter((n) => n.sessionId === h.sessionId && !n.deleted)
       .sort((a, b) => new Date(getNoteOccurredAt(a)) - new Date(getNoteOccurredAt(b)))
@@ -879,7 +894,13 @@ function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
     const vts = vitals.filter((v) => v.sessionId === h.sessionId && !v.deleted)
       .sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt))
       .map((v) => `${xTime(v.occurredAt)} ${xVitalsText(v)}`).join(' | ')
-    return [h.date, h.room, h.bedNumber, h.patientName, h.chartNumber, h.startTime, h.endTime, h.usedMinutes, notes, rds, vts]
+    return [
+      h.date, h.examRoom ? `${h.examRoom}진료실` : '', h.room, h.bedNumber,
+      h.patientName, h.chartNumber, h.lineStaff ?? '', h.mixStaff ?? '',
+      h.startTime, h.endTime, h.usedMinutes,
+      h.visitSymptom ?? '', h.specialNote ?? '', xOrdersText(h.orders),
+      notes, rds, vts,
+    ]
   })
   return xToCsv(headers, rows)
 }
@@ -891,11 +912,24 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
   const sessions = history.filter((h) => h.chartNumber === chartNumber)
     .sort((a, b) => parseDateStr(a.date) - parseDateStr(b.date))
   sessions.forEach((h) => {
+    // 이용 행의 비고에 진료실·담당자를 함께 적는다(방문 단위 정보라 이벤트가 아님).
+    const head = [
+      h.examRoom ? `${h.examRoom}진료실` : null,
+      h.lineStaff ? `라인 ${h.lineStaff}` : null,
+      h.mixStaff ? `믹스 ${h.mixStaff}` : null,
+    ].filter(Boolean).join(' · ')
     rows.push([h.date, h.startTime, '이용', h.room, h.bedNumber,
-      `수액 이용 (${formatDuration(h.usedMinutes)})`, `${h.startTime}~${h.endTime}`])
-    // 특이사항은 방문 단위라 그 방문 행 바로 아래에 붙인다.
+      `수액 이용 (${formatDuration(h.usedMinutes)})`,
+      [`${h.startTime}~${h.endTime}`, head].filter(Boolean).join(' · ')])
+    // 방문 단위 정보는 그 방문 행 바로 아래에 붙인다(이벤트 타임라인과 섞이지 않게).
+    if (h.visitSymptom) {
+      rows.push([h.date, '', '내원당시증상', h.room, h.bedNumber, h.visitSymptom, ''])
+    }
     if (h.specialNote) {
       rows.push([h.date, '', '특이사항', h.room, h.bedNumber, h.specialNote, ''])
+    }
+    if (h.orders?.length) {
+      rows.push([h.date, '', '수액처방', h.room, h.bedNumber, xOrdersText(h.orders), ''])
     }
     xVisitEvents(h.sessionId, sessionNotes, rounds, vitals).forEach((e) => {
       rows.push([h.date, xTime(e.t), e.kind, h.room, h.bedNumber, e.text, ''])
