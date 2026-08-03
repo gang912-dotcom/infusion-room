@@ -1233,7 +1233,6 @@
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 8px;
-  color-scheme: dark;
 }
 
 .occurred-at__input:focus {
@@ -4462,11 +4461,6 @@
   accent-color: var(--status-occupied);
 }
 
-/* :root의 color-scheme이 'light dark'라 체크박스 같은 브라우저 기본 위젯은 앱 테마가 아니라
-   OS 설정을 따른다 — 맥이 다크면 앱을 라이트로 봐도 미선택 칸이 새까맣게 나온다.
-   여기서만 앱 테마에 맞춰 고정한다(앱 전역 적용은 기존 화면까지 바뀌므로 범위 밖). */
-:root[data-theme='light'] .order-item__check input[type='checkbox'] { color-scheme: light; }
-:root[data-theme='dark'] .order-item__check input[type='checkbox'] { color-scheme: dark; }
 
 .order-item__label {
   font-size: 13px;
@@ -4549,7 +4543,6 @@
 
 .order-bundle-btn:hover { border-color: var(--status-occupied); }
 
-/* 관리자 항목 추가 폼의 '자유입력' 체크 — 체크리스트와 같은 이유로 테마를 고정한다. */
 .order-admin-free {
   display: flex;
   align-items: center;
@@ -4566,9 +4559,6 @@
   flex: none;
   accent-color: var(--status-occupied);
 }
-
-:root[data-theme='light'] .order-admin-free input[type='checkbox'] { color-scheme: light; }
-:root[data-theme='dark'] .order-admin-free input[type='checkbox'] { color-scheme: dark; }
 
 /* ─── 직원 자필 서명 (관리자 직원 관리) ─────────────────────────────── */
 .staff-sign {

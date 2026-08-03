@@ -30,6 +30,14 @@
   }
 }
 
+/* 브라우저 기본 위젯(체크박스·select 드롭다운·스크롤바·시각 입력)을 앱 테마에 고정한다.
+   위의 'light dark'만 있으면 브라우저가 OS 설정을 따르는데, 이 앱은 자체 테마 토글을
+   갖고 있어서 OS 다크 + 앱 라이트일 때 흰 카드 위에 까만 체크박스가 얹힌다.
+   :root[data-theme=…]가 :root보다 특이도가 높아 위 선언을 이긴다.
+   data-theme은 main.jsx가 렌더 전에 세팅하므로 첫 페인트부터 적용된다. */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;
