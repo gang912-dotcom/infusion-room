@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS staff (
   name       TEXT    NOT NULL,
   is_active  INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  signature  TEXT     -- 자필 서명 base64 dataURL. 기록지 담당자 칸에 삽입. 없으면 NULL.
 );
 
 CREATE TABLE IF NOT EXISTS patients (
@@ -66,7 +67,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   deleted          INTEGER NOT NULL DEFAULT 0,
   special_note     TEXT,  -- 이 방문(세션)의 특이사항. 등록 시 자유기재, 나중에 편집 가능.
   exam_room        TEXT,  -- 진료실 번호('1'|'2'|'3'|'6'|'7'). 미선택이면 NULL.
-  visit_symptom    TEXT   -- 내원당시증상(주 증상, 내원 사유). 자유 텍스트. 미입력이면 NULL.
+  visit_symptom    TEXT,  -- 내원당시증상(주 증상, 내원 사유). 자유 텍스트. 미입력이면 NULL.
+  record_snapshot  TEXT   -- 종료 시 얼린 기록지 데이터(JSON). 종료 전이면 NULL.
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active

@@ -22,6 +22,7 @@ import {
   acquireBedLock, releaseBedLock,
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
+  getSessionRecord,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
 } from './api'
@@ -901,6 +902,165 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
     })
   })
   return xToCsv(headers, rows)
+}
+
+// ─── 수액 간호 기록지 (4b) ──────────────────────────────────────────
+// 종이 1:1 재현이 아니라 정리된 디지털판. 새 창에 자체완결 HTML을 띄우고
+// 브라우저 인쇄 대화상자에서 "PDF로 저장"하면 그게 곧 PDF 출력이다
+// (서버 PDF 엔진을 들이지 않기 위한 선택 — 기존 이용기록 리포트와 같은 방식).
+function openRecordSheet(record) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+  ))
+  const t = (ms) => (ms ? xTime(ms) : '—')
+  const day = (ms) => (ms ? new Date(ms).toLocaleDateString('ko-KR') : '—')
+  // 방 라벨은 서버가 아니라 여기서 푼다 — 상수 사본을 서버에 또 두지 않으려고.
+  const roomLabel = TABS.find((tab) => tab.id === record.room)?.label ?? record.room
+
+  const row = (label, value) => (
+    value ? `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>` : ''
+  )
+
+  const ordersHtml = record.orders.length
+    ? `<ul class="orders">${record.orders.map((o) =>
+      `<li>${esc(o.label)}${o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : ''}</li>`).join('')}</ul>`
+    : '<p class="none">체크된 처방 없음</p>'
+
+  const vitalsHtml = record.vitals.length
+    ? `<table class="grid"><thead><tr><th>시각</th><th>체온</th><th>혈압</th><th>맥박</th></tr></thead><tbody>${
+      record.vitals.map((v) => `<tr>
+        <td>${esc(t(v.occurred_at))}</td>
+        <td>${v.temperature != null ? esc(v.temperature) + '℃' : '—'}</td>
+        <td>${v.bp_systolic != null ? `${esc(v.bp_systolic)}/${esc(v.bp_diastolic)}` : '—'}</td>
+        <td>${v.pulse != null ? esc(v.pulse) : '—'}</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<p class="none">바이탈 기록 없음</p>'
+
+  // 라운딩과 증상 기록을 시각순으로 합쳐 하나의 타임라인으로 낸다.
+  const events = [
+    ...record.rounds.map((r) => ({ t: r.occurred_at, kind: '라운딩', text: r.memo ?? '' })),
+    ...record.notes.map((n) => ({
+      t: n.occurred_at,
+      kind: '증상',
+      text: [[...n.symptoms, ...n.actions].join(' · '), n.memo].filter(Boolean).join(' / '),
+    })),
+  ].sort((a, b) => a.t - b.t)
+
+  const timelineHtml = events.length
+    ? `<ul class="tl">${events.map((e) =>
+      `<li><span class="tt">${esc(t(e.t))}</span><span class="kk">${esc(e.kind)}</span><span class="cc">${esc(e.text)}</span></li>`).join('')}</ul>`
+    : '<p class="none">라운딩·증상 기록 없음</p>'
+
+  const signCell = (name, signature) => `<div class="sign">
+      <div class="sign__role">${esc(name.role)}</div>
+      <div class="sign__img">${signature ? `<img src="${esc(signature)}" alt="${esc(name.value)} 서명">` : ''}</div>
+      <div class="sign__name">${esc(name.value || '—')}</div>
+    </div>`
+
+  const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+  <title>수액 간호 기록지 — ${esc(record.patient_name)}(${esc(record.chart_no)})</title>
+  <style>
+    @page{size:A4;margin:14mm}
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,'Pretendard','Apple SD Gothic Neo','Segoe UI',sans-serif;
+      color:#111;background:#fff;margin:0 auto;padding:28px;max-width:820px;line-height:1.5}
+    header{border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:16px;
+      display:flex;justify-content:space-between;align-items:flex-end}
+    h1{font-size:22px;margin:0;letter-spacing:-0.5px}
+    .date{color:#555;font-weight:600}
+    h2{font-size:14px;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid #ccc;color:#333}
+    table.info{width:100%;border-collapse:collapse}
+    table.info th{width:96px;text-align:left;font-weight:700;color:#444;padding:4px 8px 4px 0;
+      vertical-align:top;font-size:13px}
+    table.info td{padding:4px 0;font-size:14px}
+    table.grid{width:100%;border-collapse:collapse;font-size:13px}
+    table.grid th,table.grid td{border:1px solid #ddd;padding:4px 8px;text-align:left}
+    table.grid th{background:#f5f5f5;font-weight:700}
+    ul.orders{margin:0;padding-left:18px;font-size:14px;columns:2}
+    ul.orders li{margin:2px 0;break-inside:avoid}
+    .dose{font-weight:700}
+    p.free{margin:0;font-size:14px;white-space:pre-wrap}
+    ul.tl{list-style:none;margin:0;padding:0}
+    ul.tl li{display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;
+      border-bottom:1px dotted #e0e0e0}
+    .tt{font-variant-numeric:tabular-nums;font-weight:700;min-width:46px}
+    .kk{font-size:11px;padding:1px 6px;border:1px solid #bbb;border-radius:8px;flex:none;color:#444}
+    .none{color:#999;font-size:13px;margin:0}
+    .signs{display:flex;gap:28px;margin-top:10px}
+    .sign{flex:1;text-align:center}
+    .sign__role{font-size:12px;color:#555;font-weight:700;margin-bottom:4px}
+    .sign__img{height:52px;display:flex;align-items:flex-end;justify-content:center}
+    .sign__img img{max-height:52px;max-width:100%;object-fit:contain}
+    .sign__name{border-top:1px solid #333;margin-top:4px;padding-top:4px;font-size:14px;font-weight:600}
+    .toolbar{position:sticky;top:0;text-align:right;margin-bottom:12px}
+    .toolbar button{font:inherit;font-weight:700;padding:8px 16px;border:0;border-radius:8px;
+      background:#4c8bf5;color:#fff;cursor:pointer}
+    .draft{margin:0 0 12px;padding:6px 10px;background:#fff4d6;border:1px solid #e0c060;
+      border-radius:6px;font-size:13px;color:#6b4e00}
+    @media print{.toolbar{display:none} body{padding:0} .draft{display:none}}
+  </style></head><body>
+    <div class="toolbar"><button onclick="window.print()">인쇄 / PDF 저장</button></div>
+    ${record.from_snapshot ? '' : '<p class="draft">아직 종료되지 않은 세션입니다 — 확정본이 아닌 현재 시점 미리보기입니다.</p>'}
+    <header>
+      <h1>수액 간호 기록지</h1>
+      <div class="date">${esc(day(record.started_at ?? record.assigned_at))}</div>
+    </header>
+
+    <h2>환자 · 배치</h2>
+    <table class="info">
+      ${row('성명', record.patient_name)}
+      ${row('차트번호', record.chart_no)}
+      ${row('진료실', record.exam_room ? `${record.exam_room}진료실` : '')}
+      ${row('수액실', `${roomLabel} ${record.bed_number}번`)}
+      ${row('라인담당', record.line_staff_name)}
+      ${row('믹스담당', record.mix_staff_name)}
+    </table>
+
+    <h2>시간</h2>
+    <table class="info">
+      ${row('시작', t(record.started_at))}
+      ${row('종료', t(record.ended_at))}
+      ${row('이용시간', record.used_minutes != null ? formatDuration(record.used_minutes) : '')}
+    </table>
+
+    ${record.visit_symptom ? `<h2>내원당시증상</h2><p class="free">${esc(record.visit_symptom)}</p>` : ''}
+    ${record.special_note ? `<h2>특이사항 (질환 · 약 부작용)</h2><p class="free">${esc(record.special_note)}</p>` : ''}
+
+    <h2>수액 처방</h2>
+    ${ordersHtml}
+
+    <h2>바이탈</h2>
+    ${vitalsHtml}
+
+    <h2>라운딩 · 증상 기록</h2>
+    ${timelineHtml}
+
+    <h2>담당자</h2>
+    <div class="signs">
+      ${signCell({ role: '라인담당', value: record.line_staff_name }, record.line_signature)}
+      ${signCell({ role: '믹스담당', value: record.mix_staff_name }, record.mix_signature)}
+    </div>
+  </body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) {
+    alert('팝업이 차단되어 기록지를 열 수 없습니다. 팝업 허용 후 다시 시도해주세요.')
+    return
+  }
+  w.document.write(html)
+  w.document.close()
+}
+
+// 기록지 열기 — 베드 상세 모달과 이용기록 표가 함께 쓴다.
+// 오류 표시는 화면마다 다르므로(모달은 field__error, 이용기록은 표뿐) 콜백으로 받는다.
+async function openRecordFor(sessionId, onError) {
+  if (!sessionId) return
+  try {
+    openRecordSheet(await getSessionRecord(sessionId))
+  } catch (err) {
+    if (onError) onError(err.message)
+    else alert(err.message)
+  }
 }
 
 // 환자별 인쇄용 리포트(HTML) — 새 창으로 열고 인쇄/PDF 저장
@@ -3151,6 +3311,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [] }) {
                 <th>시작시간</th>
                 <th>종료시간</th>
                 <th>이용시간</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -3164,6 +3325,18 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [] }) {
                   <td>{entry.startTime}</td>
                   <td>{entry.endTime}</td>
                   <td>{formatDuration(entry.usedMinutes)}</td>
+                  <td>
+                    {/* 종료된 세션이라 스냅샷(공식본)이 열린다. 이 기능 이전 세션은 즉석 폴백. */}
+                    {entry.sessionId && (
+                      <button
+                        type="button"
+                        className="dm-note-btn"
+                        onClick={() => openRecordFor(entry.sessionId)}
+                      >
+                        기록지
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -4355,6 +4528,12 @@ function App() {
     setOrderChecks(next)
   }
 
+  // 기록지 열기 — 종료본이면 스냅샷, 아니면 즉석 조립본이 온다(서버가 판단).
+  function handleOpenRecord(sessionId) {
+    setActionError('')
+    return openRecordFor(sessionId, setActionError)
+  }
+
   async function handleSavePrescription() {
     if (!prescriptionBed?.sessionId) return
     setActionError('')
@@ -5108,6 +5287,14 @@ function App() {
                   >
                     처방 확인
                   </button>
+                  <button
+                    type="button"
+                    className="dm-note-btn"
+                    onClick={() => handleOpenRecord(currentBed.sessionId)}
+                    disabled={offline}
+                  >
+                    기록지
+                  </button>
                 </div>
 
                 <label className="field">
@@ -5222,6 +5409,18 @@ function App() {
                     </div>
                   </div>
                 )}
+
+                {/* 기록지는 진행중·완료 모두에서 연다. 완료면 종료 시 얼린 스냅샷이 나온다. */}
+                <div className="rec-block__actions">
+                  <button
+                    type="button"
+                    className="dm-note-btn"
+                    onClick={() => handleOpenRecord(currentBed.sessionId)}
+                    disabled={offline}
+                  >
+                    기록지
+                  </button>
+                </div>
 
                 {isInProgress && examRoomField}
 

@@ -31,6 +31,11 @@ if (!sessionColumns.includes('visit_symptom')) {
   db.exec('ALTER TABLE sessions ADD COLUMN visit_symptom TEXT')
 }
 
+// 종료 시 얼린 기록지 데이터(JSON). 종료 후 원본을 고쳐도 공식본은 이 값이 남는다.
+if (!sessionColumns.includes('record_snapshot')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN record_snapshot TEXT')
+}
+
 // 직원 자필 서명 — base64 dataURL을 컬럼에 넣는다. 파일시스템에 두지 않는 이유는
 // 기존 DB 백업(backup.bat)에 그대로 딸려가고 경로 관리·정적 서빙이 필요 없어서다.
 const staffColumns = db.prepare('PRAGMA table_info(staff)').all().map((c) => c.name)

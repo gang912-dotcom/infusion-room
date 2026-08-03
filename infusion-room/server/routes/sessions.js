@@ -2,6 +2,7 @@ import { Router } from 'express'
 import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
 import { assertInRange, isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
+import { buildSessionRecord, attachSignatures } from '../lib/record.js'
 
 const router = Router()
 
@@ -252,7 +253,13 @@ router.post('/sessions/:id/end', (req, res) => {
     return res.status(err.status).json({ error: err.message })
   }
 
-  db.prepare('UPDATE sessions SET ended_at = ?, ended_by = ? WHERE id = ?').run(endedAt, req.account.id, session.id)
+  // 종료 처리와 스냅샷 저장을 한 트랜잭션에 묶는다 — 종료됐는데 공식본이 없는 상태가
+  // 생기면 안 된다. 조립은 즉석 조회와 같은 함수를 쓴다(미리보기와 종료본이 어긋나지 않게).
+  db.transaction(() => {
+    db.prepare('UPDATE sessions SET ended_at = ?, ended_by = ? WHERE id = ?').run(endedAt, req.account.id, session.id)
+    const record = buildSessionRecord(session.id)
+    db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?').run(JSON.stringify(record), session.id)
+  })()
   bumpRevision(db)
   res.json({ ok: true })
 })
@@ -270,6 +277,22 @@ router.get('/history', (req, res) => {
     ORDER BY s.ended_at DESC
   `).all()
   res.json(rows)
+})
+
+// ─── 기록지 조회 ────────────────────────────────────────────────────
+// 종료됐으면 얼린 스냅샷을, 아니면 지금 DB로 즉석 조립한 것을 준다.
+// 이 기능 이전에 종료된 세션은 스냅샷이 없으므로 즉석 조립으로 폴백한다(백필 불필요).
+// 서명은 스냅샷에 없고 조회 시점의 직원 값을 붙인다 — 단건 조회라 base64가 실려도 된다.
+router.get('/sessions/:id/record', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+
+  const record = session.record_snapshot
+    ? JSON.parse(session.record_snapshot)
+    : buildSessionRecord(session.id)
+  if (!record) return res.status(404).json({ error: '기록지를 만들 수 없습니다' })
+
+  res.json({ ...attachSignatures(record), from_snapshot: !!session.record_snapshot })
 })
 
 // ─── deleted 토글 — 이용기록 선택 삭제/복구(물리 삭제 아님) ─────────

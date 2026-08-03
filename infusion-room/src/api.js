@@ -524,6 +524,11 @@ function mapAdminStaff(row) {
   }
 }
 
+// 기록지 — 종료됐으면 얼린 스냅샷, 아니면 즉석 조립본. 담당자 서명이 함께 온다.
+export async function getSessionRecord(sessionId) {
+  return apiFetch(`/sessions/${sessionId}/record`)
+}
+
 // 직원 자필 서명 — 원본 dataURL. 관리자 미리보기와 4b 기록지가 쓴다.
 export async function getStaffSignature(id) {
   return apiFetch(`/staff/${id}/signature`)
