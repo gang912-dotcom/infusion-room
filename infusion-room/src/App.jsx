@@ -6130,11 +6130,13 @@ function App() {
 
               {/* 그룹 순서는 GROUP_ORDER, 항목은 전부 DB 응답이다. */}
               {/* 묶음 버튼 — 누르면 현재 체크를 그 묶음으로 '교체'한다(합치기 아님).
-                  로컬 상태만 바꾸고 저장은 아래 '저장'이 담당한다. 묶음이 없으면 줄 자체가 안 뜬다. */}
-              {orderBundles.length > 0 && (
-                <div className="order-bundles">
-                  <span className="order-bundles__label">묶음</span>
-                  {orderBundles.map((bundle) => (
+                  로컬 상태만 바꾸고 저장은 아래 '저장'이 담당한다.
+                  묶음이 0개여도 줄은 그대로 둔다 — 관리자가 등록하는 순간 아래 체크리스트가
+                  밀려 내려가면 근무자가 누르던 자리가 바뀐다(자리를 미리 비워둔다). */}
+              <div className="order-bundles">
+                <span className="order-bundles__label">묶음</span>
+                {orderBundles.length > 0 ? (
+                  orderBundles.map((bundle) => (
                     <button
                       key={bundle.id}
                       type="button"
@@ -6143,9 +6145,11 @@ function App() {
                     >
                       {bundle.name}
                     </button>
-                  ))}
-                </div>
-              )}
+                  ))
+                ) : (
+                  <span className="order-bundles__empty">등록된 묶음이 없습니다</span>
+                )}
+              </div>
 
               <OrderChecklist
                 items={orderItems}

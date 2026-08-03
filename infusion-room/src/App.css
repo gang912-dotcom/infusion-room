@@ -4521,22 +4521,34 @@
 
 /* ─── 처방 확인 — 묶음 버튼 줄 ──────────────────────────────────────
    누르면 현재 체크를 통째로 바꾸는 버튼이라, 체크리스트 위에 따로 떼어 놓는다. */
+/* 묶음이 0개여도 줄을 없애지 않는다 — 관리자가 등록하는 순간 체크리스트가 밀려 내려가
+   근무자가 누르던 자리가 바뀐다. min-height는 버튼 높이(44px)와 같게 둬서 자리를 비워둔다.
+   개수가 늘면 줄바꿈으로 아래로 자라고, 넘치면 .modal__body가 세로로 스크롤한다. */
 .order-bundles {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-height: 44px;
   margin-bottom: 12px;
 }
 
 .order-bundles__label {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 800;
   color: var(--text-secondary);
   margin-right: 2px;
 }
 
+.order-bundles__empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .order-bundle-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   min-height: 44px;
   padding: 6px 14px;
   font-family: inherit;
