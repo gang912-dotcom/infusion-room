@@ -4364,6 +4364,30 @@ function App() {
     }
   }
 
+  // 정리 확인 모달에서 시간추가 — '완료'는 서버 종료가 아니라 클라 계산이라
+  // (markCompletedIfNeeded) ended_at은 아직 NULL이다. 그래서 예정시간만 늘리면
+  // 카드가 그대로 진행중으로 되돌아온다.
+  //
+  // 기존 예정시간에 그냥 더하면 안 된다 — 이미 초과된 상태라 '예정+30'이 여전히
+  // 경과보다 작을 수 있고, 그러면 눌러도 완료가 안 풀린다. 경과와 예정 중 큰 값을
+  // 기준으로 더해 확실히 진행중이 되게 한다.
+  async function handleAddTimeFromCleanup(addMinutes) {
+    if (!cleanupBed) return
+    const elapsedMin = cleanupBed.startTime
+      ? Math.ceil((now - cleanupBed.startTime) / 60000)
+      : 0
+    const base = Math.max(cleanupBed.durationMinutes ?? 0, elapsedMin)
+    const nextDuration = Math.max(MIN_DURATION, base + addMinutes)
+    try {
+      await adjustSessionDuration(cleanupBed.sessionId, nextDuration)
+      await refreshBoard()
+      setCleanupBed(null)
+      setCleanupReopenBed(null)
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   async function handleCleanupYes() {
     if (!cleanupBed) return
     const endTime = now
@@ -5238,6 +5262,26 @@ function App() {
               <p className="confirm__message">
                 이용을 종료하시겠습니까?
               </p>
+              {/* 완료 카드는 상세가 안 열려 시간추가 진입점이 여기밖에 없다.
+                  아직 더 맞아야 하면 종료 대신 이걸로 되돌린다. */}
+              <div className="confirm__extend">
+                <button
+                  type="button"
+                  className="btn-extend"
+                  onClick={() => handleAddTimeFromCleanup(15)}
+                  disabled={offline}
+                >
+                  시간추가 +15분
+                </button>
+                <button
+                  type="button"
+                  className="btn-extend"
+                  onClick={() => handleAddTimeFromCleanup(30)}
+                  disabled={offline}
+                >
+                  +30분
+                </button>
+              </div>
               {/* 라인 제거 — 라인을 뽑은 직원. 고르기 전엔 '예'가 안 눌린다. */}
               <label className="field confirm__field">
                 <span className="field__label">라인 제거</span>

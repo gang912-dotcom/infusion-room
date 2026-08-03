@@ -4621,3 +4621,31 @@
   margin: 4px 0 12px;
   text-align: left;
 }
+
+/* ─── 정리 확인 모달의 시간추가 ─────────────────────────────────────
+   완료 카드는 상세가 안 열려 시간추가 진입점이 여기밖에 없다.
+   종료(예/아니오)와 성격이 달라 한 줄 위에 따로 놓는다.
+   색은 상태색 글자를 쓰지 않고 본문색+테두리로 간다 — 틴트 위 색글자는
+   라이트에서 대비가 반복해서 깨졌다(결함 ②⑦). */
+.confirm__extend {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.btn-extend {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.btn-extend:hover { border-color: var(--status-occupied); }
+.btn-extend:disabled { opacity: 0.5; cursor: not-allowed; }
