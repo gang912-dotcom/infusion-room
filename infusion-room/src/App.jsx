@@ -1122,12 +1122,17 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
     const tl = events.length ? `<ul class="tl">${events.map((e) =>
       `<li><span class="t">${esc(xTime(e.t))}</span><span class="k k--${e.kind === '라운딩' ? 'round' : 'note'}">${esc(e.kind)}</span><span class="c">${esc(e.text)}</span></li>`).join('')}</ul>`
       : '<p class="none">증상·라운딩 기록 없음</p>'
-    // 특이사항은 방문 단위라 그 방문 블록 안에 표시한다.
-    const sn = h.specialNote ? `<p class="special">특이사항: ${esc(h.specialNote)}</p>` : ''
+    // 방문 단위 정보는 그 방문 블록 안에 한 줄씩. 값이 없으면 줄 자체를 뺀다.
+    // (내원당시증상·처방은 history 행이 이미 들고 온다 — CSV용으로 실어둔 것을 그대로 쓴다.)
+    const line = (label, value) => (
+      value ? `<p class="vline"><b>${esc(label)}</b> ${esc(value)}</p>` : ''
+    )
     return `<section class="visit">
       <h3>${esc(h.date)} · ${esc(h.room)} ${esc(h.bedNumber)}번</h3>
       <p class="meta">${esc(h.startTime)} ~ ${esc(h.endTime)} · 이용 ${esc(formatDuration(h.usedMinutes))}</p>
-      ${sn}
+      ${line('내원당시증상', h.visitSymptom)}
+      ${line('특이사항', h.specialNote)}
+      ${line('수액처방', xOrdersText(h.orders))}
       ${tl}
     </section>`
   }).join('')
@@ -1135,7 +1140,9 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <title>${esc(patientName)}(${esc(chartNumber)}) 이용기록</title>
   <style>
-    *{box-sizing:border-box} body{font-family:-apple-system,'Pretendard','Apple SD Gothic Neo','Segoe UI',sans-serif;color:#1b1b1f;margin:0;padding:32px;max-width:860px;margin:0 auto;line-height:1.5}
+    /* 배경을 명시하지 않으면 OS가 다크 모드일 때 기본 캔버스가 검게 깔려
+       검은 글자가 검은 배경에 얹힌다(기록지 쪽은 원래 #fff를 두고 있었다). */
+    *{box-sizing:border-box} body{font-family:-apple-system,'Pretendard','Apple SD Gothic Neo','Segoe UI',sans-serif;color:#1b1b1f;background:#fff;color-scheme:light;margin:0;padding:32px;max-width:860px;margin:0 auto;line-height:1.5}
     header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:8px}
     h1{font-size:24px;margin:0} .chart{color:#666;font-weight:600}
     .sum{color:#555;font-size:14px;margin:6px 0 20px}
@@ -1150,6 +1157,10 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
     .k{font-size:11px;padding:1px 6px;border-radius:8px;color:#fff;flex:none}
     .k--round{background:#5b8def} .k--note{background:#c77400}
     .none{color:#aaa;font-size:13px;margin:2px 0 0 11px}
+    /* 방문 단위 한 줄들(내원당시증상·특이사항·수액처방) — .meta/.none과 같은 들여쓰기로 맞춘다.
+       기존 특이사항 줄은 .special 클래스를 쓰면서 정의가 없어 홀로 어긋나 있었다. */
+    .vline{font-size:13px;margin:2px 0 0 11px;color:#333}
+    .vline b{color:#666;margin-right:4px}
     .toolbar{position:sticky;top:0;text-align:right;margin-bottom:12px}
     .toolbar button{font:inherit;font-weight:700;padding:8px 16px;border:0;border-radius:8px;background:#4c8bf5;color:#fff;cursor:pointer}
     @media print{.toolbar{display:none} body{padding:0}}
