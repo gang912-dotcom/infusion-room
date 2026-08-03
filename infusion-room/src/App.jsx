@@ -6116,6 +6116,18 @@ function App() {
             </div>
 
             <div className="modal__body">
+              {/* 내원당시증상 — 오더를 고르기 전에 읽는 값이라 맨 위다. placeholder·예시 없음. */}
+              <label className="field">
+                <span className="field__label">내원당시증상</span>
+                <textarea
+                  className="field__input"
+                  value={visitSymptom}
+                  onChange={(e) => setVisitSymptom(e.target.value)}
+                  rows={2}
+                  aria-label="내원당시증상"
+                />
+              </label>
+
               {/* 그룹 순서는 GROUP_ORDER, 항목은 전부 DB 응답이다. */}
               {/* 묶음 버튼 — 누르면 현재 체크를 그 묶음으로 '교체'한다(합치기 아님).
                   로컬 상태만 바꾸고 저장은 아래 '저장'이 담당한다. 묶음이 없으면 줄 자체가 안 뜬다. */}
@@ -6142,18 +6154,6 @@ function App() {
                 onDose={selectOrderDose}
                 onFreeText={setOrderFreeText}
               />
-
-              {/* 내원당시증상 — 2단계에서 여기로 옮겼다. placeholder·예시 없음. */}
-              <label className="field">
-                <span className="field__label">내원당시증상</span>
-                <textarea
-                  className="field__input"
-                  value={visitSymptom}
-                  onChange={(e) => setVisitSymptom(e.target.value)}
-                  rows={2}
-                  aria-label="내원당시증상"
-                />
-              </label>
 
               {actionError && <p role="alert" className="field__error">{actionError}</p>}
 
