@@ -4317,7 +4317,7 @@ function App() {
                     value={specialNote}
                     onChange={(e) => setSpecialNote(e.target.value)}
                     rows={2}
-                    placeholder="부작용·임신·혈관통 등 이 환자의 주의점"
+                    placeholder="기저질환, 약 부작용, 임신 등 특이사항"
                   />
                 </label>
 
@@ -4938,13 +4938,13 @@ function App() {
                 <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} nowMs={now} />
 
                 <label className="field">
-                  <span className="field__label">메모 (선택)</span>
+                  <span className="field__label">증상 기록 (선택)</span>
                   <input
                     type="text"
                     className="field__input"
                     value={roundMemo}
                     onChange={(e) => setRoundMemo(e.target.value)}
-                    placeholder="특이사항 있으면 한 줄로"
+                    placeholder="발열, 혈관통 등 관찰한 증상"
                   />
                 </label>
 
