@@ -39,10 +39,13 @@ router.post('/sessions/assign', (req, res) => {
     return res.status(400).json({ error: 'bed_code, chart_no, patient_name, line_staff_id가 모두 필요합니다' })
   }
 
-  // 진료실은 선택 항목이라 미선택은 통과시키되, 목록 밖의 값은 거부한다.
+  // 진료실은 라인 담당자와 같은 필수 항목이다(1단계에선 선택이었다가 필수로 바뀜).
   const normalizedExamRoom = normalizeExamRoom(examRoom)
   if (normalizedExamRoom === undefined) {
     return res.status(400).json({ error: '유효하지 않은 진료실입니다' })
+  }
+  if (normalizedExamRoom === null) {
+    return res.status(400).json({ error: '진료실을 선택해주세요' })
   }
 
   const normalizedChartNo = normalizeChartNo(chart_no)
@@ -330,6 +333,11 @@ router.patch('/sessions/:id', (req, res) => {
   const normalizedExamRoom = normalizeExamRoom(examRoom)
   if (normalizedExamRoom === undefined) {
     return res.status(400).json({ error: '유효하지 않은 진료실입니다' })
+  }
+  // 정정은 다른 유효한 값으로만 가능하다 — 필수 항목이 된 이상 비우기는 막는다.
+  // (진료실 없이 배정된 과거 세션은 그대로 두되, 여기서 값을 넣는 건 허용된다.)
+  if (examRoom !== undefined && normalizedExamRoom === null) {
+    return res.status(400).json({ error: '진료실은 비울 수 없습니다' })
   }
 
   const fields = []

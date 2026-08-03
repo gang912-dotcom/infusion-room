@@ -4042,7 +4042,9 @@ function App() {
         onChange={(e) => handleChangeExamRoom(e.target.value)}
         disabled={offline}
       >
-        <option value="">선택</option>
+        {/* 진료실 필수화 이전에 배정된 세션은 값이 비어 있다 — 그 상태를 보여주되
+            다시 '선택'으로 되돌리지는 못하게 한다(서버도 비우기를 400으로 막는다). */}
+        <option value="" disabled>선택</option>
         {EXAM_ROOMS.map((room) => (
           <option key={room} value={room}>{room}진료실</option>
         ))}
@@ -5253,7 +5255,7 @@ function App() {
                   </select>
                 </label>
 
-                {/* 진료실 — 선택 항목. 미선택이면 카드에 진료실만 안 뜨고 배정은 정상 진행된다. */}
+                {/* 진료실 — 라인 담당자와 같은 필수 항목. 고르기 전엔 배정 버튼이 안 눌린다. */}
                 <label className="field">
                   <span className="field__label">진료실</span>
                   <select
@@ -5261,7 +5263,8 @@ function App() {
                     value={examRoom}
                     onChange={(e) => setExamRoom(e.target.value)}
                   >
-                    <option value="">선택</option>
+                    {/* 필수라 되돌아갈 수 없는 자리다 — 초기 표시만 하고 다시 고르지는 못하게. */}
+                    <option value="" disabled>선택</option>
                     {EXAM_ROOMS.map((room) => (
                       <option key={room} value={room}>{room}진료실</option>
                     ))}
@@ -5286,7 +5289,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleRegister}
-                  disabled={offline || !patientName.trim() || !chartNumber.trim() || !lineStaffId}
+                  disabled={offline || !patientName.trim() || !chartNumber.trim() || !lineStaffId || !examRoom}
                 >
                   배정
                 </button>
