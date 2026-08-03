@@ -20,7 +20,10 @@ import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
 
 const app = express()
-app.use(express.json())
+// 기본 상한이 100KB인데 직원 서명이 base64 dataURL로 들어온다(상한 500KB, admin.js의
+// signature 라우트에서 검증). 100KB로 두면 그 검증에 닿기도 전에 express가 413으로
+// 끊어버려 상한 자체가 무의미해진다. 실제 거절은 라우트의 500KB 검사가 맡는다.
+app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
 app.use('/api', authRouter)

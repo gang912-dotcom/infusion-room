@@ -31,6 +31,13 @@ if (!sessionColumns.includes('visit_symptom')) {
   db.exec('ALTER TABLE sessions ADD COLUMN visit_symptom TEXT')
 }
 
+// 직원 자필 서명 — base64 dataURL을 컬럼에 넣는다. 파일시스템에 두지 않는 이유는
+// 기존 DB 백업(backup.bat)에 그대로 딸려가고 경로 관리·정적 서빙이 필요 없어서다.
+const staffColumns = db.prepare('PRAGMA table_info(staff)').all().map((c) => c.name)
+if (!staffColumns.includes('signature')) {
+  db.exec('ALTER TABLE staff ADD COLUMN signature TEXT')
+}
+
 // ─── 수액 Order 항목 시드 ─────────────────────────────────────────────
 // 라벨은 원내 표기 그대로. code는 유일해야 한다 — ORD·MPC FILTER SET이 두 그룹에
 // 중복 등장하므로 접미(_basic/_imsc, _basic/_flu)로 갈랐다.

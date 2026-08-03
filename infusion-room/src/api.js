@@ -514,7 +514,27 @@ export async function updateAccount(id, { displayName, password, role, isActive 
 }
 
 function mapAdminStaff(row) {
-  return { id: row.id, name: row.name, isActive: !!row.is_active, sortOrder: row.sort_order }
+  return {
+    id: row.id,
+    name: row.name,
+    isActive: !!row.is_active,
+    sortOrder: row.sort_order,
+    // 서명 원본은 목록에 안 실린다 — 등록 여부만 오고 원본은 getStaffSignature로.
+    hasSignature: !!row.has_signature,
+  }
+}
+
+// 직원 자필 서명 — 원본 dataURL. 관리자 미리보기와 4b 기록지가 쓴다.
+export async function getStaffSignature(id) {
+  return apiFetch(`/staff/${id}/signature`)
+}
+
+// dataURL을 주면 저장, null을 주면 삭제.
+export async function setStaffSignature(id, signature) {
+  return apiFetch(`/admin/staff/${id}/signature`, {
+    method: 'PUT',
+    body: JSON.stringify({ signature }),
+  })
 }
 
 export async function listStaffAdmin() {

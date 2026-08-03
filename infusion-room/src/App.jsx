@@ -21,7 +21,7 @@ import {
   updateSessionPatient,
   acquireBedLock, releaseBedLock,
   listAccounts, createAccount, updateAccount,
-  listStaffAdmin, createStaffMember, updateStaffMember,
+  listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
 } from './api'
@@ -2089,6 +2089,33 @@ function AccountManageSection({ offline }) {
   )
 }
 
+// 서명 이미지를 가로 최대 600px로 줄여 dataURL을 만든다. 서명은 이 정도면 충분하고,
+// 원본을 그대로 넣으면 500KB 상한에 쉽게 걸린다(폰 사진은 수 MB).
+// PNG는 투명 배경을 살려야 해서 PNG로, JPG는 그대로 JPG로 뽑는다.
+const SIGNATURE_MAX_WIDTH = 600
+
+function resizeSignature(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('이미지를 열지 못했습니다'))
+      img.onload = () => {
+        const scale = Math.min(1, SIGNATURE_MAX_WIDTH / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const type = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
+        resolve(canvas.toDataURL(type, type === 'image/jpeg' ? 0.9 : undefined))
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 // ─── 관리자 설정 — 직원 관리 ──────────────────────────────────────
 function StaffManageSection({ offline }) {
   const [staff, setStaff] = useState([])
@@ -2101,6 +2128,11 @@ function StaffManageSection({ offline }) {
 
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
+
+  // 서명 미리보기 — 목록에는 원본이 안 오므로 눌렀을 때만 받아온다. { [staffId]: dataURL }
+  const [signatures, setSignatures] = useState({})
+  const fileInputRef = useRef(null)
+  const uploadTargetRef = useRef(null)
 
   function reload() {
     listStaffAdmin()
@@ -2160,6 +2192,61 @@ function StaffManageSection({ offline }) {
     }
   }
 
+  // 파일 input은 하나만 두고 어느 직원 것인지 ref로 기억한다 — 직원마다 input을 두면
+  // 목록이 길어질수록 쓸데없이 늘어난다.
+  function pickSignature(staffId) {
+    uploadTargetRef.current = staffId
+    fileInputRef.current?.click()
+  }
+
+  async function handleSignatureFile(e) {
+    const file = e.target.files?.[0]
+    const staffId = uploadTargetRef.current
+    e.target.value = '' // 같은 파일을 다시 골라도 change가 나게
+    if (!file || !staffId) return
+    setBusyId(staffId)
+    setError('')
+    try {
+      const dataUrl = await resizeSignature(file)
+      await setStaffSignature(staffId, dataUrl)
+      setSignatures((prev) => ({ ...prev, [staffId]: dataUrl }))
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleSignatureDelete(s) {
+    if (!window.confirm(`${s.name} 직원의 서명을 삭제할까요?`)) return
+    setBusyId(s.id)
+    setError('')
+    try {
+      await setStaffSignature(s.id, null)
+      setSignatures((prev) => {
+        const next = { ...prev }
+        delete next[s.id]
+        return next
+      })
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function loadSignature(s) {
+    if (signatures[s.id]) return
+    try {
+      const { signature } = await getStaffSignature(s.id)
+      setSignatures((prev) => ({ ...prev, [s.id]: signature }))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function handleMove(index, dir) {
     const current = staff[index]
     const target = staff[index + dir]
@@ -2188,6 +2275,15 @@ function StaffManageSection({ offline }) {
         </button>
       </div>
 
+      {/* 서명 파일 선택 — 직원마다 두지 않고 하나를 돌려 쓴다(대상은 uploadTargetRef). */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="staff-sign__file"
+        onChange={handleSignatureFile}
+      />
+
       {error && <p role="alert" className="field__error">{error}</p>}
 
       {showAdd && (
@@ -2211,6 +2307,7 @@ function StaffManageSection({ offline }) {
               <tr>
                 <th>이름</th>
                 <th>상태</th>
+                <th>서명</th>
                 <th></th>
               </tr>
             </thead>
@@ -2226,6 +2323,31 @@ function StaffManageSection({ offline }) {
                     <span className={`badge ${s.isActive ? 'badge--info' : 'badge--warning'}`}>
                       {s.isActive ? '사용' : '사용 안함'}
                     </span>
+                  </td>
+                  <td>
+                    <div className="staff-sign">
+                      {s.hasSignature ? (
+                        signatures[s.id] ? (
+                          <img className="staff-sign__img" src={signatures[s.id]} alt={`${s.name} 서명`} />
+                        ) : (
+                          <button type="button" className="dm-note-btn" onClick={() => loadSignature(s)}>
+                            보기
+                          </button>
+                        )
+                      ) : (
+                        <span className="staff-sign__none">없음</span>
+                      )}
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id} onClick={() => pickSignature(s.id)}>
+                          {s.hasSignature ? '교체' : '등록'}
+                        </button>
+                        {s.hasSignature && (
+                          <button type="button" className="dm-note-btn" disabled={offline || busyId === s.id} onClick={() => handleSignatureDelete(s)}>
+                            삭제
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="dm-note-manage__action">
                     {editingId === s.id ? (

@@ -75,8 +75,39 @@ router.patch('/accounts/:id', (req, res) => {
 })
 
 // ─── staff ──────────────────────────────────────────────────────────
+// 서명 원본(base64)은 일부러 안 싣는다 — 직원 수만큼 수십 KB가 붙으면 목록이 무거워진다.
+// 화면은 '등록됨/없음'만 알면 되고, 원본은 GET /staff/:id/signature로 따로 가져간다.
 router.get('/staff', (req, res) => {
-  res.json(db.prepare('SELECT id, name, is_active, sort_order FROM staff ORDER BY sort_order').all())
+  res.json(db.prepare(
+    'SELECT id, name, is_active, sort_order, (signature IS NOT NULL) AS has_signature FROM staff ORDER BY sort_order',
+  ).all())
+})
+
+// ─── 직원 자필 서명 ─────────────────────────────────────────────────
+// 4b에서 기록지의 라인담당·믹스담당 칸에 이 이미지를 넣는다.
+const SIGNATURE_MAX_BYTES = 500 * 1024
+const SIGNATURE_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,']
+
+router.put('/staff/:id/signature', (req, res) => {
+  const staff = db.prepare('SELECT id FROM staff WHERE id = ?').get(req.params.id)
+  if (!staff) return res.status(404).json({ error: '존재하지 않는 직원입니다' })
+
+  const { signature } = req.body ?? {}
+  if (signature !== null && typeof signature !== 'string') {
+    return res.status(400).json({ error: '서명 형식이 올바르지 않습니다' })
+  }
+  if (typeof signature === 'string') {
+    if (!SIGNATURE_PREFIXES.some((p) => signature.startsWith(p))) {
+      return res.status(400).json({ error: 'PNG 또는 JPG 이미지만 등록할 수 있습니다' })
+    }
+    if (signature.length > SIGNATURE_MAX_BYTES) {
+      return res.status(400).json({ error: '서명 이미지가 너무 큽니다 (500KB 이하)' })
+    }
+  }
+
+  db.prepare('UPDATE staff SET signature = ? WHERE id = ?').run(signature, staff.id)
+  logAccess(req, ACTIONS.ACCOUNT_CHANGE, { targetType: 'staff', targetId: staff.id })
+  res.json({ ok: true })
 })
 
 router.post('/staff', (req, res) => {

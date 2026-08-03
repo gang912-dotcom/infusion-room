@@ -4569,3 +4569,33 @@
 
 :root[data-theme='light'] .order-admin-free input[type='checkbox'] { color-scheme: light; }
 :root[data-theme='dark'] .order-admin-free input[type='checkbox'] { color-scheme: dark; }
+
+/* ─── 직원 자필 서명 (관리자 직원 관리) ─────────────────────────────── */
+.staff-sign {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 서명은 대개 가로로 긴 이미지라 높이를 고정하고 가로를 따라가게 둔다.
+   흰 배경 PNG가 다크 테마에서 안 보이는 일이 없도록 밝은 판을 깔아준다. */
+.staff-sign__img {
+  height: 32px;
+  max-width: 140px;
+  object-fit: contain;
+  padding: 2px 4px;
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+}
+
+.staff-sign__none {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 파일 input은 버튼으로 대신 연다 — 기본 위젯은 테마·문구를 못 맞춘다. */
+.staff-sign__file {
+  display: none;
+}
