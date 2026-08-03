@@ -361,6 +361,8 @@ function mapHistoryRow(row) {
     visitSymptom: row.visit_symptom ?? null,
     lineStaff: row.line_staff_name ?? null,
     mixStaff: row.mix_staff_name ?? null,
+    endStaff: row.end_staff_name ?? null,
+    patientMemo: row.patient_memo ?? null,
     orders: row.orders ?? [],
     deleted: !!row.deleted,
   }

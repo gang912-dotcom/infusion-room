@@ -283,12 +283,16 @@ router.get('/history', (req, res) => {
            s.exam_room, s.visit_symptom, s.duration_minutes,
            b.room, b.number AS bed_number,
            p.chart_no, p.name AS patient_name,
-           ls.name AS line_staff_name, ms.name AS mix_staff_name
+           ls.name AS line_staff_name, ms.name AS mix_staff_name,
+           es.name AS end_staff_name, pm.note AS patient_memo
     FROM sessions s
     JOIN beds b ON b.id = s.bed_id
     JOIN patients p ON p.id = s.patient_id
     LEFT JOIN staff ls ON ls.id = s.line_staff_id
     LEFT JOIN staff ms ON ms.id = s.mix_staff_id
+    -- 발침 담당은 이 기능 이전 종료분엔 없다. 환자 메모는 차트번호 기준(현재값).
+    LEFT JOIN staff es ON es.id = s.end_staff_id
+    LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
     WHERE s.ended_at IS NOT NULL
     ORDER BY s.ended_at DESC
   `).all()

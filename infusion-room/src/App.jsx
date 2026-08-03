@@ -884,8 +884,9 @@ function xOrdersText(orders = []) {
 // 권장 순서는 바이탈을 증상 앞에 두는데, 그러면 기존 CSV를 쓰던 엑셀 작업이 밀린다.
 function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
   const headers = [
-    '날짜', '진료실', '수액실', '베드', '환자명', '차트번호', '라인담당', '믹스담당',
-    '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항', '수액처방',
+    '날짜', '진료실', '수액실', '베드', '환자명', '차트번호',
+    '라인담당', '믹스담당', '발침담당',
+    '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항', '환자메모', '수액처방',
     '증상', '라운딩', '바이탈',
   ]
   const rows = history.map((h) => {
@@ -900,9 +901,10 @@ function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
       .map((v) => `${xTime(v.occurredAt)} ${xVitalsText(v)}`).join(' | ')
     return [
       h.date, h.examRoom ? `${h.examRoom}진료실` : '', h.room, h.bedNumber,
-      h.patientName, h.chartNumber, h.lineStaff ?? '', h.mixStaff ?? '',
+      h.patientName, h.chartNumber,
+      h.lineStaff ?? '', h.mixStaff ?? '', h.endStaff ?? '',
       h.startTime, h.endTime, h.usedMinutes,
-      h.visitSymptom ?? '', h.specialNote ?? '', xOrdersText(h.orders),
+      h.visitSymptom ?? '', h.specialNote ?? '', h.patientMemo ?? '', xOrdersText(h.orders),
       notes, rds, vts,
     ]
   })
@@ -921,6 +923,7 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
       h.examRoom ? `${h.examRoom}진료실` : null,
       h.lineStaff ? `라인 ${h.lineStaff}` : null,
       h.mixStaff ? `믹스 ${h.mixStaff}` : null,
+      h.endStaff ? `발침 ${h.endStaff}` : null,
     ].filter(Boolean).join(' · ')
     rows.push([h.date, h.startTime, '이용', h.room, h.bedNumber,
       `수액 이용 (${formatDuration(h.usedMinutes)})`,
@@ -931,6 +934,10 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
     }
     if (h.specialNote) {
       rows.push([h.date, '', '특이사항', h.room, h.bedNumber, h.specialNote, ''])
+    }
+    // 환자 메모는 방문이 아니라 환자에 붙는 값이라 방문 블록마다 같은 내용이 반복된다.
+    if (h.patientMemo) {
+      rows.push([h.date, '', '환자메모', h.room, h.bedNumber, h.patientMemo, ''])
     }
     if (h.orders?.length) {
       rows.push([h.date, '', '수액처방', h.room, h.bedNumber, xOrdersText(h.orders), ''])
@@ -1057,12 +1064,17 @@ function openRecordSheet(record) {
     <h2>시간</h2>
     <table class="info">
       ${row('시작', t(record.started_at))}
-      ${row('종료', t(record.ended_at))}
+      ${/* 발침 담당은 종료시간 옆에 함께 — 라인을 뽑은 사람이 곧 종료한 사람이다.
+           이 기능 이전에 종료된 세션은 이름이 없어 시각만 나간다. */ ''}
+      ${row('종료', record.end_staff_name
+        ? `${t(record.ended_at)} (발침 ${record.end_staff_name})`
+        : t(record.ended_at))}
       ${row('이용시간', record.used_minutes != null ? formatDuration(record.used_minutes) : '')}
     </table>
 
     ${record.visit_symptom ? `<h2>내원당시증상</h2><p class="free">${esc(record.visit_symptom)}</p>` : ''}
     ${record.special_note ? `<h2>특이사항 (질환 · 약 부작용)</h2><p class="free">${esc(record.special_note)}</p>` : ''}
+    ${record.patient_memo ? `<h2>환자 메모</h2><p class="free">${esc(record.patient_memo)}</p>` : ''}
 
     <h2>수액 처방</h2>
     ${ordersHtml}
