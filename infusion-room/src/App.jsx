@@ -4850,13 +4850,13 @@ function App() {
                   <input
                     type="number" inputMode="numeric" className="field__input vitals-bp__field"
                     value={vitalsSys} onChange={(e) => setVitalsSys(e.target.value)}
-                    placeholder="120" aria-label="수축기 혈압"
+                    aria-label="수축기 혈압"
                   />
                   <span className="vitals-bp__sep">/</span>
                   <input
                     type="number" inputMode="numeric" className="field__input vitals-bp__field"
                     value={vitalsDia} onChange={(e) => setVitalsDia(e.target.value)}
-                    placeholder="80" aria-label="이완기 혈압"
+                    aria-label="이완기 혈압"
                   />
                 </div>
               </div>
@@ -4866,7 +4866,6 @@ function App() {
                 <input
                   type="number" inputMode="numeric" className="field__input"
                   value={vitalsPulse} onChange={(e) => setVitalsPulse(e.target.value)}
-                  placeholder="79"
                 />
               </label>
 
