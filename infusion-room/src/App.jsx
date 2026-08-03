@@ -3521,6 +3521,18 @@ function LoginScreen({ onLoginSuccess }) {
 // ─── 쪽지 메신저 ────────────────────────────────────────────────
 // 받은 쪽지 하나 = 카드 하나. 헤더를 잡고 드래그해 옮길 수 있고, 확인/답장으로 닫는다.
 // 위치를 안 잡은(=아직 안 옮긴) 카드는 cascade 기본 자리에 뜬다.
+// 엔터로 전송, 쉬프트+엔터로 줄바꿈 — 슬랙·디스코드·카톡PC와 같은 관례.
+//
+// 한글 입력에서 엔터는 조합 중인 글자를 확정하는 키이기도 하다. 그대로 잡아버리면
+// '안녕'을 치다 확정하려는 순간 쪽지가 날아간다. isComposing으로 조합 중을 걸러낸다.
+// (일부 브라우저는 isComposing 대신 keyCode 229로만 알려줘서 둘 다 본다.)
+function sendOnEnter(e, canSend, send) {
+  if (e.key !== 'Enter' || e.shiftKey) return
+  if (e.nativeEvent?.isComposing || e.keyCode === 229) return
+  e.preventDefault() // 줄바꿈이 들어가지 않게
+  if (canSend) send()
+}
+
 const MSG_CASCADE_STEP = 28
 const MSG_CASCADE_MAX = 7 // 이보다 많이 쌓이면 더 밀지 않고 겹쳐 쌓는다
 
@@ -3602,12 +3614,14 @@ function MessageCard({ message, index, onClose, onMove }) {
             className="msg-card__input"
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => sendOnEnter(e, !sending && !!replyText.trim(), handleSendReply)}
             maxLength={1000}
             rows={3}
             placeholder={`${message.from_name}님에게 답장`}
             aria-label="답장 내용"
             autoFocus
           />
+          <p className="field__keyhint">엔터로 전송 · 쉬프트+엔터로 줄바꿈</p>
           {error && <p role="alert" className="msg-card__error">{error}</p>}
           <div className="msg-card__actions">
             <button type="button" className="msg-card__btn" onClick={() => setReplying(false)} disabled={sending}>
@@ -3690,10 +3704,12 @@ function ComposeMessageModal({ onClose, closing }) {
               className="field__input msg-compose__text"
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onKeyDown={(e) => sendOnEnter(e, !sending && !!to && !!content.trim(), handleSend)}
               maxLength={1000}
               rows={5}
               placeholder="쪽지 내용 (1000자까지)"
             />
+            <p className="field__keyhint">엔터로 전송 · 쉬프트+엔터로 줄바꿈</p>
           </label>
           {error && <p role="alert" className="field__error">{error}</p>}
           {done && <p role="status" className="msg-compose__done">{done}</p>}

@@ -4652,3 +4652,12 @@
 
 /* 쪽지 로그 삭제 버튼 — 메타 줄 오른쪽 끝으로 밀어 내용과 겹치지 않게. */
 .msg-log__del { margin-left: auto; }
+
+/* 입력칸 아래 조작법 안내(엔터 전송 등) — muted로 뒤로 뺀다.
+   .field__hint는 환자 조회 결과가 이미 쓰고 있고 --ok/--new 색 변형이 달려 있어
+   그 이름을 재사용하면 색이 덮인다. 별도 클래스로 둔다. */
+.field__keyhint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
