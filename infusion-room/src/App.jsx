@@ -1457,11 +1457,18 @@ function PatientView({
     }
   })
 
-  // 검색 필터 (환자명 부분 일치)
+  // 검색 필터 — 환자명과 차트번호를 같은 칸에서 받는다.
+  // 이름은 부분 일치, 차트번호는 앞자리 일치다. 번호를 부분 일치로 두면 '2444'가
+  // '2244414'에도 걸려(가운데에 들어 있다) 엉뚱한 환자가 섞인다.
+  // 이름에 숫자가 들어가는 경우가 없어 두 조건이 서로 섞이지 않는다.
   const trimmed = query.trim()
   const searchResults = trimmed
-    ? allPatients.filter((p) => p.patientName.includes(trimmed))
+    ? allPatients.filter((p) => p.patientName.includes(trimmed)
+      || String(p.chartNumber).startsWith(trimmed))
     : []
+
+  // 숫자만 넣었으면 차트번호로 찾는 것이다 → 결과에 번호를 같이 보여줘야 맞게 찾았는지 안다.
+  const isChartQuery = /^\d+$/.test(trimmed)
 
   // 동명이인 처리: 같은 이름이 여러 차트번호로 존재하는 경우 감지
   const nameCounts = {}
@@ -1526,7 +1533,7 @@ function PatientView({
           className="patient-search__input"
           value={query}
           onChange={handleQueryChange}
-          placeholder="환자명을 입력하세요"
+          placeholder="환자명 또는 차트번호"
           autoComplete="off"
         />
         {query && (
@@ -1544,7 +1551,7 @@ function PatientView({
       {/* 상태별 렌더링 */}
       {!trimmed && !selectedPatient && (
         <div className="patient-empty">
-          <p>환자명을 입력하면 검색 결과가 표시됩니다.</p>
+          <p>환자명 또는 차트번호를 입력하면 검색 결과가 표시됩니다.</p>
         </div>
       )}
 
@@ -1564,7 +1571,7 @@ function PatientView({
                     onClick={() => handleSelect(p.chartNumber)}
                   >
                     <span className="patient-list__name">{p.patientName}</span>
-                    {nameCounts[p.patientName] > 1 && (
+                    {(nameCounts[p.patientName] > 1 || isChartQuery) && (
                       <span className="patient-list__chart">({p.chartNumber})</span>
                     )}
                     <span className="patient-list__meta">
