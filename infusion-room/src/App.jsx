@@ -22,7 +22,7 @@ import {
   acquireBedLock, releaseBedLock,
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
-  getSessionRecord, getPatientMemo, savePatientMemo,
+  getSessionRecord, saveDayMemo,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
@@ -684,10 +684,10 @@ function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
 
-// 베드 카드용 요약 다줄: 이 방문의 특이사항 → 환자 메모 → 금일 증상(session_note) 순,
+// 베드 카드용 요약 다줄: 이 방문의 특이사항 → 당일 메모 → 금일 증상(session_note) 순,
 // 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로
 //
-// 특이사항(danger)과 환자 메모(caution)를 색으로 갈라 놓는다 — 전자는 이번 방문의
+// 특이사항(danger)과 당일 메모(caution)를 색으로 갈라 놓는다 — 전자는 이번 방문의
 // 주의점이고 후자는 그 환자에게 계속 따라다니는 메모라 성격이 다르다.
 function getCardNoteLines(sessionNotes, bed) {
   const todayNotes = getSessionNotesBySessionId(sessionNotes, bed.sessionId).sort(
@@ -696,7 +696,7 @@ function getCardNoteLines(sessionNotes, bed) {
 
   const allLines = [
     ...(bed.specialNote ? [{ tone: 'danger', icon: 'alert', text: bed.specialNote }] : []),
-    ...(bed.patientMemo ? [{ tone: 'caution', icon: 'bell', text: bed.patientMemo }] : []),
+    ...(bed.dayMemo ? [{ tone: 'caution', icon: 'bell', text: bed.dayMemo }] : []),
     ...todayNotes.map((n) => ({
       tone: 'neutral',
       icon: 'clock',
@@ -930,7 +930,7 @@ function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
   const headers = [
     '날짜', '진료실', '수액실', '베드', '환자명', '차트번호',
     '라인담당', '믹스담당', '라인 제거',
-    '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항', '환자메모', '수액처방',
+    '시작', '종료', '이용시간(분)', '내원당시증상', '특이사항(기저질환)', '당일메모', '수액처방',
     '증상', '라운딩', '바이탈',
   ]
   const rows = history.map((h) => {
@@ -948,7 +948,7 @@ function buildHistoryCsv(history, sessionNotes, rounds, vitals = []) {
       h.patientName, h.chartNumber,
       h.lineStaff ?? '', h.mixStaff ?? '', h.endStaff ?? '',
       h.startTime, h.endTime, h.usedMinutes,
-      h.visitSymptom ?? '', h.specialNote ?? '', h.patientMemo ?? '', xOrdersText(h.orders),
+      h.visitSymptom ?? '', h.specialNote ?? '', h.dayMemo ?? '', xOrdersText(h.orders),
       notes, rds, vts,
     ]
   })
@@ -977,11 +977,11 @@ function buildPatientCsv(chartNumber, history, sessionNotes, rounds, vitals = []
       rows.push([h.date, '', '내원당시증상', h.room, h.bedNumber, h.visitSymptom, ''])
     }
     if (h.specialNote) {
-      rows.push([h.date, '', '특이사항', h.room, h.bedNumber, h.specialNote, ''])
+      rows.push([h.date, '', '특이사항(기저질환)', h.room, h.bedNumber, h.specialNote, ''])
     }
-    // 환자 메모는 방문이 아니라 환자에 붙는 값이라 방문 블록마다 같은 내용이 반복된다.
-    if (h.patientMemo) {
-      rows.push([h.date, '', '환자메모', h.room, h.bedNumber, h.patientMemo, ''])
+    // 당일 메모는 방문이 아니라 환자에 붙는 값이라 방문 블록마다 같은 내용이 반복된다.
+    if (h.dayMemo) {
+      rows.push([h.date, '', '당일메모', h.room, h.bedNumber, h.dayMemo, ''])
     }
     if (h.orders?.length) {
       rows.push([h.date, '', '수액처방', h.room, h.bedNumber, xOrdersText(h.orders), ''])
@@ -1126,8 +1126,8 @@ function openRecordSheet(record) {
     </table>
 
     ${record.visit_symptom ? `<h2>내원당시증상</h2><p class="free">${esc(record.visit_symptom)}</p>` : ''}
-    ${record.special_note ? `<h2>특이사항 (질환 · 약 부작용)</h2><p class="free">${esc(record.special_note)}</p>` : ''}
-    ${record.patient_memo ? `<h2>환자 메모</h2><p class="free">${esc(record.patient_memo)}</p>` : ''}
+    ${record.special_note ? `<h2>특이사항(기저질환)</h2><p class="free">${esc(record.special_note)}</p>` : ''}
+    ${record.day_memo ? `<h2>당일 메모</h2><p class="free">${esc(record.day_memo)}</p>` : ''}
 
     <h2>수액 처방</h2>
     ${ordersHtml}
@@ -1183,7 +1183,7 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
       <h3>${esc(h.date)} · ${esc(h.room)} ${esc(h.bedNumber)}번</h3>
       <p class="meta">${esc(h.startTime)} ~ ${esc(h.endTime)} · 이용 ${esc(formatDuration(h.usedMinutes))}</p>
       ${line('내원당시증상', h.visitSymptom)}
-      ${line('특이사항', h.specialNote)}
+      ${line('특이사항(기저질환)', h.specialNote)}
       ${line('수액처방', xOrdersText(h.orders))}
       ${tl}
     </section>`
@@ -3987,11 +3987,15 @@ function App() {
   // 2단 상세 오른쪽의 특이사항 인라인 편집
   const [specialNoteEditing, setSpecialNoteEditing] = useState(false)
   const [specialNoteDraft, setSpecialNoteDraft] = useState('')
-  // 환자 메모(차트번호 기준, 방문을 넘어 유지) — 특이사항과 같은 인라인 편집 패턴.
-  const [patientMemoEditing, setPatientMemoEditing] = useState(false)
-  const [patientMemoDraft, setPatientMemoDraft] = useState('')
+  // 당일 메모(차트번호 기준, 방문을 넘어 유지) — 특이사항과 같은 인라인 편집 패턴.
+  const [dayMemoEditing, setDayMemoEditing] = useState(false)
+  const [dayMemoDraft, setDayMemoDraft] = useState('')
   // 배정 중 차트번호를 넣었을 때 뜨는 지난 메모 팝업. { chartNo, note } 또는 null.
-  const [memoPopup, setMemoPopup] = useState(null)
+  // 특이사항(기저질환) 기록이 있는 환자라는 안내. 등록 한 번에 한 번만 뜬다.
+  // 차트번호 조회와 라인담당 지정은 순서가 정해져 있지 않아 양쪽 핸들러에서 같은 조건을 본다
+  // — effect에 두면 setState-in-effect라 eslint 베이스라인(1건)을 넘는다.
+  const [noteAlert, setNoteAlert] = useState(false)
+  const noteAlertShownRef = useRef(false)
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
   const [now, setNow] = useState(Date.now())
   const [editPatientModal, setEditPatientModal] = useState(false)
@@ -4497,6 +4501,14 @@ function App() {
     }
   }
 
+  // 차트 조회 결과와 라인담당이 둘 다 갖춰졌을 때만, 그리고 한 번만 띄운다.
+  function maybeAlertBaselineNote(info, staffId) {
+    if (noteAlertShownRef.current) return
+    if (!info?.baseline_note || !staffId) return
+    noteAlertShownRef.current = true
+    setNoteAlert(true)
+  }
+
   async function handleChartNumberBlur() {
     const trimmed = chartNumber.trim()
     if (!trimmed) {
@@ -4506,21 +4518,18 @@ function App() {
     try {
       const result = await lookupPatient(trimmed)
       setLookupInfo(result)
+      maybeAlertBaselineNote(result, lineStaffId)
       if (result.found && !patientName.trim()) {
         setPatientName(result.name)
       }
-      // 지난 방문의 특이사항을 채워준다. 이미 뭔가 입력한 상태면 덮지 않는다.
-      if (result.last_special_note && !specialNote.trim()) {
-        setSpecialNote(result.last_special_note)
+      // 특이사항(기저질환) 정본을 칸에 채워준다. 이미 뭔가 입력한 상태면 덮지 않는다.
+      // 여기서 채운 값을 근무자가 고치면 그게 곧 새 정본이 된다(서버가 함께 쓴다).
+      if (result.baseline_note && !specialNote.trim()) {
+        setSpecialNote(result.baseline_note)
       }
-      // 환자 메모가 있으면 팝업으로 띄운다 — 매 방문 눈에 띄게 하는 게 목적이라
-      // 폼 어딘가에 조용히 넣지 않는다. 비어 있으면 아무것도 안 뜬다.
-      try {
-        const { note } = await getPatientMemo(trimmed)
-        if (note) setMemoPopup({ chartNo: trimmed, note })
-      } catch {
-        // 메모 조회 실패가 등록을 막으면 안 된다 — 조용히 넘어간다.
-      }
+      // 팝업은 여기서 띄우지 않는다 — 라인담당까지 지정돼 '환자 조회가 성립'한 뒤에
+      // 안내 모달이 뜬다(아래 effect). 차트번호를 나중에 입력하는 순서도 있어서
+      // select의 onChange에만 걸면 그 경우 안 뜬다.
     } catch {
       setLookupInfo(null)
     }
@@ -4537,6 +4546,9 @@ function App() {
       setLookupInfo(null)
       setSpecialNote('')
       setExamRoom('')
+      // 새 등록이니 안내를 다시 띄울 수 있게 되돌린다.
+      noteAlertShownRef.current = false
+      setNoteAlert(false)
     }
     if (bed.status === 'reserved') {
       setDurationMinutes(DEFAULT_DURATION)
@@ -5063,19 +5075,19 @@ function App() {
     }
   }
 
-  // 환자 메모 — 특이사항과 같은 인라인 편집 패턴이지만 저장 대상이 다르다.
-  // 특이사항은 세션(이번 방문), 환자 메모는 차트번호(그 환자 전체)에 붙는다.
-  function startPatientMemoEdit() {
-    setPatientMemoDraft(currentBed?.patientMemo ?? '')
-    setPatientMemoEditing(true)
+  // 당일 메모 — 이 방문에만 유효하다(다음 방문엔 안 뜬다). 특이사항과 같은 인라인 편집
+  // 패턴이고, 이제 저장 대상도 같은 세션이다(구 당일 메모는 차트번호에 붙었다).
+  function startDayMemoEdit() {
+    setDayMemoDraft(currentBed?.dayMemo ?? '')
+    setDayMemoEditing(true)
   }
 
-  async function handleSavePatientMemo() {
-    if (!currentBed?.chartNumber) return
+  async function handleSaveDayMemo() {
+    if (!currentBed?.sessionId) return
     try {
-      await savePatientMemo(currentBed.chartNumber, patientMemoDraft.trim())
-      await refreshBoard() // 환자 메모도 board payload에 실려 온다
-      setPatientMemoEditing(false)
+      await saveDayMemo(currentBed.sessionId, dayMemoDraft.trim())
+      await refreshBoard() // 당일 메모도 board payload에 실려 온다
+      setDayMemoEditing(false)
     } catch (err) {
       setActionError(err.message)
     }
@@ -5688,7 +5700,10 @@ function App() {
                   <select
                     className="field__input"
                     value={lineStaffId}
-                    onChange={(e) => setLineStaffId(e.target.value)}
+                    onChange={(e) => {
+                      setLineStaffId(e.target.value)
+                      maybeAlertBaselineNote(lookupInfo, e.target.value)
+                    }}
                   >
                     <option value="">선택</option>
                     {staffList.map((s) => (
@@ -5715,7 +5730,7 @@ function App() {
 
                 {/* 이 방문의 특이사항 — 매 방문 받되, 재방문이면 지난 방문 내용이 채워진다(수정 가능). */}
                 <label className="field">
-                  <span className="field__label">특이사항</span>
+                  <span className="field__label">특이사항(기저질환)</span>
                   <textarea
                     className="field__input special-note__input"
                     value={specialNote}
@@ -5914,7 +5929,7 @@ function App() {
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (
                   <div className="bed-detail-notes">
-                    <h3 className="bed-detail-notes__title">특이사항</h3>
+                    <h3 className="bed-detail-notes__title">특이사항(기저질환)</h3>
                     <p className="special-note__text">{currentBed.specialNote}</p>
                   </div>
                 )}
@@ -5974,7 +5989,7 @@ function App() {
                     {/* (A) 이 방문의 특이사항 — 자유텍스트 한 칸, 인라인 편집 */}
                     <section className="rec-block">
                       <div className="rec-block__head">
-                        <h3 className="rec-block__title">특이사항</h3>
+                        <h3 className="rec-block__title">특이사항(기저질환)</h3>
                         {!specialNoteEditing && (
                           <button
                             type="button"
@@ -6021,29 +6036,29 @@ function App() {
                       )}
                     </section>
 
-                    {/* (A-2) 환자 메모 — 차트번호에 붙어 다음 방문에도 그대로 따라온다 */}
+                    {/* (A-2) 당일 메모 — 차트번호에 붙어 다음 방문에도 그대로 따라온다 */}
                     <section className="rec-block">
                       <div className="rec-block__head">
-                        <h3 className="rec-block__title">환자 메모</h3>
-                        {!patientMemoEditing && (
+                        <h3 className="rec-block__title">당일 메모</h3>
+                        {!dayMemoEditing && (
                           <button
                             type="button"
                             className="dm-note-btn"
-                            onClick={startPatientMemoEdit}
+                            onClick={startDayMemoEdit}
                             disabled={offline}
                           >
-                            {currentBed.patientMemo ? '수정' : '추가'}
+                            {currentBed.dayMemo ? '수정' : '추가'}
                           </button>
                         )}
                       </div>
-                      {patientMemoEditing ? (
+                      {dayMemoEditing ? (
                         <div className="special-note__edit">
                           <textarea
                             className="field__input special-note__input"
-                            value={patientMemoDraft}
-                            onChange={(e) => setPatientMemoDraft(e.target.value)}
+                            value={dayMemoDraft}
+                            onChange={(e) => setDayMemoDraft(e.target.value)}
                             rows={2}
-                            aria-label="환자 메모"
+                            aria-label="당일 메모"
                             autoFocus
                           />
                           <p className="rec-empty">이 메모는 같은 환자에게 계속 표시됩니다</p>
@@ -6051,24 +6066,24 @@ function App() {
                             <button
                               type="button"
                               className="rec-btn"
-                              onClick={() => setPatientMemoEditing(false)}
+                              onClick={() => setDayMemoEditing(false)}
                             >
                               취소
                             </button>
                             <button
                               type="button"
                               className="rec-btn rec-btn--primary"
-                              onClick={handleSavePatientMemo}
+                              onClick={handleSaveDayMemo}
                               disabled={offline}
                             >
                               저장
                             </button>
                           </div>
                         </div>
-                      ) : currentBed.patientMemo ? (
-                        <p className="special-note__text">{currentBed.patientMemo}</p>
+                      ) : currentBed.dayMemo ? (
+                        <p className="special-note__text">{currentBed.dayMemo}</p>
                       ) : (
-                        <p className="rec-empty">적어둔 환자 메모가 없습니다</p>
+                        <p className="rec-empty">적어둔 당일 메모가 없습니다</p>
                       )}
                     </section>
 
@@ -6312,22 +6327,25 @@ function App() {
         </div>
       )}
 
-      {/* ── 환자 메모 팝업 (배정 중 차트번호 입력 시, 메모가 있을 때만) ── */}
-      {memoPopup && (
+      {/* ── 당일 메모 팝업 (배정 중 차트번호 입력 시, 메모가 있을 때만) ── */}
+      {/* 특이사항(기저질환) 안내 — 차트 조회 + 라인담당까지 정해져 '환자 조회가 성립'한
+          시점에 1회 뜬다. 내용을 여기 다시 보여주지 않는다: 등록 폼의 특이사항 칸에
+          정본이 이미 채워져 있고, 이 모달은 '보고 지나가지 말라'는 신호다.
+          닫아도 폼은 그대로다 — 아무것도 초기화하지 않는다. */}
+      {noteAlert && (
         <div className="modal-overlay modal-overlay--top">
           <div className="modal modal--narrow" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
-                <h2>환자 메모</h2>
-                <span className="modal__header-sub">차트 {memoPopup.chartNo}</span>
+                <h2>특이사항 안내</h2>
               </div>
-              <button type="button" className="modal__close" onClick={() => setMemoPopup(null)} aria-label="닫기">
+              <button type="button" className="modal__close" onClick={() => setNoteAlert(false)} aria-label="닫기">
                 <Icon name="close" />
               </button>
             </div>
             <div className="modal__body">
-              <p className="memo-popup__note">{memoPopup.note}</p>
-              <button type="button" className="btn-register" onClick={() => setMemoPopup(null)}>
+              <p className="memo-popup__note">특이사항 기록이 있는 환자입니다.</p>
+              <button type="button" className="btn-register" onClick={() => setNoteAlert(false)}>
                 확인
               </button>
             </div>

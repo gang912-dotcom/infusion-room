@@ -85,7 +85,7 @@ function mapBoardToBeds(board) {
       assignedAt: s.assigned_at,
       specialNote: s.special_note ?? null,
       // 환자 메모 — 차트번호 기준이라 방문을 넘어 따라온다(특이사항은 방문 단위).
-      patientMemo: s.patient_memo ?? null,
+      dayMemo: s.day_memo ?? null,
       examRoom: s.exam_room ?? null,
       visitSymptom: s.visit_symptom ?? null,
       // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다
@@ -254,7 +254,7 @@ export async function deleteOrderBundle(id) {
   return apiFetch(`/admin/order-bundles/${id}`, { method: 'DELETE' })
 }
 
-// 이 방문의 특이사항 편집(2단 상세 오른쪽 패널).
+// 특이사항(기저질환) 편집. 서버가 이 방문 스냅샷과 환자 정본(baseline_note)을 함께 쓴다.
 export async function editSessionSpecialNote(sessionId, specialNote) {
   return apiFetch(`/sessions/${sessionId}`, {
     method: 'PATCH',
@@ -362,7 +362,7 @@ function mapHistoryRow(row) {
     lineStaff: row.line_staff_name ?? null,
     mixStaff: row.mix_staff_name ?? null,
     endStaff: row.end_staff_name ?? null,
-    patientMemo: row.patient_memo ?? null,
+    dayMemo: row.day_memo ?? null,
     orders: row.orders ?? [],
     deleted: !!row.deleted,
   }
@@ -543,16 +543,13 @@ function mapAdminStaff(row) {
   }
 }
 
-// ─── 환자 메모 (차트번호 기준, 방문을 넘어 유지) ─────────────────────
-// 테이블·경로 이름 주의: patient_notes가 아니라 patient_memos다(전자는 은퇴한 구 기능).
-export async function getPatientMemo(chartNo) {
-  return apiFetch(`/patient-memos/${encodeURIComponent(chartNo)}`)
-}
-
-export async function savePatientMemo(chartNo, note) {
-  return apiFetch(`/patient-memos/${encodeURIComponent(chartNo)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ note }),
+// ─── 당일 메모 (이 방문에만 유효) ────────────────────────────────────
+// 구 '환자 메모'는 차트 기준 영구였고 전용 라우트를 썼다. 이제 세션 컬럼이라
+// 특이사항·진료실과 같은 PATCH를 탄다. 조회는 보드 payload에 이미 실려 온다.
+export async function saveDayMemo(sessionId, dayMemo) {
+  return apiFetch(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ day_memo: dayMemo }),
   })
 }
 
