@@ -2069,6 +2069,7 @@ function OrderBundleManageSection({ offline }) {
   // editingId === 'new'면 추가 폼, 숫자면 그 묶음 수정 폼, null이면 닫힘.
   const [editingId, setEditingId] = useState(null)
   const [name, setName] = useState('')
+  const [emrCode, setEmrCode] = useState('')
   const [checks, setChecks] = useState({})
 
   function reload() {
@@ -2083,12 +2084,14 @@ function OrderBundleManageSection({ offline }) {
   function openNew() {
     setEditingId('new')
     setName('')
+    setEmrCode('')
     setChecks({})
   }
 
   function openEdit(bundle) {
     setEditingId(bundle.id)
     setName(bundle.name)
+    setEmrCode(bundle.emr_code ?? '')
     const next = {}
     bundle.items.forEach((it) => {
       next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
@@ -2100,6 +2103,7 @@ function OrderBundleManageSection({ offline }) {
     setError('')
     const payload = {
       name: name.trim(),
+      emr_code: emrCode.trim(),
       items: Object.values(checks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty })),
     }
     try {
@@ -2150,6 +2154,16 @@ function OrderBundleManageSection({ offline }) {
       {editingId !== null && (
         <div className="dm-admin-add-form">
           <label className="field">
+            <span className="field__label">묶음코드</span>
+            <input
+              className="field__input"
+              value={emrCode}
+              onChange={(e) => setEmrCode(e.target.value)}
+              aria-label="EMR 묶음코드"
+            />
+            <span className="field__hint">처방 확인 화면의 버튼에 이 값이 찍힌다. 비우면 이름이 찍힌다.</span>
+          </label>
+          <label className="field">
             <span className="field__label">묶음 이름</span>
             <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
@@ -2197,11 +2211,12 @@ function OrderBundleManageSection({ offline }) {
         <div className="dm-table-wrap">
           <table className="dm-table">
             <thead>
-              <tr><th>이름</th><th>포함 항목</th><th></th></tr>
+              <tr><th>묶음코드</th><th>이름</th><th>포함 항목</th><th></th></tr>
             </thead>
             <tbody>
               {bundles.map((bundle) => (
                 <tr key={bundle.id}>
+                  <td>{bundle.emr_code || '—'}</td>
                   <td>{bundle.name}</td>
                   <td>{summary(bundle)}</td>
                   <td className="dm-note-manage__action">
@@ -6335,8 +6350,12 @@ function App() {
                       type="button"
                       className="order-bundle-btn"
                       onClick={() => applyOrderBundle(bundle)}
+                      /* 버튼에는 EMR 묶음코드를 찍는다 — 원장님·근무자가 이 코드로 부른다.
+                         코드가 짧아 7개도 한 줄에 들어간다. 전체 이름은 눌러보기 전에
+                         확인할 수 있게 title로 남긴다. */
+                      title={bundle.emr_code ? bundle.name : undefined}
                     >
-                      {bundle.name}
+                      {bundle.emr_code || bundle.name}
                     </button>
                   ))
                 ) : (

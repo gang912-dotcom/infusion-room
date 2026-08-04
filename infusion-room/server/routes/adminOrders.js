@@ -194,15 +194,22 @@ function writeBundleItems(bundleId, rows) {
   for (const row of rows) insertBundleItem.run(bundleId, row.code, row.dose, row.qty)
 }
 
+// EMR 묶음코드. 처방 확인 모달의 버튼에 이 값이 찍힌다(원장님·근무자가 이 코드로 부른다).
+// 빈 값은 NULL — 버튼은 코드가 없으면 이름으로 떨어진다.
+function normalizeEmrCode(value) {
+  const trimmed = String(value ?? '').trim()
+  return trimmed || null
+}
+
 router.post('/order-bundles', (req, res) => {
-  const { name, items, sort_order: sortOrder } = req.body ?? {}
+  const { name, items, sort_order: sortOrder, emr_code: emrCode } = req.body ?? {}
   if (!String(name ?? '').trim()) return res.status(400).json({ error: '묶음 이름이 필요합니다' })
   const rows = validateBundleItems(items, res)
   if (rows === null) return
 
   const create = db.transaction(() => {
-    const info = db.prepare('INSERT INTO order_bundles (name, sort_order) VALUES (?, ?)')
-      .run(String(name).trim(), Number.isInteger(sortOrder) ? sortOrder : 0)
+    const info = db.prepare('INSERT INTO order_bundles (name, emr_code, sort_order) VALUES (?, ?, ?)')
+      .run(String(name).trim(), normalizeEmrCode(emrCode), Number.isInteger(sortOrder) ? sortOrder : 0)
     writeBundleItems(info.lastInsertRowid, rows)
     return info.lastInsertRowid
   })
@@ -213,8 +220,10 @@ router.patch('/order-bundles/:id', (req, res) => {
   const bundle = db.prepare('SELECT * FROM order_bundles WHERE id = ?').get(req.params.id)
   if (!bundle) return res.status(404).json({ error: '존재하지 않는 묶음입니다' })
 
-  const { name, items, sort_order: sortOrder, is_active: isActive } = req.body ?? {}
-  if (name === undefined && items === undefined && sortOrder === undefined && isActive === undefined) {
+  const { name, items, sort_order: sortOrder, is_active: isActive, emr_code: emrCode } = req.body ?? {}
+  // emr_code를 이 가드에 넣지 않으면 코드만 바꾸는 요청이 전부 400으로 튕긴다.
+  if (name === undefined && items === undefined && sortOrder === undefined
+      && isActive === undefined && emrCode === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
   if (name !== undefined && !String(name).trim()) {
@@ -226,6 +235,7 @@ router.patch('/order-bundles/:id', (req, res) => {
   const fields = []
   const params = []
   if (name !== undefined) { fields.push('name = ?'); params.push(String(name).trim()) }
+  if (emrCode !== undefined) { fields.push('emr_code = ?'); params.push(normalizeEmrCode(emrCode)) }
   if (sortOrder !== undefined) { fields.push('sort_order = ?'); params.push(Number(sortOrder) || 0) }
   if (isActive !== undefined) { fields.push('is_active = ?'); params.push(isActive ? 1 : 0) }
 
