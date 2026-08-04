@@ -1728,23 +1728,46 @@ function PatientView({
 //
 // checks 형태: { [code]: dose } — 키가 있으면 체크됨. 단순 항목은 dose가 ''.
 // 수량 — 숫자를 직접 타이핑하거나 ▲▼로 1씩. 체크된 줄에만 뜬다.
+//
+// 타이핑 중에는 정규화하지 않는다. 매 글자마다 normalizeQty를 물리면 '0.5'를 넣을 수 없다:
+// 칸을 지우면 ''가 1로 되돌아가고, '0'을 넣는 순간 1이 되고, '0.'은 NaN이라 1이 된다.
+// 그래서 편집 중 원문(draft)을 그대로 들고 있다가 포커스를 뗄 때 한 번만 정리한다.
+// draft가 null이면 부모가 준 qty를 보여준다.
+// inputMode는 decimal이다 — numeric이면 아이패드 키패드에 소수점이 안 나온다.
 function QtyStepper({ qty, onChange, label }) {
+  const [draft, setDraft] = useState(null)
+
+  function commit() {
+    if (draft !== null) onChange(draft)
+    setDraft(null)
+  }
+
+  // ▲▼는 편집 중이던 값을 기준으로 움직인다(버튼을 누르면 blur가 먼저 나지만,
+  // 순서에 기대지 않고 draft를 직접 본다). QTY_MIN 아래로는 안 내려간다 —
+  // 음수를 넘기면 정규화가 부호를 떼어 0.1이 0.9로 '늘어난다'.
+  function step(delta) {
+    const base = draft !== null ? normalizeQty(draft) : qty
+    setDraft(null)
+    onChange(Math.max(QTY_MIN, base + delta))
+  }
+
   return (
     <span className="qty">
       <span className="qty__x">×</span>
       <input
         type="text"
-        inputMode="numeric"
+        inputMode="decimal"
         className="qty__input"
-        value={qty}
-        onChange={(e) => onChange(e.target.value)}
+        value={draft ?? qty}
+        onChange={(e) => setDraft(e.target.value.replace(/[^\d.]/g, ''))}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
         aria-label={`${label} 수량`}
       />
       <span className="qty__steps">
-        {/* ▼는 QTY_MIN에서 멈춘다. 그냥 qty-1을 보내면 음수가 되고, 정규화가 부호를
-            떼어내 0.1이 0.9로 '늘어나' 버린다. 0.1 단위는 타이핑으로 넣는다. */}
-        <button type="button" className="qty__step" onClick={() => onChange(qty + 1)} aria-label={`${label} 수량 1 늘리기`}>▲</button>
-        <button type="button" className="qty__step" onClick={() => onChange(Math.max(QTY_MIN, qty - 1))} aria-label={`${label} 수량 1 줄이기`}>▼</button>
+        {/* ▲▼는 ±1이다(대부분 정수). 0.1 단위는 칸에 직접 타이핑한다. */}
+        <button type="button" className="qty__step" onClick={() => step(1)} aria-label={`${label} 수량 1 늘리기`}>▲</button>
+        <button type="button" className="qty__step" onClick={() => step(-1)} aria-label={`${label} 수량 1 줄이기`}>▼</button>
       </span>
     </span>
   )
