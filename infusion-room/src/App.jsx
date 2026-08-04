@@ -2313,6 +2313,27 @@ function AccountManageSection({ offline }) {
 // PNG는 투명 배경을 살려야 해서 PNG로, JPG는 그대로 JPG로 뽑는다.
 const SIGNATURE_MAX_WIDTH = 600
 
+// 스캔·촬영한 서명 파일은 사방에 빈 여백이 붙어 온다. 기록지는 서명을 height 20px로 줄여
+// 넣으므로 여백을 그대로 두면 잉크가 절반 크기로 찍혀 이름이 안 읽힌다
+// (받아온 7장 실측: 여백이 넓이의 48~62%) → 잉크 영역만 남기고 잘라낸다.
+// PNG는 투명 배경, JPG는 흰 배경이라 '투명하지도 않고 거의 흰색도 아닌' 픽셀을 잉크로 본다.
+// 배경이 흰색이 아닌 스캔은 경계가 전체가 되어 그대로 통과한다(안전한 폴백).
+function inkBounds(data, w, h) {
+  let x0 = w, y0 = h, x1 = -1, y1 = -1
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const i = (y * w + x) * 4
+      if (data[i + 3] <= 16) continue
+      if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) continue
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+    }
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+}
+
 function resizeSignature(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -2322,10 +2343,21 @@ function resizeSignature(file) {
       img.onerror = () => reject(new Error('이미지를 열지 못했습니다'))
       img.onload = () => {
         const scale = Math.min(1, SIGNATURE_MAX_WIDTH / img.width)
-        const canvas = document.createElement('canvas')
+        let canvas = document.createElement('canvas')
         canvas.width = Math.round(img.width * scale)
         canvas.height = Math.round(img.height * scale)
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+        const box = inkBounds(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)
+        if (box && (box.w < canvas.width || box.h < canvas.height)) {
+          const cropped = document.createElement('canvas')
+          cropped.width = box.w
+          cropped.height = box.h
+          cropped.getContext('2d').drawImage(canvas, -box.x, -box.y)
+          canvas = cropped
+        }
+
         const type = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png'
         resolve(canvas.toDataURL(type, type === 'image/jpeg' ? 0.9 : undefined))
       }
