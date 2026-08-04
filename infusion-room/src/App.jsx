@@ -129,7 +129,7 @@ const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 
 // 관리자 편집은 아직 필요 없어 상수로 둔다.
 const EXAM_ROOMS = ['1', '2', '3', '6', '7']
 
-// 처방 확인 체크리스트의 그룹 표시 순서. 항목 자체는 DB(order_items)가 원본이고
+// 처방 작성 체크리스트의 그룹 표시 순서. 항목 자체는 DB(order_items)가 원본이고
 // 여기 있는 건 '그룹을 어떤 순서로 보여줄지'뿐이다(그룹 편집은 범위 밖).
 // DB에 이 목록에 없는 group_key가 생기면 뒤에 붙여서 렌더한다 — 조용히 사라지면 안 되므로.
 // 투여경로는 n/s보다 먼저 고르는 값이라 맨 앞이다.
@@ -1683,7 +1683,7 @@ function PatientView({
 }
 
 // ─── 수액 Order 체크리스트 (공용) ──────────────────────────────────
-// 처방 확인 모달과 관리자 묶음 편집 폼이 같은 것을 쓴다. "이 묶음에 뭐가 들어가나"를
+// 처방 작성 모달과 관리자 묶음 편집 폼이 같은 것을 쓴다. "이 묶음에 뭐가 들어가나"를
 // 실제 처방을 체크하는 것과 똑같은 조작으로 고르게 하려는 것(3b 스펙 4.2).
 //
 // checks 형태: { [code]: dose } — 키가 있으면 체크됨. 단순 항목은 dose가 ''.
@@ -2058,7 +2058,7 @@ function OrderItemManageSection({ offline }) {
 }
 
 // ─── 관리자 설정 — 묶음처방 관리 ────────────────────────────────────
-// 포함 항목은 처방 확인과 같은 체크리스트로 고른다(OrderChecklist 재사용).
+// 포함 항목은 처방 작성과 같은 체크리스트로 고른다(OrderChecklist 재사용).
 function OrderBundleManageSection({ offline }) {
   const [bundles, setBundles] = useState([])
   const [items, setItems] = useState([])
@@ -2161,7 +2161,7 @@ function OrderBundleManageSection({ offline }) {
               onChange={(e) => setEmrCode(e.target.value)}
               aria-label="EMR 묶음코드"
             />
-            <span className="field__hint">처방 확인 화면의 버튼에 이 값이 찍힌다. 비우면 이름이 찍힌다.</span>
+            <span className="field__hint">처방 작성 화면의 버튼에 이 값이 찍힌다. 비우면 이름이 찍힌다.</span>
           </label>
           <label className="field">
             <span className="field__label">묶음 이름</span>
@@ -3904,7 +3904,7 @@ function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [beds, setBeds] = useState([])
   const [staffList, setStaffList] = useState([])
-  // 처방 확인 — 오더 항목은 DB가 원본이다(하드코딩 목록 없음).
+  // 처방 작성 — 오더 항목은 DB가 원본이다(하드코딩 목록 없음).
   const [orderItems, setOrderItems] = useState([])
   const [orderBundles, setOrderBundles] = useState([])
   const [prescriptionBed, setPrescriptionBed] = useState(null)
@@ -4314,7 +4314,7 @@ function App() {
     </label>
   )
 
-  // 내원당시증상 입력은 3a단계에서 '처방 확인' 모달로 옮겼다(투여 시작과 분리).
+  // 내원당시증상 입력은 3a단계에서 '처방 작성' 모달로 옮겼다(투여 시작과 분리).
 
 
   // 직전 방문 증상 상기 — 진행중 상세를 열 때 한 번 조회한다.
@@ -4793,7 +4793,7 @@ function App() {
     setEditingVitalsId(null)
   }
 
-  // ─── 처방 확인 ────────────────────────────────────────────────────
+  // ─── 처방 작성 ────────────────────────────────────────────────────
   // 투여 시작과 독립된 동작이다 — 예약·진행중 어느 쪽에서든 열리고, 순서를 강제하지 않는다
   // (급하면 투약 먼저 하고 기록은 나중에).
   async function openPrescriptionModal(bed) {
@@ -5729,23 +5729,23 @@ function App() {
 
                 {examRoomField}
 
-                {/* 처방 확인은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
+                {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
                 <div className="rec-block__actions">
+                  <button
+                    type="button"
+                    className="dm-note-btn dm-note-btn--record"
+                    onClick={() => handleOpenRecord(currentBed.sessionId)}
+                    disabled={offline}
+                  >
+                    수액간호기록지
+                  </button>
                   <button
                     type="button"
                     className="dm-note-btn"
                     onClick={() => openPrescriptionModal()}
                     disabled={offline}
                   >
-                    처방 확인
-                  </button>
-                  <button
-                    type="button"
-                    className="dm-note-btn"
-                    onClick={() => handleOpenRecord(currentBed.sessionId)}
-                    disabled={offline}
-                  >
-                    기록지
+                    처방 작성
                   </button>
                 </div>
 
@@ -5866,11 +5866,19 @@ function App() {
                 <div className="rec-block__actions">
                   <button
                     type="button"
-                    className="dm-note-btn"
+                    className="dm-note-btn dm-note-btn--record"
                     onClick={() => handleOpenRecord(currentBed.sessionId)}
                     disabled={offline}
                   >
-                    기록지
+                    수액간호기록지
+                  </button>
+                  <button
+                    type="button"
+                    className="dm-note-btn"
+                    onClick={() => openPrescriptionModal()}
+                    disabled={offline}
+                  >
+                    처방 작성
                   </button>
                 </div>
 
@@ -6042,14 +6050,7 @@ function App() {
                       <div className="rec-block__head">
                         <h3 className="rec-block__title">금일 기록</h3>
                         <div className="rec-block__actions">
-                          <button
-                            type="button"
-                            className="dm-note-btn"
-                            onClick={() => openPrescriptionModal()}
-                            disabled={offline}
-                          >
-                            처방 확인
-                          </button>
+                          {/* 처방 작성 버튼은 왼쪽 수액간호기록지 옆으로 옮겼다. */}
                           <button
                             type="button"
                             className="dm-note-btn"
@@ -6307,13 +6308,13 @@ function App() {
         </div>
       )}
 
-      {/* ── 처방 확인 (수액 Order 체크 + 내원당시증상) ── */}
+      {/* ── 처방 작성 (수액 Order 체크 + 내원당시증상) ── */}
       {prescriptionBed && (
         <div className="modal-overlay modal-overlay--top">
           <div className="modal modal--prescription" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
-                <h2>처방 확인</h2>
+                <h2>처방 작성</h2>
                 <span className="modal__header-sub">
                   베드 {prescriptionBed.number} · {prescriptionBed.patientName}
                 </span>

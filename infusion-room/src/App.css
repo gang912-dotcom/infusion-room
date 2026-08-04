@@ -20,6 +20,10 @@
   --track-bg: #2a2a2a;
   --number-bg: #2a2a2a;
   --hover-tint: rgba(255, 255, 255, 0.04);
+  /* 수액간호기록지 버튼 틴트. 스펙은 #e9f4fb 인라인이었는데 그 색은 라이트 전용이다 —
+     다크에서 밝은 본문색이 얹혀 글자가 사라진다. 테마별로 갈라 둔다. */
+  --record-btn-bg: rgba(120, 190, 235, 0.16);
+  --record-btn-border: rgba(120, 190, 235, 0.45);
   /* iOS 세그먼트 컨트롤(탭) */
   --seg-track: rgba(255, 255, 255, 0.06);
   --seg-active: #3a3a40;
@@ -61,6 +65,8 @@
   --track-bg: #e5e5ea;
   --number-bg: #ececf0;
   --hover-tint: rgba(0, 0, 0, 0.04);
+  --record-btn-bg: #e9f4fb;
+  --record-btn-border: #b6d9ee;
   --seg-track: #e6e6ec;
   --seg-active: #ffffff;
   --seg-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
@@ -3500,6 +3506,18 @@
 
 .dm-note-btn:hover {
   background: var(--hover-tint);
+}
+
+/* 수액간호기록지 — 인쇄로 이어지는 주된 동작이라 틴트로 구분한다.
+   글자는 상태색이 아니라 본문색이다(틴트 배경 + 테두리로만 강조) — 그러면 대비 함정이 없다. */
+.dm-note-btn--record {
+  color: var(--text-primary);
+  background: var(--record-btn-bg);
+  border-color: var(--record-btn-border);
+}
+
+.dm-note-btn--record:hover {
+  background: var(--record-btn-border);
 }
 
 .dm-note-btn:disabled {
