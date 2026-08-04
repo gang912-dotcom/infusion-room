@@ -25,6 +25,10 @@ const sessionStmt = db.prepare(`
   WHERE s.id = ?
 `)
 
+// 투여경로 그룹 — 경로를 고르는 체크박스이고 처방 '수량'이 아니다.
+// 서버에서는 여기 하나만 두고 sessions.js가 가져다 쓴다(클라 App.jsx에 한 벌 더 있다).
+export const ROUTE_GROUP = '투여경로'
+
 // 라벨 조인에 is_active 필터를 걸지 않는다 — 비활성 항목도 라벨이 풀려야 한다.
 // (관리자가 항목을 숨겨도 과거 기록지의 이름이 사라지면 안 되므로.)
 const ordersStmt = db.prepare(`
@@ -103,10 +107,12 @@ export function buildSessionRecord(sessionId) {
     // 라벨을 바꿔도 과거 기록지는 그대로다.
     // qty는 1도 그대로 싣는다 — 기록지에서 1을 감출지는 표시하는 쪽이 정한다.
     // 배포 전 스냅샷에는 qty가 없다(undefined) → 읽는 쪽이 1로 보면 된다.
+    // 단 투여경로 그룹(IV/IM/SC 체크박스)은 수량 개념이 없다 → null로 보내 표시를 막는다.
+    // 안 그러면 기록지에 'IV ×1'이 찍힌다.
     orders: ordersStmt.all(s.id).map((o) => ({
       label: o.label ?? o.item_code,
       dose: o.dose,
-      qty: o.qty ?? 1,
+      qty: o.group_key === ROUTE_GROUP ? null : (o.qty ?? 1),
       // 용법 IV|IM|SC. ORD처럼 가변인 항목과 투여경로 체크박스 자체는 NULL이다
       // (경로 항목에 route가 박히면 'IV IV'처럼 자기 이름 뒤에 또 찍힌다).
       route: o.route ?? null,

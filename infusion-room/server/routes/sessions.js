@@ -2,7 +2,7 @@ import { Router } from 'express'
 import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
 import { assertInRange, isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
-import { buildSessionRecord, attachSignatures } from '../lib/record.js'
+import { buildSessionRecord, attachSignatures, ROUTE_GROUP } from '../lib/record.js'
 
 const router = Router()
 
@@ -307,7 +307,7 @@ router.get('/history', (req, res) => {
   // 처방은 세션마다 조회하면 N+1이 된다 — 한 번에 받아 세션별로 묶는다.
   // 라벨 조인에 is_active 필터를 걸지 않는다(관리자가 숨긴 항목도 이름이 풀려야 한다).
   const orderRows = db.prepare(`
-    SELECT so.session_id, so.item_code, so.dose, so.qty, oi.label, oi.route
+    SELECT so.session_id, so.item_code, so.dose, so.qty, oi.label, oi.route, oi.group_key
     FROM session_orders so
     LEFT JOIN order_items oi ON oi.code = so.item_code
     ORDER BY oi.group_key, oi.sort_order, so.dose
@@ -316,8 +316,12 @@ router.get('/history', (req, res) => {
   for (const o of orderRows) {
     if (!ordersBySession.has(o.session_id)) ordersBySession.set(o.session_id, [])
     // route까지 싣는다 — CSV·환자 리포트의 처방 표기를 기록지와 같게 맞춘다.
+    // 투여경로 그룹은 수량 개념이 없어 null로 보낸다(record.js와 같은 규칙).
     ordersBySession.get(o.session_id).push({
-      label: o.label ?? o.item_code, dose: o.dose, qty: o.qty, route: o.route ?? null,
+      label: o.label ?? o.item_code,
+      dose: o.dose,
+      qty: o.group_key === ROUTE_GROUP ? null : o.qty,
+      route: o.route ?? null,
     })
   }
 

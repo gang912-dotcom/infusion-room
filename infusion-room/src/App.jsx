@@ -912,8 +912,9 @@ function xDownload(filename, content, mime) {
 }
 
 // 수액 처방 요약 셀 — '라벨(용량) · 라벨 · …'. 쉼표는 CSV 열을 밀 수 있어 쓰지 않는다.
-// 수량은 2개 이상일 때만 붙인다 — 전부 '×1'이면 읽는 사람이 세야 할 것이 늘어난다.
-// 배포 전 스냅샷·기록에는 qty가 없다(undefined) → 조건이 거짓이라 그대로 나온다.
+// 수량은 1도 붙인다 — 숫자가 없으면 '1개'인지 '안 적은 것'인지 구분이 안 된다.
+// 투여경로 줄(IV/IM/SC)은 서버가 qty를 null로 보내 안 붙는다(수량 개념이 없다).
+// 배포 전 스냅샷·기록에는 qty가 없다(undefined) → 그대로 안 붙는다.
 // 용법은 IM·SC만 찍는다. 수액은 IV가 기본이라 줄마다 반복되면(0번 묶음이면 14줄)
 // 정작 예외인 IM·SC가 그 사이에 묻힌다. 전체 경로는 처방 목록 끝의 투여경로 줄
 // (IV·SC 항목 자체)에 그대로 남으므로 정보가 사라지지는 않는다.
@@ -928,7 +929,7 @@ function xOrdersText(orders = []) {
   return orders.map((o) => {
     const dose = o.dose ? `(${o.dose})` : ''
     const route = routeLabel(o.route)
-    return `${o.label}${dose}${o.qty !== undefined && o.qty !== 1 ? ` ×${o.qty}` : ''}${route ? ` ${route}` : ''}`
+    return `${o.label}${dose}${o.qty ? ` ×${o.qty}` : ''}${route ? ` ${route}` : ''}`
   }).join(' · ')
 }
 
@@ -1040,7 +1041,7 @@ function openRecordSheet(record) {
     ? `<ul class="orders">${record.orders.map((o) =>
       `<li>${esc(o.label)}`
       + (o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : '')
-      + (o.qty !== undefined && o.qty !== 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
+      + (o.qty ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
       + (routeLabel(o.route) ? ` <span class="route">${esc(routeLabel(o.route))}</span>` : '')
       + '</li>').join('')}</ul>`
     : '<p class="none">체크된 처방 없음</p>'
@@ -1092,7 +1093,7 @@ function openRecordSheet(record) {
     ul.orders{margin:0;padding-left:18px;font-size:14px;columns:2}
     ul.orders li{margin:2px 0;break-inside:avoid}
     .dose{font-weight:700}
-    /* 수량 — 용량과 헷갈리지 않게 굵게. 1개는 아예 안 나온다. */
+    /* 수량 — 용량과 헷갈리지 않게 굵게. */
     .qty{font-weight:700}
     /* 용법 — 약품명·용량보다 약하게. 인쇄지는 항상 흰 배경이라 #555면 대비 7:1이다. */
     .route{color:#555;font-size:12px}
@@ -2200,7 +2201,7 @@ function OrderBundleManageSection({ offline }) {
     const labelOf = (code) => items.find((i) => i.code === code)?.label ?? code
     const names = bundle.items.map((it) => labelOf(it.code)
       + (it.dose ? ` ${it.dose}` : '')
-      + (it.qty !== undefined && it.qty !== 1 ? ` ×${it.qty}` : ''))
+      + (it.qty ? ` ×${it.qty}` : ''))
     if (names.length === 0) return '(비어 있음)'
     return names.length <= 4 ? names.join(', ') : `${names.slice(0, 4).join(', ')} 외 ${names.length - 4}`
   }
