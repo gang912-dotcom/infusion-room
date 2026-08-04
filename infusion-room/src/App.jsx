@@ -3592,7 +3592,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
                           className="dm-note-btn"
                           onClick={() => openRecordFor(entry.sessionId)}
                         >
-                          기록지
+                          수액간호기록지
                         </button>
                       )}
                       {/* 실수로 종료한 것 되돌리기. 베드가 이미 찼으면 서버가 막는다. */}
