@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS patients (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   chart_no   TEXT    NOT NULL UNIQUE,
   name       TEXT    NOT NULL,
+  -- 특이사항(기저질환) 정본. 환자에게 계속 따라다니는 값이고, 등록 시 이 값이 칸에 채워진다.
+  -- sessions.special_note는 그 방문의 스냅샷으로 남는다(기록지·CSV가 그걸 읽는다).
+  -- 비우면 진짜로 지워진다 — 세션에서 최신 non-null을 찾던 옛 방식은 삭제가 불가능했다.
+  baseline_note TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -65,7 +69,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   cancelled        INTEGER NOT NULL DEFAULT 0,
   cancel_reason    TEXT,
   deleted          INTEGER NOT NULL DEFAULT 0,
-  special_note     TEXT,  -- 이 방문(세션)의 특이사항. 등록 시 자유기재, 나중에 편집 가능.
+  special_note     TEXT,  -- 이 방문의 특이사항(기저질환) 스냅샷. 정본은 patients.baseline_note.
+  -- 당일 메모 — 이 방문에만 유효하다. 다음 방문에는 안 뜨고, 그 방문의 기록지·이용기록에만 남는다.
+  -- 구 '환자 메모'(patient_memos, 차트 영구)를 대체한다. 그 테이블은 데이터 보존용으로 남겨둔다.
+  day_memo         TEXT,
   exam_room        TEXT,  -- 진료실 번호('1'|'2'|'3'|'6'|'7'). 미선택이면 NULL.
   visit_symptom    TEXT,  -- 내원당시증상(주 증상, 내원 사유). 자유 텍스트. 미입력이면 NULL.
   record_snapshot  TEXT   -- 종료 시 얼린 기록지 데이터(JSON). 종료 전이면 NULL.

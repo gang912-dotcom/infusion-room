@@ -74,12 +74,19 @@ router.post('/sessions/assign', (req, res) => {
 
   let sessionId
   try {
-    // 특이사항은 이 방문 단위 자유기재. 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
+    // 특이사항(기저질환)은 이 방문의 스냅샷으로 세션에 남기고, 정본은 환자에 쓴다.
+    // 등록 칸은 정본이 프리필돼 있으므로 근무자가 고친 값이 곧 새 정본이다.
+    // 빈 문자열은 NULL로 저장해 "없음"과 구분되지 않게 한다.
     const trimmedNote = typeof specialNote === 'string' ? specialNote.trim() : ''
-    const info = db.prepare(
-      `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, special_note, exam_room)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(bed.id, patient.id, now, req.account.id, lineStaff.id, trimmedNote || null, normalizedExamRoom)
+    const info = db.transaction(() => {
+      const created = db.prepare(
+        `INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, special_note, exam_room)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(bed.id, patient.id, now, req.account.id, lineStaff.id, trimmedNote || null, normalizedExamRoom)
+      db.prepare('UPDATE patients SET baseline_note = ?, updated_at = ? WHERE id = ?')
+        .run(trimmedNote || null, now, patient.id)
+      return created
+    })()
     sessionId = info.lastInsertRowid
   } catch (err) {
     if (isUniqueConstraintError(err)) {
@@ -284,15 +291,15 @@ router.get('/history', (req, res) => {
            b.room, b.number AS bed_number,
            p.chart_no, p.name AS patient_name,
            ls.name AS line_staff_name, ms.name AS mix_staff_name,
-           es.name AS end_staff_name, pm.note AS patient_memo
+           es.name AS end_staff_name, s.day_memo
     FROM sessions s
     JOIN beds b ON b.id = s.bed_id
     JOIN patients p ON p.id = s.patient_id
     LEFT JOIN staff ls ON ls.id = s.line_staff_id
     LEFT JOIN staff ms ON ms.id = s.mix_staff_id
-    -- 라인 제거 담당자는 이 기능 이전 종료분엔 없다. 환자 메모는 차트번호 기준(현재값).
+    -- 라인 제거 담당자는 이 기능 이전 종료분엔 없다.
+    -- 당일 메모는 그 방문 값이라 세션 컬럼이다 — 차트로 조인하던 구 환자 메모와 다르다.
     LEFT JOIN staff es ON es.id = s.end_staff_id
-    LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
     WHERE s.ended_at IS NOT NULL
     ORDER BY s.ended_at DESC
   `).all()
@@ -372,9 +379,10 @@ router.patch('/sessions/:id', (req, res) => {
 
   const {
     deleted, special_note: specialNote, exam_room: examRoom, visit_symptom: visitSymptom,
+    day_memo: dayMemo,
   } = req.body ?? {}
   if (deleted === undefined && specialNote === undefined
-      && examRoom === undefined && visitSymptom === undefined) {
+      && examRoom === undefined && visitSymptom === undefined && dayMemo === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
   }
 
@@ -402,11 +410,28 @@ router.patch('/sessions/:id', (req, res) => {
     fields.push('visit_symptom = ?')
     params.push(trimmed || null)
   }
+  if (dayMemo !== undefined) {
+    const trimmed = typeof dayMemo === 'string' ? dayMemo.trim() : ''
+    fields.push('day_memo = ?')
+    params.push(trimmed || null)
+  }
   params.push(session.id)
 
-  db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`).run(...params)
-  // 특이사항·진료실·내원당시증상은 상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 revision을 올린다.
-  if (specialNote !== undefined || examRoom !== undefined || visitSymptom !== undefined) bumpRevision(db)
+  db.transaction(() => {
+    db.prepare(`UPDATE sessions SET ${fields.join(', ')} WHERE id = ?`).run(...params)
+    // 특이사항(기저질환)은 영구다 → 세션 스냅샷과 함께 환자 정본도 갱신한다.
+    // 여기서 같이 쓰지 않으면 편집이 이 방문에만 남고 다음 방문에 사라진다.
+    // 비우면 정본도 비워진다 — 지울 수 있어야 한다는 게 이번 개편의 핵심이다.
+    if (specialNote !== undefined) {
+      const trimmed = typeof specialNote === 'string' ? specialNote.trim() : ''
+      db.prepare('UPDATE patients SET baseline_note = ?, updated_at = ? WHERE id = ?')
+        .run(trimmed || null, Date.now(), session.patient_id)
+    }
+  })()
+  // 특이사항·진료실·내원당시증상·당일 메모는 상세·카드에 바로 보여야 하므로
+  // 다른 단말도 폴링으로 받게 revision을 올린다.
+  if (specialNote !== undefined || examRoom !== undefined
+      || visitSymptom !== undefined || dayMemo !== undefined) bumpRevision(db)
   res.json({ ok: true })
 })
 

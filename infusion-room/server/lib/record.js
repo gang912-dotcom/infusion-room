@@ -13,7 +13,7 @@ const sessionStmt = db.prepare(`
          b.room, b.number AS bed_number,
          ls.name AS line_staff_name, ms.name AS mix_staff_name,
          es.name AS end_staff_name,
-         pm.note AS patient_memo
+         s.day_memo
   FROM sessions s
   JOIN patients p ON p.id = s.patient_id
   JOIN beds b ON b.id = s.bed_id
@@ -21,8 +21,7 @@ const sessionStmt = db.prepare(`
   LEFT JOIN staff ms ON ms.id = s.mix_staff_id
   -- 라인 제거 담당자는 이 기능 이전에 종료된 세션엔 없다(LEFT JOIN → NULL).
   LEFT JOIN staff es ON es.id = s.end_staff_id
-  -- 환자 메모는 차트번호 기준. 종료 시점의 값이 스냅샷에 그대로 굳는다.
-  LEFT JOIN patient_memos pm ON pm.chart_no = p.chart_no
+  -- 당일 메모는 그 방문 값이라 세션 컬럼이다. 종료 스냅샷에 그대로 굳는다.
   WHERE s.id = ?
 `)
 
@@ -98,7 +97,7 @@ export function buildSessionRecord(sessionId) {
 
     visit_symptom: s.visit_symptom,
     special_note: s.special_note,
-    patient_memo: s.patient_memo,
+    day_memo: s.day_memo,
 
     // 체크된 항목만. 라벨은 이 시점 값으로 문자열로 굳는다 — 나중에 관리자가
     // 라벨을 바꿔도 과거 기록지는 그대로다.

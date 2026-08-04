@@ -48,6 +48,41 @@ if (!staffColumns.includes('signature')) {
   db.exec('ALTER TABLE staff ADD COLUMN signature TEXT')
 }
 
+// ─── 당일 메모 · 특이사항(기저질환) 정본 (2026-08-04) ─────────────────
+// 두 기능의 지속성이 맞바뀌었다.
+//   구 '환자 메모'(patient_memos, 차트 영구) → '당일 메모'(sessions.day_memo, 이 방문만)
+//   구 '특이사항'(sessions.special_note, 방문 1회성) → '특이사항(기저질환)' 영구
+// 특이사항의 영구성을 세션에서 '최신 non-null 찾기'로 흉내내면 **비워도 옛 값이 되살아나
+// 삭제가 불가능하다** → patients.baseline_note를 정본으로 둔다. 세션 special_note는
+// 그 방문 스냅샷으로 남아 기록지·CSV가 그대로 읽는다.
+if (!sessionColumns.includes('day_memo')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN day_memo TEXT')
+}
+const patientColumns = db.prepare('PRAGMA table_info(patients)').all().map((c) => c.name)
+if (!patientColumns.includes('baseline_note')) {
+  db.exec('ALTER TABLE patients ADD COLUMN baseline_note TEXT')
+}
+
+// 구 환자 메모는 성격상 기저질환 정본에 가깝다(차트별 영구) → 1회 이관한다.
+// patient_memos는 지우지 않는다 — 이관이 잘못됐을 때 돌아갈 원본이다.
+// 이미 값이 있는 정본은 건드리지 않는다(COALESCE 아니라 IS NULL 조건).
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'baseline_note_migrated'").get()) {
+  db.transaction(() => {
+    const moved = db.prepare(`
+      UPDATE patients SET baseline_note = (
+        SELECT note FROM patient_memos WHERE patient_memos.chart_no = patients.chart_no
+      )
+      WHERE baseline_note IS NULL
+        AND EXISTS (
+          SELECT 1 FROM patient_memos
+          WHERE patient_memos.chart_no = patients.chart_no AND TRIM(note) <> ''
+        )
+    `).run().changes
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('baseline_note_migrated', String(moved), Date.now())
+  })()
+}
+
 // ─── 투여경로·수량 (2026-08-04) ───────────────────────────────────────
 // schema.sql은 CREATE ... IF NOT EXISTS라 이미 만들어진 DB엔 안 먹는다 — 직접 보강.
 const orderItemColumns = db.prepare('PRAGMA table_info(order_items)').all().map((c) => c.name)

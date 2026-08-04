@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { normalizeChartNo } from '../lib/validation.js'
-import { bumpRevision } from '../lib/revision.js'
 import { logAccess, ACTIONS } from '../lib/accessLog.js'
 
 const router = Router()
@@ -12,24 +11,21 @@ router.get('/patients/lookup', (req, res) => {
     return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
   }
 
-  const patient = db.prepare('SELECT id, chart_no, name FROM patients WHERE chart_no = ?').get(normalized)
+  const patient = db.prepare(
+    'SELECT id, chart_no, name, baseline_note FROM patients WHERE chart_no = ?',
+  ).get(normalized)
   if (!patient) {
     return res.json({ found: false, chart_no: normalized })
   }
 
-  // 등록 모달의 특이사항 칸을 채워줄 값 — 이 환자의 직전 방문에 적힌 특이사항.
-  // 매 방문 새로 받되(세션 단위 1회성) 지난 내용이 떠서 다시 타이핑할 필요가 없게 하는 편의.
-  const last = db.prepare(
-    `SELECT special_note FROM sessions
-     WHERE patient_id = ? AND special_note IS NOT NULL AND deleted = 0
-     ORDER BY assigned_at DESC LIMIT 1`,
-  ).get(patient.id)
-
+  // 특이사항(기저질환)은 영구다 → 정본 컬럼을 그대로 준다.
+  // 세션에서 '최신 non-null'을 찾던 옛 방식은 비워도 옛 값이 되살아나 삭제가 불가능했다.
+  // 등록 모달이 이 값을 칸에 채우고, 값이 있으면 라인담당 지정 후 안내 모달이 뜬다.
   res.json({
     found: true,
     chart_no: patient.chart_no,
     name: patient.name,
-    last_special_note: last?.special_note ?? null,
+    baseline_note: patient.baseline_note ?? null,
   })
 })
 
@@ -49,34 +45,13 @@ router.post('/patients/:chartNo/detail-view', (req, res) => {
   res.json({ ok: true })
 })
 
-// ─── 환자 메모 ───────────────────────────────────────────────────────
-// 차트번호 기준이라 방문을 넘어 유지된다 — 같은 환자가 다시 오면 그대로 뜬다.
-// (세션 단위인 sessions.special_note '특이사항'과는 다른 것.)
+// ─── 은퇴: 환자 메모(patient_memos) ──────────────────────────────────
+// 차트별 영구 메모였는데 2026-08-04 개편에서 성격이 갈렸다.
+//   영구로 남길 것 → patients.baseline_note('특이사항(기저질환)' 정본)
+//   그 방문만    → sessions.day_memo('당일 메모')
+// 기존 데이터는 db.js가 baseline_note로 1회 이관했고(settings.baseline_note_migrated),
+// patient_memos 테이블은 이관이 잘못됐을 때 돌아갈 원본으로 남겨둔다. 라우트만 없앤다.
 //
-// 테이블 이름 주의: patient_notes가 아니라 patient_memos다. patient_notes는 은퇴한
-// 구 '주의사항' 기능이 쓰던 이름이고 스키마가 전혀 다르다(자세한 경위는 schema.sql 주석).
-router.get('/patient-memos/:chartNo', (req, res) => {
-  const normalized = normalizeChartNo(req.params.chartNo)
-  if (normalized === null) {
-    return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
-  }
-  const row = db.prepare('SELECT note FROM patient_memos WHERE chart_no = ?').get(normalized)
-  res.json({ note: row?.note ?? '' })
-})
-
-router.put('/patient-memos/:chartNo', (req, res) => {
-  const normalized = normalizeChartNo(req.params.chartNo)
-  if (normalized === null) {
-    return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
-  }
-  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : ''
-  db.prepare(`
-    INSERT INTO patient_memos (chart_no, note, updated_at) VALUES (?, ?, ?)
-    ON CONFLICT(chart_no) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at
-  `).run(normalized, note, Date.now())
-  // 카드에 뜨는 값이라 다른 단말도 폴링으로 받아야 한다.
-  bumpRevision(db)
-  res.json({ ok: true })
-})
+// 테이블 이름 주의: patient_notes(은퇴한 구 '주의사항')와는 또 다른 테이블이다.
 
 export default router
