@@ -161,6 +161,102 @@ if (db.prepare('SELECT COUNT(*) c FROM order_items').get().c === 0) {
   })()
 }
 
+// ─── 투여경로 값·멜스몬·묶음처방 7종 (원장님 EMR 묶음코드 2026-08-04) ──
+// 전부 settings 플래그로 '1회만'이다. 무조건 UPDATE하면 관리자가 라벨·경로를 고쳐도
+// 재부팅마다 되돌아가고, INSERT OR IGNORE로 두면 지운 항목이 매번 부활한다.
+// ⚠️ qty는 EMR 사진 판독값이다 — 원본 대조 전에는 확정이 아니다.
+const ROUTE_BY_CODE = {
+  immune: 'SC', histobulin: 'SC', melsmon: 'SC',
+  vitd: 'IM', dp: 'IM', tr: 'IM',
+  // ORD은 용법에 따라 IV/IM이 갈린다 → NULL. 자동 체크에 기여하지 않고 사람이 직접 켠다.
+  ord_basic: null, ord_imsc: null,
+}
+
+// 묶음 항목: { code, dose?, qty }. dose는 선택형 항목만, qty는 주사제 개수.
+const BUNDLE_SEED = [
+  { name: '기본수액 (iv200)', emr: '200', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'mpc_basic' },
+  ] },
+  { name: '부신기능저하증 (200)', emr: '200-10', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { name: '부신기능저하증 (110)', emr: '110-10', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { name: '0번 (200+TO+글루타치온+싸이모신)', emr: '0', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'mpc_basic' }, { code: 'furiamin' }, { code: 'ns10_tathion' },
+    // EMR ima7(이뮤알파=싸이모신알파1) = 면역주사 항목. SC.
+    { code: 'immune' }, { code: 'denogan', qty: 2 },
+  ] },
+  { name: '1번 (110-3+De2)', emr: '1', items: [
+    // 같은 NS110 두 백 → 행이 아니라 qty로 센다.
+    { code: 'ns', dose: '110', qty: 2 },
+    { code: 'nac' }, { code: 'licorice' }, { code: 'merit', dose: '5g' },
+    { code: 'meganesium' }, { code: 'panbicomp' }, { code: 'b6', qty: 3 },
+    { code: 'b12' }, { code: 'gcbbon' }, { code: 'lainec', qty: 4 },
+    { code: 'dipeptiven' }, { code: 'multi5' }, { code: 'mpc_basic', qty: 2 },
+    { code: 'denogan', qty: 2 },
+  ] },
+  { name: '2번 (200+De2+글루타치온)', emr: '2', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 },
+    { code: 'denogan' }, { code: 'ns10_tathion' },
+  ] },
+  { name: '3번 (200+치옥트산)', emr: '3', items: [
+    // NS180과 NS110을 둘 다 투약한다 — dose가 다르므로 2행. PK에 dose를 넣은 이유가 이것.
+    { code: 'ns', dose: '180' }, { code: 'ns', dose: '110' },
+    { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 }, { code: 'denogan' },
+    { code: 'thioctacid', qty: 4 },
+  ] },
+]
+
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'order_route_qty_seeded'").get()) {
+  db.transaction(() => {
+    // 라벨 확정: 면역주사 = 싸이모신알파1(EMR ima7).
+    db.prepare("UPDATE order_items SET label = ? WHERE code = 'immune'")
+      .run('면역주사(싸이모신알파1)')
+    // 멜스몬(SC) 누락분 추가. 그룹 안 맨 뒤로.
+    db.prepare(`INSERT OR IGNORE INTO order_items (code, label, group_key, sort_order, route)
+                VALUES ('melsmon', '멜스몬', 'IM,SC', ?, 'SC')`)
+      .run(db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 m FROM order_items').get().m)
+    // 경로 일괄: IM,SC 그룹 밖은 전부 IV. 어제 만든 '투여경로' 3개 항목은 경로를 고르는
+    // 체크박스 자체라 대상이 아니다 — 여기에 route가 박히면 자기 자신을 OR 해버린다.
+    db.prepare("UPDATE order_items SET route = 'IV' WHERE group_key NOT IN ('IM,SC', '투여경로')").run()
+    const setRoute = db.prepare('UPDATE order_items SET route = ? WHERE code = ?')
+    for (const [code, route] of Object.entries(ROUTE_BY_CODE)) setRoute.run(route, code)
+
+    // 묶음은 비어 있을 때만 — 관리자가 지운 묶음이 되살아나면 안 된다.
+    if (db.prepare('SELECT COUNT(*) c FROM order_bundles').get().c === 0) {
+      const insBundle = db.prepare('INSERT INTO order_bundles (name, emr_code, sort_order) VALUES (?, ?, ?)')
+      const insItem = db.prepare(
+        'INSERT INTO order_bundle_items (bundle_id, item_code, dose, qty) VALUES (?, ?, ?, ?)',
+      )
+      BUNDLE_SEED.forEach((bundle, i) => {
+        const { lastInsertRowid } = insBundle.run(bundle.name, bundle.emr, i)
+        bundle.items.forEach((it) => insItem.run(lastInsertRowid, it.code, it.dose ?? '', it.qty ?? 1))
+      })
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('order_route_qty_seeded', '1', Date.now())
+  })()
+}
+
 // ─── 투여경로(IV/IM/SC) ──────────────────────────────────────────────
 // 위 시드보다 나중에 생긴 항목이라 이미 시드된 운영 DB에는 없다 → 따로 넣는다.
 // sort_order를 음수로 두는 이유: 기존 항목이 0..41을 쓰고 있어 그룹 안 맨 앞에 오게 하려면
