@@ -178,11 +178,12 @@ function validateBundleItems(items, res) {
     }
     seen.add(key)
 
-    const qty = row.qty === undefined ? 1 : row.qty
-    if (!Number.isInteger(qty) || qty < 1 || qty > BUNDLE_QTY_MAX) {
-      res.status(400).json({ error: `수량은 1~${BUNDLE_QTY_MAX} 사이의 정수여야 합니다: ${row.code}` })
+    const rawQty = row.qty === undefined ? 1 : row.qty
+    if (typeof rawQty !== 'number' || !Number.isFinite(rawQty) || rawQty <= 0 || rawQty > BUNDLE_QTY_MAX) {
+      res.status(400).json({ error: `수량은 0보다 크고 ${BUNDLE_QTY_MAX} 이하인 숫자여야 합니다: ${row.code}` })
       return null
     }
+    const qty = Math.round(rawQty * 10) / 10
     parsed.push({ code: row.code, dose, qty })
   }
   return parsed

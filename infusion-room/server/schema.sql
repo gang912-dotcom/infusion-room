@@ -274,7 +274,10 @@ CREATE TABLE IF NOT EXISTS session_orders (
   -- dose가 PK에 들어간다. NS를 180·110 두 백 담는 처방이 있어 같은 item_code가 2행 필요하다.
   -- NOT NULL DEFAULT ''인 이유: SQLite는 PK 컬럼에 NULL을 허용하고 유니크로 세지 않는다.
   dose       TEXT    NOT NULL DEFAULT '', -- 용량항목이면 '110'/'5g', 증류수면 mL 자유텍스트, 단순체크면 ''
-  qty        INTEGER NOT NULL DEFAULT 1,  -- 주사제 개수. 같은 dose 2백은 qty=2, 다른 dose는 2행
+  -- 주사제 개수. 같은 dose 2백은 qty=2, 다른 dose는 2행.
+  -- 소수 첫째 자리까지 쓴다(반 앰플 0.5 등). INTEGER 선언이지만 SQLite 타입 친화도는
+  -- 손실 없이 정수로 못 바꾸는 값을 real로 그대로 보존한다 → 0.5가 잘리지 않는다.
+  qty        INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (session_id, item_code, dose)
 );
 
@@ -294,7 +297,7 @@ CREATE TABLE IF NOT EXISTS order_bundle_items (
   bundle_id INTEGER NOT NULL REFERENCES order_bundles(id),
   item_code TEXT    NOT NULL,           -- order_items.code
   dose      TEXT    NOT NULL DEFAULT '',-- session_orders와 같은 이유로 PK에 들어간다(NS 180+110)
-  qty       INTEGER NOT NULL DEFAULT 1,
+  qty       INTEGER NOT NULL DEFAULT 1, -- 소수 첫째 자리까지(반 앰플 0.5). 위 주석 참고
   PRIMARY KEY (bundle_id, item_code, dose)
 );
 

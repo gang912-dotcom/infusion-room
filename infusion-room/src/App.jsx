@@ -143,7 +143,20 @@ const ROUTE_CODES = Object.values(ROUTE_ITEM_CODE)
 
 // 처방 체크 상태의 키. NS를 180·110 두 백 담는 처방이 있어 code 단독으로는 못 쓴다.
 // 자유입력(증류수 mL)은 타이핑마다 키가 바뀌면 커서가 튀므로 dose를 키에서 뺀다.
+// 수량은 소수 첫째 자리까지 허용한다 — 반 앰플(0.5), 0.1 단위 분할이 실제로 있다.
+// 반올림을 Math.round(n / 0.1) * 0.1로 하면 0.3이 0.30000000000000004가 되어
+// 기록지에 그대로 인쇄된다 → 10을 곱해 정수로 반올림한 뒤 다시 나눈다.
+// 숫자·소수점만 남긴다. 소수점이 두 번 들어가면 NaN → 1로 떨어진다.
+// 상한을 두는 이유: 오타로 들어간 큰 수가 기록지에 그대로 인쇄된다.
 const QTY_MAX = 99
+const QTY_MIN = 0.1
+function normalizeQty(value) {
+  const cleaned = String(value).replace(/[^\d.]/g, '')
+  if (cleaned === '') return 1 // 칸을 비우면 기본값으로 돌린다
+  const n = Number(cleaned)
+  if (!Number.isFinite(n) || n <= 0) return 1
+  return Math.min(QTY_MAX, Math.max(QTY_MIN, Math.round(n * 10) / 10))
+}
 function checkKey(code, dose) {
   return `${code}|${dose ?? ''}`
 }
@@ -915,7 +928,7 @@ function xOrdersText(orders = []) {
   return orders.map((o) => {
     const dose = o.dose ? `(${o.dose})` : ''
     const route = routeLabel(o.route)
-    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}${route ? ` ${route}` : ''}`
+    return `${o.label}${dose}${o.qty !== undefined && o.qty !== 1 ? ` ×${o.qty}` : ''}${route ? ` ${route}` : ''}`
   }).join(' · ')
 }
 
@@ -1027,7 +1040,7 @@ function openRecordSheet(record) {
     ? `<ul class="orders">${record.orders.map((o) =>
       `<li>${esc(o.label)}`
       + (o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : '')
-      + (o.qty > 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
+      + (o.qty !== undefined && o.qty !== 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
       + (routeLabel(o.route) ? ` <span class="route">${esc(routeLabel(o.route))}</span>` : '')
       + '</li>').join('')}</ul>`
     : '<p class="none">체크된 처방 없음</p>'
@@ -1728,8 +1741,10 @@ function QtyStepper({ qty, onChange, label }) {
         aria-label={`${label} 수량`}
       />
       <span className="qty__steps">
+        {/* ▼는 QTY_MIN에서 멈춘다. 그냥 qty-1을 보내면 음수가 되고, 정규화가 부호를
+            떼어내 0.1이 0.9로 '늘어나' 버린다. 0.1 단위는 타이핑으로 넣는다. */}
         <button type="button" className="qty__step" onClick={() => onChange(qty + 1)} aria-label={`${label} 수량 1 늘리기`}>▲</button>
-        <button type="button" className="qty__step" onClick={() => onChange(qty - 1)} aria-label={`${label} 수량 1 줄이기`}>▼</button>
+        <button type="button" className="qty__step" onClick={() => onChange(Math.max(QTY_MIN, qty - 1))} aria-label={`${label} 수량 1 줄이기`}>▼</button>
       </span>
     </span>
   )
@@ -2162,7 +2177,7 @@ function OrderBundleManageSection({ offline }) {
     const labelOf = (code) => items.find((i) => i.code === code)?.label ?? code
     const names = bundle.items.map((it) => labelOf(it.code)
       + (it.dose ? ` ${it.dose}` : '')
-      + (it.qty > 1 ? ` ×${it.qty}` : ''))
+      + (it.qty !== undefined && it.qty !== 1 ? ` ×${it.qty}` : ''))
     if (names.length === 0) return '(비어 있음)'
     return names.length <= 4 ? names.join(', ') : `${names.slice(0, 4).join(', ')} 외 ${names.length - 4}`
   }
@@ -2220,7 +2235,7 @@ function OrderBundleManageSection({ offline }) {
               ...prev,
               [key]: {
                 ...prev[key],
-                qty: Math.min(QTY_MAX, Math.max(1, Number(String(value).replace(/\D/g, '')) || 1)),
+                qty: normalizeQty(value),
               },
             } : prev))}
           />
@@ -4910,7 +4925,7 @@ function App() {
   // 수량: 타이핑값도 ▲▼도 여기로 온다. 숫자가 아닌 입력은 버리고 1~99로 묶는다 —
   // 오타로 들어간 값이 기록지에 그대로 인쇄되면 안 된다.
   function setOrderQty(key, value) {
-    const qty = Math.min(QTY_MAX, Math.max(1, Number(String(value).replace(/\D/g, '')) || 1))
+    const qty = normalizeQty(value)
     setOrderChecks((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], qty } } : prev))
   }
 
