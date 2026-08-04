@@ -1014,8 +1014,11 @@ function openRecordSheet(record) {
 
   const ordersHtml = record.orders.length
     ? `<ul class="orders">${record.orders.map((o) =>
-      `<li>${esc(o.label)}${o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : ''}${
-        o.qty > 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : ''}</li>`).join('')}</ul>`
+      `<li>${esc(o.label)}`
+      + (o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : '')
+      + (o.qty > 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
+      + (o.route ? ` <span class="route">${esc(o.route)}</span>` : '')
+      + '</li>').join('')}</ul>`
     : '<p class="none">체크된 처방 없음</p>'
 
   const vitalsHtml = record.vitals.length
@@ -1066,7 +1069,9 @@ function openRecordSheet(record) {
     ul.orders li{margin:2px 0;break-inside:avoid}
     .dose{font-weight:700}
     /* 수량 — 용량과 헷갈리지 않게 굵게. 1개는 아예 안 나온다. */
-    ul.orders .qty{font-weight:800}
+    .qty{font-weight:700}
+    /* 용법 — 약품명·용량보다 약하게. 인쇄지는 항상 흰 배경이라 #555면 대비 7:1이다. */
+    .route{color:#555;font-size:12px}
     p.free{margin:0;font-size:14px;white-space:pre-wrap}
     ul.tl{list-style:none;margin:0;padding:0}
     ul.tl li{display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;

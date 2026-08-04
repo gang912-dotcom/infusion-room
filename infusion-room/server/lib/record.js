@@ -29,7 +29,7 @@ const sessionStmt = db.prepare(`
 // 라벨 조인에 is_active 필터를 걸지 않는다 — 비활성 항목도 라벨이 풀려야 한다.
 // (관리자가 항목을 숨겨도 과거 기록지의 이름이 사라지면 안 되므로.)
 const ordersStmt = db.prepare(`
-  SELECT so.item_code, so.dose, so.qty, oi.label, oi.group_key, oi.sort_order
+  SELECT so.item_code, so.dose, so.qty, oi.label, oi.group_key, oi.sort_order, oi.route
   FROM session_orders so
   LEFT JOIN order_items oi ON oi.code = so.item_code
   WHERE so.session_id = ?
@@ -107,7 +107,10 @@ export function buildSessionRecord(sessionId) {
     orders: ordersStmt.all(s.id).map((o) => ({
       label: o.label ?? o.item_code,
       dose: o.dose,
-      qty: o.qty,
+      qty: o.qty ?? 1,
+      // 용법 IV|IM|SC. ORD처럼 가변인 항목과 투여경로 체크박스 자체는 NULL이다
+      // (경로 항목에 route가 박히면 'IV IV'처럼 자기 이름 뒤에 또 찍힌다).
+      route: o.route ?? null,
     })),
 
     vitals: vitalsStmt.all(s.id).map((v) => ({
