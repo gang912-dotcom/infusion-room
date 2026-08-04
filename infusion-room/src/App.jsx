@@ -901,12 +901,21 @@ function xDownload(filename, content, mime) {
 // 수액 처방 요약 셀 — '라벨(용량) · 라벨 · …'. 쉼표는 CSV 열을 밀 수 있어 쓰지 않는다.
 // 수량은 2개 이상일 때만 붙인다 — 전부 '×1'이면 읽는 사람이 세야 할 것이 늘어난다.
 // 배포 전 스냅샷·기록에는 qty가 없다(undefined) → 조건이 거짓이라 그대로 나온다.
+// 용법은 IM·SC만 찍는다. 수액은 IV가 기본이라 줄마다 반복되면(0번 묶음이면 14줄)
+// 정작 예외인 IM·SC가 그 사이에 묻힌다. 전체 경로는 처방 목록 끝의 투여경로 줄
+// (IV·SC 항목 자체)에 그대로 남으므로 정보가 사라지지는 않는다.
+// 서버는 IV도 그대로 보낸다 — 표기 방침만 여기서 정하면 되도록.
+const ROUTE_SHOWN = ['IM', 'SC']
+function routeLabel(route) {
+  return ROUTE_SHOWN.includes(route) ? route : ''
+}
+
 // 표기는 기록지와 같게 맞춘다: 라벨(용량) ×수량 용법.
-// 용법은 route가 있는 항목만 — 투여경로 체크박스 자체와 ORD는 NULL이다.
 function xOrdersText(orders = []) {
   return orders.map((o) => {
     const dose = o.dose ? `(${o.dose})` : ''
-    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}${o.route ? ` ${o.route}` : ''}`
+    const route = routeLabel(o.route)
+    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}${route ? ` ${route}` : ''}`
   }).join(' · ')
 }
 
@@ -1019,7 +1028,7 @@ function openRecordSheet(record) {
       `<li>${esc(o.label)}`
       + (o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : '')
       + (o.qty > 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
-      + (o.route ? ` <span class="route">${esc(o.route)}</span>` : '')
+      + (routeLabel(o.route) ? ` <span class="route">${esc(routeLabel(o.route))}</span>` : '')
       + '</li>').join('')}</ul>`
     : '<p class="none">체크된 처방 없음</p>'
 
