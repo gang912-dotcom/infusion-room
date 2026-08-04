@@ -901,10 +901,12 @@ function xDownload(filename, content, mime) {
 // 수액 처방 요약 셀 — '라벨(용량) · 라벨 · …'. 쉼표는 CSV 열을 밀 수 있어 쓰지 않는다.
 // 수량은 2개 이상일 때만 붙인다 — 전부 '×1'이면 읽는 사람이 세야 할 것이 늘어난다.
 // 배포 전 스냅샷·기록에는 qty가 없다(undefined) → 조건이 거짓이라 그대로 나온다.
+// 표기는 기록지와 같게 맞춘다: 라벨(용량) ×수량 용법.
+// 용법은 route가 있는 항목만 — 투여경로 체크박스 자체와 ORD는 NULL이다.
 function xOrdersText(orders = []) {
   return orders.map((o) => {
     const dose = o.dose ? `(${o.dose})` : ''
-    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}`
+    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}${o.route ? ` ${o.route}` : ''}`
   }).join(' · ')
 }
 
