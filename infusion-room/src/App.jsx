@@ -1461,10 +1461,14 @@ function PatientView({
   // 이름은 부분 일치, 차트번호는 앞자리 일치다. 번호를 부분 일치로 두면 '2444'가
   // '2244414'에도 걸려(가운데에 들어 있다) 엉뚱한 환자가 섞인다.
   // 이름에 숫자가 들어가는 경우가 없어 두 조건이 서로 섞이지 않는다.
+  // 정렬은 차트번호 오름차순(작은 번호부터). chart_no가 TEXT라 그냥 비교하면
+  // '2244414'가 '244414'보다 앞에 온다 → localeCompare의 numeric으로 숫자로 센다.
+  // (숫자가 아닌 값이 섞여도 NaN이 안 나온다.)
   const trimmed = query.trim()
   const searchResults = trimmed
-    ? allPatients.filter((p) => p.patientName.includes(trimmed)
-      || String(p.chartNumber).startsWith(trimmed))
+    ? allPatients
+      .filter((p) => p.patientName.includes(trimmed) || String(p.chartNumber).startsWith(trimmed))
+      .sort((a, b) => String(a.chartNumber).localeCompare(String(b.chartNumber), undefined, { numeric: true }))
     : []
 
   // 숫자만 넣었으면 차트번호로 찾는 것이다 → 결과에 번호를 같이 보여줘야 맞게 찾았는지 안다.
