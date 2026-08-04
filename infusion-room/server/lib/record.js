@@ -29,11 +29,11 @@ const sessionStmt = db.prepare(`
 // 라벨 조인에 is_active 필터를 걸지 않는다 — 비활성 항목도 라벨이 풀려야 한다.
 // (관리자가 항목을 숨겨도 과거 기록지의 이름이 사라지면 안 되므로.)
 const ordersStmt = db.prepare(`
-  SELECT so.item_code, so.dose, oi.label, oi.group_key, oi.sort_order
+  SELECT so.item_code, so.dose, so.qty, oi.label, oi.group_key, oi.sort_order
   FROM session_orders so
   LEFT JOIN order_items oi ON oi.code = so.item_code
   WHERE so.session_id = ?
-  ORDER BY oi.group_key, oi.sort_order
+  ORDER BY oi.group_key, oi.sort_order, so.dose
 `)
 
 const vitalsStmt = db.prepare(`
@@ -102,9 +102,12 @@ export function buildSessionRecord(sessionId) {
 
     // 체크된 항목만. 라벨은 이 시점 값으로 문자열로 굳는다 — 나중에 관리자가
     // 라벨을 바꿔도 과거 기록지는 그대로다.
+    // qty는 1도 그대로 싣는다 — 기록지에서 1을 감출지는 표시하는 쪽이 정한다.
+    // 배포 전 스냅샷에는 qty가 없다(undefined) → 읽는 쪽이 1로 보면 된다.
     orders: ordersStmt.all(s.id).map((o) => ({
       label: o.label ?? o.item_code,
       dose: o.dose,
+      qty: o.qty,
     })),
 
     vitals: vitalsStmt.all(s.id).map((v) => ({

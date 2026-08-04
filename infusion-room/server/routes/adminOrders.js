@@ -38,6 +38,7 @@ function itemPayload(row) {
     free_text: row.free_text === 1,
     sort_order: row.sort_order,
     is_active: row.is_active === 1,
+    route: row.route ?? null,
   }
 }
 
@@ -49,13 +50,27 @@ router.get('/order-items', (req, res) => {
   res.json(rows.map(itemPayload))
 })
 
+// 투여경로. NULL은 '용법에 따라 가변'(ORD) — 자동 체크에 기여하지 않는다.
+const ROUTES = ['IV', 'IM', 'SC']
+function normalizeRoute(value, res) {
+  if (value === undefined || value === null || value === '') return null
+  if (!ROUTES.includes(value)) {
+    res.status(400).json({ error: `경로는 ${ROUTES.join('/')} 중 하나이거나 비워야 합니다` })
+    return undefined
+  }
+  return value
+}
+
 router.post('/order-items', (req, res) => {
-  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder } = req.body ?? {}
+  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder, route } = req.body ?? {}
   if (!String(label ?? '').trim()) return res.status(400).json({ error: '라벨이 필요합니다' })
   if (!String(groupKey ?? '').trim()) return res.status(400).json({ error: '그룹이 필요합니다' })
+  // route를 안 받으면 관리자가 새로 만든 항목은 영원히 자동 체크에 안 걸린다.
+  const normalizedRoute = normalizeRoute(route, res)
+  if (normalizedRoute === undefined) return
 
   const info = db.prepare(
-    'INSERT INTO order_items (code, label, group_key, dose_options, free_text, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO order_items (code, label, group_key, dose_options, free_text, sort_order, route) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).run(
     generateCode(label),
     String(label).trim(),
@@ -63,6 +78,7 @@ router.post('/order-items', (req, res) => {
     normalizeDoseOptions(doseOptions),
     freeText ? 1 : 0,
     Number.isInteger(sortOrder) ? sortOrder : 0,
+    normalizedRoute,
   )
   res.status(201).json(itemPayload(db.prepare('SELECT * FROM order_items WHERE id = ?').get(info.lastInsertRowid)))
 })
@@ -72,9 +88,14 @@ router.patch('/order-items/:id', (req, res) => {
   const item = db.prepare('SELECT * FROM order_items WHERE id = ?').get(req.params.id)
   if (!item) return res.status(404).json({ error: '존재하지 않는 항목입니다' })
 
-  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder, is_active: isActive } = req.body ?? {}
+  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder, is_active: isActive, route } = req.body ?? {}
   const fields = []
   const params = []
+  if (route !== undefined) {
+    const normalizedRoute = normalizeRoute(route, res)
+    if (normalizedRoute === undefined) return
+    fields.push('route = ?'); params.push(normalizedRoute)
+  }
   if (label !== undefined) {
     if (!String(label).trim()) return res.status(400).json({ error: '라벨이 필요합니다' })
     fields.push('label = ?'); params.push(String(label).trim())
@@ -118,11 +139,15 @@ router.delete('/order-items/:id', (req, res) => {
 // 관리자 화면은 비활성 묶음도 본다.
 router.get('/order-bundles', (req, res) => {
   const bundles = db.prepare('SELECT * FROM order_bundles ORDER BY sort_order, id').all()
-  const itemsStmt = db.prepare('SELECT item_code AS code, dose FROM order_bundle_items WHERE bundle_id = ?')
+  const itemsStmt = db.prepare('SELECT item_code AS code, dose, qty FROM order_bundle_items WHERE bundle_id = ?')
   res.json(bundles.map((b) => ({
-    id: b.id, name: b.name, sort_order: b.sort_order, is_active: b.is_active === 1, items: itemsStmt.all(b.id),
+    id: b.id, name: b.name, emr_code: b.emr_code ?? null,
+    sort_order: b.sort_order, is_active: b.is_active === 1, items: itemsStmt.all(b.id),
   })))
 })
+
+// 오타로 들어간 큰 수가 기록지에 그대로 인쇄되므로 상한을 둔다(처방 저장과 같은 값).
+const BUNDLE_QTY_MAX = 99
 
 // items의 code가 하나라도 모르는 값이면 통째로 거부한다(3a의 처방 저장과 같은 규칙).
 function validateBundleItems(items, res) {
@@ -132,22 +157,41 @@ function validateBundleItems(items, res) {
   }
   const rows = items ?? []
   const known = new Set(db.prepare('SELECT code FROM order_items').all().map((r) => r.code))
+  // 같은 항목을 dose만 달리해 두 번 담는 건 정상(NS 180 + NS 110). 같은 (code, dose) 중복은
+  // PK가 막아 500이 되므로 여기서 400으로 잡는다. qty는 처방 저장과 같은 규칙.
+  const seen = new Set()
+  const parsed = []
   for (const row of rows) {
     if (!row || typeof row.code !== 'string' || !known.has(row.code)) {
       res.status(400).json({ error: `알 수 없는 오더 항목입니다: ${row?.code}` })
       return null
     }
+    const dose = typeof row.dose === 'string' ? row.dose.trim() : ''
+    const key = `${row.code} ${dose}`
+    if (seen.has(key)) {
+      res.status(400).json({ error: `같은 항목이 같은 용량으로 두 번 있습니다: ${row.code}` })
+      return null
+    }
+    seen.add(key)
+
+    const qty = row.qty === undefined ? 1 : row.qty
+    if (!Number.isInteger(qty) || qty < 1 || qty > BUNDLE_QTY_MAX) {
+      res.status(400).json({ error: `수량은 1~${BUNDLE_QTY_MAX} 사이의 정수여야 합니다: ${row.code}` })
+      return null
+    }
+    parsed.push({ code: row.code, dose, qty })
   }
-  return rows
+  return parsed
 }
 
-const insertBundleItem = db.prepare('INSERT INTO order_bundle_items (bundle_id, item_code, dose) VALUES (?, ?, ?)')
+const insertBundleItem = db.prepare(
+  'INSERT INTO order_bundle_items (bundle_id, item_code, dose, qty) VALUES (?, ?, ?, ?)',
+)
 
+// validateBundleItems가 이미 dose·qty를 정리해서 준다 — 여기서 다시 손대지 않는다.
+// (qty를 안 싣던 버전에서는 관리자가 묶음을 저장할 때마다 수량이 1로 날아갔다.)
 function writeBundleItems(bundleId, rows) {
-  for (const row of rows) {
-    const dose = typeof row.dose === 'string' ? row.dose.trim() : ''
-    insertBundleItem.run(bundleId, row.code, dose || null)
-  }
+  for (const row of rows) insertBundleItem.run(bundleId, row.code, row.dose, row.qty)
 }
 
 router.post('/order-bundles', (req, res) => {

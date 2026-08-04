@@ -253,7 +253,10 @@ CREATE TABLE IF NOT EXISTS order_items (
   dose_options TEXT,                      -- 용량 선택지 쉼표구분('110,180,100'), 없으면 NULL
   free_text    INTEGER NOT NULL DEFAULT 0,-- 1이면 체크박스 대신 자유입력(증류수 mL)
   sort_order   INTEGER NOT NULL DEFAULT 0,
-  is_active    INTEGER NOT NULL DEFAULT 1
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  -- 투여경로 'IV'|'IM'|'SC'. 체크된 항목들의 route를 OR 해서 IV/IM/SC 박스를 자동 체크한다.
+  -- ORD처럼 용법에 따라 갈리는 항목은 NULL — 자동 계산에 기여하지 않고 사람이 직접 켠다.
+  route        TEXT
 );
 
 -- ─── 세션별 처방(체크 결과) ───────────────────────────────────────────
@@ -261,8 +264,11 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS session_orders (
   session_id INTEGER NOT NULL REFERENCES sessions(id),
   item_code  TEXT    NOT NULL,   -- order_items.code
-  dose       TEXT,               -- 용량항목이면 '110'/'5g', 증류수면 mL 자유텍스트, 단순체크면 NULL
-  PRIMARY KEY (session_id, item_code)
+  -- dose가 PK에 들어간다. NS를 180·110 두 백 담는 처방이 있어 같은 item_code가 2행 필요하다.
+  -- NOT NULL DEFAULT ''인 이유: SQLite는 PK 컬럼에 NULL을 허용하고 유니크로 세지 않는다.
+  dose       TEXT    NOT NULL DEFAULT '', -- 용량항목이면 '110'/'5g', 증류수면 mL 자유텍스트, 단순체크면 ''
+  qty        INTEGER NOT NULL DEFAULT 1,  -- 주사제 개수. 같은 dose 2백은 qty=2, 다른 dose는 2행
+  PRIMARY KEY (session_id, item_code, dose)
 );
 
 -- ─── 묶음처방 ─────────────────────────────────────────────────────────
@@ -272,6 +278,7 @@ CREATE TABLE IF NOT EXISTS session_orders (
 CREATE TABLE IF NOT EXISTS order_bundles (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT    NOT NULL,          -- 버튼에 뜨는 묶음 이름(예: '감기 기본')
+  emr_code   TEXT,                      -- 원장님 EMR '묶음코드'('200'·'200-10'·'0'~'3'). 대조용
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active  INTEGER NOT NULL DEFAULT 1
 );
@@ -279,8 +286,9 @@ CREATE TABLE IF NOT EXISTS order_bundles (
 CREATE TABLE IF NOT EXISTS order_bundle_items (
   bundle_id INTEGER NOT NULL REFERENCES order_bundles(id),
   item_code TEXT    NOT NULL,           -- order_items.code
-  dose      TEXT,                       -- 용량항목이면 '110'/'5g', 자유입력이면 기본값(또는 NULL)
-  PRIMARY KEY (bundle_id, item_code)
+  dose      TEXT    NOT NULL DEFAULT '',-- session_orders와 같은 이유로 PK에 들어간다(NS 180+110)
+  qty       INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (bundle_id, item_code, dose)
 );
 
 -- ─── 환자 메모 (차트번호 기준, 방문을 넘어 유지) ──────────────────────

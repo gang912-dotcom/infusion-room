@@ -48,6 +48,55 @@ if (!staffColumns.includes('signature')) {
   db.exec('ALTER TABLE staff ADD COLUMN signature TEXT')
 }
 
+// ─── 투여경로·수량 (2026-08-04) ───────────────────────────────────────
+// schema.sql은 CREATE ... IF NOT EXISTS라 이미 만들어진 DB엔 안 먹는다 — 직접 보강.
+const orderItemColumns = db.prepare('PRAGMA table_info(order_items)').all().map((c) => c.name)
+if (!orderItemColumns.includes('route')) {
+  db.exec('ALTER TABLE order_items ADD COLUMN route TEXT')
+}
+const bundleColumns = db.prepare('PRAGMA table_info(order_bundles)').all().map((c) => c.name)
+if (!bundleColumns.includes('emr_code')) {
+  db.exec('ALTER TABLE order_bundles ADD COLUMN emr_code TEXT')
+}
+
+// session_orders·order_bundle_items는 PK가 바뀐다 — 같은 항목을 dose만 달리해 2행 담아야
+// 하기 때문이다(NS 180 + NS 110 두 백을 함께 투약하는 처방이 있다).
+// SQLite에는 PK를 바꾸는 ALTER가 없어 테이블을 새로 만들어 옮기는 수밖에 없다.
+// dose는 NOT NULL DEFAULT '' — PK 컬럼에 NULL이 들어가면 SQLite가 유니크로 세지 않아
+// 중복 행이 조용히 쌓인다(기존 NULL은 ''로 옮긴다).
+// qty 컬럼 존재 여부를 이 마이그레이션의 표시로 쓴다.
+function rebuildWithDoseKey(table, createSql, keyColumn) {
+  if (db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === 'qty')) return
+  // 외래키를 끈 상태에서 해야 한다(SQLite 권장 절차) — pragma는 트랜잭션 안에서 무시된다.
+  db.pragma('foreign_keys = OFF')
+  db.transaction(() => {
+    db.exec(createSql)
+    db.exec(`INSERT INTO ${table}_new (${keyColumn}, item_code, dose, qty)
+             SELECT ${keyColumn}, item_code, COALESCE(dose, ''), 1 FROM ${table}`)
+    db.exec(`DROP TABLE ${table}`)
+    db.exec(`ALTER TABLE ${table}_new RENAME TO ${table}`)
+  })()
+  db.pragma('foreign_keys = ON')
+}
+
+rebuildWithDoseKey('session_orders', `
+  CREATE TABLE session_orders_new (
+    session_id INTEGER NOT NULL REFERENCES sessions(id),
+    item_code  TEXT    NOT NULL,
+    dose       TEXT    NOT NULL DEFAULT '',
+    qty        INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (session_id, item_code, dose)
+  )`, 'session_id')
+
+rebuildWithDoseKey('order_bundle_items', `
+  CREATE TABLE order_bundle_items_new (
+    bundle_id INTEGER NOT NULL REFERENCES order_bundles(id),
+    item_code TEXT    NOT NULL,
+    dose      TEXT    NOT NULL DEFAULT '',
+    qty       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (bundle_id, item_code, dose)
+  )`, 'bundle_id')
+
 // ─── 수액 Order 항목 시드 ─────────────────────────────────────────────
 // 라벨은 원내 표기 그대로. code는 유일해야 한다 — ORD·MPC FILTER SET이 두 그룹에
 // 중복 등장하므로 접미(_basic/_imsc, _basic/_flu)로 갈랐다.
