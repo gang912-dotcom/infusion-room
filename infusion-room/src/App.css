@@ -4519,6 +4519,73 @@
 
 .order-item__unit { font-size: 12px; color: var(--text-muted); }
 
+/* ─── 수량 (주사제 개수) ─────────────────────────────────────────────
+   체크된 줄에만 뜬다. 상태색 글자를 쓰지 않는다 — 본문색 + 테두리로만 강조해서
+   대비 함정을 아예 피한다(인수인계 8장). */
+.order-item__checked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-item__qty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.order-item__qty-dose {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 34px;
+}
+
+.qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.qty__x { font-size: 12px; color: var(--text-muted); }
+
+.qty__input {
+  width: 38px;
+  min-height: 32px;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-primary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+}
+
+.qty__steps { display: flex; flex-direction: column; }
+
+/* 44px 규칙을 못 지키는 자리다 — 두 개를 세로로 쌓아 합쳐 44px를 만든다.
+   ponytail: 22px씩 두 칸. 아이패드에서 누르기 어려우면 좌우 −/+ 배치로 바꾼다. */
+.qty__step {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--number-bg);
+  border: 1px solid var(--card-border);
+  cursor: pointer;
+}
+
+.qty__step:first-child { border-radius: 6px 6px 0 0; border-bottom: 0; }
+.qty__step:last-child { border-radius: 0 0 6px 6px; }
+
 /* ─── 처방 확인 — 묶음 버튼 줄 ──────────────────────────────────────
    누르면 현재 체크를 통째로 바꾸는 버튼이라, 체크리스트 위에 따로 떼어 놓는다. */
 /* 묶음이 0개여도 줄을 없애지 않는다 — 관리자가 등록하는 순간 체크리스트가 밀려 내려가

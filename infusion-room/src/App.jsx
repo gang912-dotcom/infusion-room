@@ -133,7 +133,33 @@ const EXAM_ROOMS = ['1', '2', '3', '6', '7']
 // 여기 있는 건 '그룹을 어떤 순서로 보여줄지'뿐이다(그룹 편집은 범위 밖).
 // DB에 이 목록에 없는 group_key가 생기면 뒤에 붙여서 렌더한다 — 조용히 사라지면 안 되므로.
 // 투여경로는 n/s보다 먼저 고르는 값이라 맨 앞이다.
-const GROUP_ORDER = ['투여경로', '기본', '치료제', 'IM,SC', '독감', '증류수']
+const ROUTE_GROUP = '투여경로'
+const GROUP_ORDER = [ROUTE_GROUP, '기본', '치료제', 'IM,SC', '독감', '증류수']
+
+// 경로 박스는 order_items 행이지만 '처방 항목'이 아니라 경로를 고르는 체크박스다.
+// route 컬럼은 NULL이어야 한다 — 값이 있으면 자기 자신을 OR 해버린다.
+const ROUTE_ITEM_CODE = { IV: 'route_iv', IM: 'route_im', SC: 'route_sc' }
+const ROUTE_CODES = Object.values(ROUTE_ITEM_CODE)
+
+// 처방 체크 상태의 키. NS를 180·110 두 백 담는 처방이 있어 code 단독으로는 못 쓴다.
+// 자유입력(증류수 mL)은 타이핑마다 키가 바뀌면 커서가 튀므로 dose를 키에서 뺀다.
+const QTY_MAX = 99
+function checkKey(code, dose) {
+  return `${code}|${dose ?? ''}`
+}
+
+// 체크된 항목들의 route를 OR 해서 켤 경로 박스를 정한다.
+// route가 NULL인 항목(ORD — 용법에 따라 IV/IM이 갈린다)은 기여하지 않는다.
+// 그래서 근무자가 직접 켤 수 있어야 하고, 그게 routeOverride다.
+function autoRouteCodes(checks, items) {
+  const routeByCode = new Map(items.map((item) => [item.code, item.route]))
+  const on = new Set()
+  Object.values(checks).forEach((row) => {
+    const code = ROUTE_ITEM_CODE[routeByCode.get(row.code)]
+    if (code) on.add(code)
+  })
+  return on
+}
 
 // 라운딩 이력 조회: 해당 환자의 !deleted 라운딩을 occurredAt 내림차순(최신이 위)
 // SF Symbols 풍 단색 라인 아이콘 (currentColor, 1em) — 이모지 대체
@@ -873,8 +899,13 @@ function xDownload(filename, content, mime) {
 }
 
 // 수액 처방 요약 셀 — '라벨(용량) · 라벨 · …'. 쉼표는 CSV 열을 밀 수 있어 쓰지 않는다.
+// 수량은 2개 이상일 때만 붙인다 — 전부 '×1'이면 읽는 사람이 세야 할 것이 늘어난다.
+// 배포 전 스냅샷·기록에는 qty가 없다(undefined) → 조건이 거짓이라 그대로 나온다.
 function xOrdersText(orders = []) {
-  return orders.map((o) => (o.dose ? `${o.label}(${o.dose})` : o.label)).join(' · ')
+  return orders.map((o) => {
+    const dose = o.dose ? `(${o.dose})` : ''
+    return `${o.label}${dose}${o.qty > 1 ? ` ×${o.qty}` : ''}`
+  }).join(' · ')
 }
 
 // 날짜별 이용기록 CSV — 한 세션 = 한 행 (다중값은 시각과 함께 요약 셀)
@@ -983,7 +1014,8 @@ function openRecordSheet(record) {
 
   const ordersHtml = record.orders.length
     ? `<ul class="orders">${record.orders.map((o) =>
-      `<li>${esc(o.label)}${o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : ''}</li>`).join('')}</ul>`
+      `<li>${esc(o.label)}${o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : ''}${
+        o.qty > 1 ? ` <span class="qty">×${esc(o.qty)}</span>` : ''}</li>`).join('')}</ul>`
     : '<p class="none">체크된 처방 없음</p>'
 
   const vitalsHtml = record.vitals.length
@@ -1033,6 +1065,8 @@ function openRecordSheet(record) {
     ul.orders{margin:0;padding-left:18px;font-size:14px;columns:2}
     ul.orders li{margin:2px 0;break-inside:avoid}
     .dose{font-weight:700}
+    /* 수량 — 용량과 헷갈리지 않게 굵게. 1개는 아예 안 나온다. */
+    ul.orders .qty{font-weight:800}
     p.free{margin:0;font-size:14px;white-space:pre-wrap}
     ul.tl{list-style:none;margin:0;padding:0}
     ul.tl li{display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;
@@ -1653,7 +1687,31 @@ function PatientView({
 // 실제 처방을 체크하는 것과 똑같은 조작으로 고르게 하려는 것(3b 스펙 4.2).
 //
 // checks 형태: { [code]: dose } — 키가 있으면 체크됨. 단순 항목은 dose가 ''.
-function OrderChecklist({ items, checks, onToggle, onDose, onFreeText }) {
+// 수량 — 숫자를 직접 타이핑하거나 ▲▼로 1씩. 체크된 줄에만 뜬다.
+function QtyStepper({ qty, onChange, label }) {
+  return (
+    <span className="qty">
+      <span className="qty__x">×</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        className="qty__input"
+        value={qty}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`${label} 수량`}
+      />
+      <span className="qty__steps">
+        <button type="button" className="qty__step" onClick={() => onChange(qty + 1)} aria-label={`${label} 수량 1 늘리기`}>▲</button>
+        <button type="button" className="qty__step" onClick={() => onChange(qty - 1)} aria-label={`${label} 수량 1 줄이기`}>▼</button>
+      </span>
+    </span>
+  )
+}
+
+// routeChecked·onToggleRoute는 경로 그룹을 렌더할 때만 쓰인다(관리자 묶음 편집은 그 그룹을 뺀다).
+const EMPTY_SET = new Set()
+
+function OrderChecklist({ items, checks, onToggle, onDose, onFreeText, onQty, routeChecked = EMPTY_SET, onToggleRoute }) {
   // 그룹 순서는 GROUP_ORDER를 따르되, 거기 없는 group_key가 DB에 생기면 뒤에 붙인다 —
   // 관리자가 새 그룹을 만들었을 때 화면에서 조용히 사라지면 안 된다.
   const byGroup = new Map()
@@ -1671,52 +1729,90 @@ function OrderChecklist({ items, checks, onToggle, onDose, onFreeText }) {
         <section key={group} className="order-group">
           <h3 className="order-group__title">{group}</h3>
           <ul className="order-group__list">
-            {groupItems.map((item) => (
-              <li key={item.code} className="order-item">
-                {item.free_text ? (
-                  /* 증류수 — 체크박스가 아니라 mL 자유입력. 값이 있으면 체크로 본다. */
-                  <label className="order-item__free">
-                    <span className="order-item__label">{item.label}</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className="order-item__free-input"
-                      value={checks[item.code] ?? ''}
-                      onChange={(e) => onFreeText(item.code, e.target.value)}
-                      aria-label={`${item.label} mL`}
-                    />
-                    <span className="order-item__unit">mL</span>
-                  </label>
-                ) : item.dose_options ? (
-                  /* 용량 항목 — 용량 버튼이 곧 체크다. 용량 없이 체크되는 상태가 없다. */
-                  <div className="order-item__dosed">
-                    <span className="order-item__label">{item.label}</span>
-                    <div className="order-item__doses">
-                      {item.dose_options.map((dose) => (
-                        <button
-                          key={dose}
-                          type="button"
-                          className={`order-dose${checks[item.code] === dose ? ' order-dose--on' : ''}`}
-                          onClick={() => onDose(item.code, dose)}
-                          aria-pressed={checks[item.code] === dose}
-                        >
-                          {dose}
-                        </button>
-                      ))}
+            {groupItems.map((item) => {
+              const plainKey = checkKey(item.code, '')
+              return (
+                <li key={item.code} className="order-item">
+                  {group === ROUTE_GROUP ? (
+                    /* 경로 박스 — 체크된 항목들의 route에서 자동으로 켜지고, 손으로 보정할 수
+                       있다. ORD처럼 용법에 따라 갈리는 항목은 자동에 안 잡히므로 이 손잡이가 있다. */
+                    <label className="order-item__check">
+                      <input
+                        type="checkbox"
+                        checked={routeChecked.has(item.code)}
+                        onChange={() => onToggleRoute(item.code)}
+                      />
+                      <span className="order-item__label">{item.label}</span>
+                    </label>
+                  ) : item.free_text ? (
+                    /* 증류수 — 체크박스가 아니라 mL 자유입력. 값이 있으면 체크로 본다.
+                       mL이 곧 양이라 수량 스테퍼를 붙이지 않는다. */
+                    <label className="order-item__free">
+                      <span className="order-item__label">{item.label}</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className="order-item__free-input"
+                        value={checks[plainKey]?.dose ?? ''}
+                        onChange={(e) => onFreeText(item.code, e.target.value)}
+                        aria-label={`${item.label} mL`}
+                      />
+                      <span className="order-item__unit">mL</span>
+                    </label>
+                  ) : item.dose_options ? (
+                    /* 용량 항목 — 용량 버튼이 곧 체크다. 용량 없이 체크되는 상태가 없다.
+                       용량마다 독립이다: NS 180과 110을 함께 투약하는 처방이 있어 둘 다 켜진다.
+                       같은 용량 두 백은 줄이 아니라 수량으로 센다. */
+                    <div className="order-item__dosed">
+                      <span className="order-item__label">{item.label}</span>
+                      <div className="order-item__doses">
+                        {item.dose_options.map((dose) => (
+                          <button
+                            key={dose}
+                            type="button"
+                            className={`order-dose${checkKey(item.code, dose) in checks ? ' order-dose--on' : ''}`}
+                            onClick={() => onDose(item.code, dose)}
+                            aria-pressed={checkKey(item.code, dose) in checks}
+                          >
+                            {dose}
+                          </button>
+                        ))}
+                      </div>
+                      {item.dose_options
+                        .filter((dose) => checkKey(item.code, dose) in checks)
+                        .map((dose) => (
+                          <div key={dose} className="order-item__qty-row">
+                            <span className="order-item__qty-dose">{dose}</span>
+                            <QtyStepper
+                              qty={checks[checkKey(item.code, dose)].qty}
+                              onChange={(v) => onQty(checkKey(item.code, dose), v)}
+                              label={`${item.label} ${dose}`}
+                            />
+                          </div>
+                        ))}
                     </div>
-                  </div>
-                ) : (
-                  <label className="order-item__check">
-                    <input
-                      type="checkbox"
-                      checked={item.code in checks}
-                      onChange={() => onToggle(item.code)}
-                    />
-                    <span className="order-item__label">{item.label}</span>
-                  </label>
-                )}
-              </li>
-            ))}
+                  ) : (
+                    <div className="order-item__checked-row">
+                      <label className="order-item__check">
+                        <input
+                          type="checkbox"
+                          checked={plainKey in checks}
+                          onChange={() => onToggle(item.code)}
+                        />
+                        <span className="order-item__label">{item.label}</span>
+                      </label>
+                      {plainKey in checks && (
+                        <QtyStepper
+                          qty={checks[plainKey].qty}
+                          onChange={(v) => onQty(plainKey, v)}
+                          label={item.label}
+                        />
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </section>
       ))}
@@ -1994,7 +2090,9 @@ function OrderBundleManageSection({ offline }) {
     setEditingId(bundle.id)
     setName(bundle.name)
     const next = {}
-    bundle.items.forEach((it) => { next[it.code] = it.dose ?? '' })
+    bundle.items.forEach((it) => {
+      next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+    })
     setChecks(next)
   }
 
@@ -2002,7 +2100,7 @@ function OrderBundleManageSection({ offline }) {
     setError('')
     const payload = {
       name: name.trim(),
-      items: Object.entries(checks).map(([code, dose]) => (dose === '' ? { code } : { code, dose })),
+      items: Object.values(checks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty })),
     }
     try {
       if (editingId === 'new') await createOrderBundle({ ...payload, sort_order: bundles.length })
@@ -2031,7 +2129,9 @@ function OrderBundleManageSection({ offline }) {
 
   function summary(bundle) {
     const labelOf = (code) => items.find((i) => i.code === code)?.label ?? code
-    const names = bundle.items.map((it) => labelOf(it.code) + (it.dose ? ` ${it.dose}` : ''))
+    const names = bundle.items.map((it) => labelOf(it.code)
+      + (it.dose ? ` ${it.dose}` : '')
+      + (it.qty > 1 ? ` ×${it.qty}` : ''))
     if (names.length === 0) return '(비어 있음)'
     return names.length <= 4 ? names.join(', ') : `${names.slice(0, 4).join(', ')} 외 ${names.length - 4}`
   }
@@ -2054,23 +2154,34 @@ function OrderBundleManageSection({ offline }) {
             <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <OrderChecklist
-            items={items}
+            /* 경로 그룹은 빼고 보여준다 — 묶음에 경로를 담는 게 아니라 담긴 항목에서 나온다. */
+            items={items.filter((it) => it.group_key !== ROUTE_GROUP)}
             checks={checks}
             onToggle={(code) => setChecks((prev) => {
               const next = { ...prev }
-              if (code in next) delete next[code]; else next[code] = ''
+              const key = checkKey(code, '')
+              if (key in next) delete next[key]; else next[key] = { code, dose: '', qty: 1 }
               return next
             })}
             onDose={(code, dose) => setChecks((prev) => {
               const next = { ...prev }
-              if (next[code] === dose) delete next[code]; else next[code] = dose
+              const key = checkKey(code, dose)
+              if (key in next) delete next[key]; else next[key] = { code, dose, qty: 1 }
               return next
             })}
             onFreeText={(code, value) => setChecks((prev) => {
               const next = { ...prev }
-              if (value.trim() === '') delete next[code]; else next[code] = value
+              const key = checkKey(code, '')
+              if (value.trim() === '') delete next[key]; else next[key] = { code, dose: value, qty: 1 }
               return next
             })}
+            onQty={(key, value) => setChecks((prev) => (prev[key] ? {
+              ...prev,
+              [key]: {
+                ...prev[key],
+                qty: Math.min(QTY_MAX, Math.max(1, Number(String(value).replace(/\D/g, '')) || 1)),
+              },
+            } : prev))}
           />
           <button type="button" className="btn-register" disabled={offline || !name.trim()} onClick={handleSave}>
             {editingId === 'new' ? '추가' : '저장'}
@@ -3783,7 +3894,10 @@ function App() {
   const [orderBundles, setOrderBundles] = useState([])
   const [prescriptionBed, setPrescriptionBed] = useState(null)
   // { [code]: dose } — 키가 있으면 체크된 것. 단순 항목은 dose가 ''.
+  // { [`${code}|${dose}`]: { code, dose, qty } } — 같은 항목을 용량만 달리해 두 번 담을 수 있다.
   const [orderChecks, setOrderChecks] = useState({})
+  // 경로 박스는 항목에서 자동 계산한다. 여기엔 '자동과 다르게 손으로 켠/끈 것'만 남는다.
+  const [routeOverride, setRouteOverride] = useState({})
   const [lineStaffId, setLineStaffId] = useState('')
   // 등록 시 선택하는 진료실. 선택 안 하면 '' → 서버에 NULL로 저장된다.
   const [examRoom, setExamRoom] = useState('')
@@ -4673,12 +4787,25 @@ function App() {
     setPrescriptionBed(target)
     setActionError('')
     setOrderChecks({})
+    setRouteOverride({})
     setVisitSymptom('')
     try {
       const saved = await getPrescription(target.sessionId)
       const checks = {}
-      saved.items.forEach((it) => { checks[it.code] = it.dose ?? '' })
+      const savedRoutes = new Set()
+      saved.items.forEach((it) => {
+        if (ROUTE_CODES.includes(it.code)) { savedRoutes.add(it.code); return }
+        checks[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+      })
+      // 저장된 경로가 자동 계산과 다르면 그 차이만 수동 보정으로 기억한다 — 손으로 켠 IM이
+      // 항목을 하나 더 고치는 순간 사라지면 안 된다.
+      const auto = autoRouteCodes(checks, orderItems)
+      const override = {}
+      ROUTE_CODES.forEach((code) => {
+        if (savedRoutes.has(code) !== auto.has(code)) override[code] = savedRoutes.has(code)
+      })
       setOrderChecks(checks)
+      setRouteOverride(override)
       setVisitSymptom(saved.visit_symptom ?? '')
     } catch (err) {
       setActionError(err.message)
@@ -4693,8 +4820,9 @@ function App() {
   function toggleOrderItem(code) {
     setOrderChecks((prev) => {
       const next = { ...prev }
-      if (code in next) delete next[code]
-      else next[code] = ''
+      const key = checkKey(code, '')
+      if (key in next) delete next[key]
+      else next[key] = { code, dose: '', qty: 1 }
       return next
     })
   }
@@ -4702,21 +4830,50 @@ function App() {
   // 용량 항목: 용량 버튼 자체가 체크다. 같은 용량을 다시 누르면 해제.
   // 이렇게 하면 "체크됐는데 용량이 비어 있는" 상태가 구조적으로 생기지 않는다
   // (기록지에 용량 빈 칸이 나가면 안 되므로).
+  // 용량끼리는 독립이다 — NS 180과 110을 함께 투약하는 처방이 있어 교체가 아니라 각각 체크된다.
   function selectOrderDose(code, dose) {
     setOrderChecks((prev) => {
       const next = { ...prev }
-      if (next[code] === dose) delete next[code]
-      else next[code] = dose
+      const key = checkKey(code, dose)
+      if (key in next) delete next[key]
+      else next[key] = { code, dose, qty: 1 }
       return next
     })
   }
 
   // 자유입력 항목(증류수 mL): 값이 있으면 체크, 비우면 해제.
+  // 키에 dose를 넣지 않는다 — 타이핑마다 키가 바뀌면 입력이 끊긴다.
   function setOrderFreeText(code, value) {
     setOrderChecks((prev) => {
       const next = { ...prev }
-      if (value.trim() === '') delete next[code]
-      else next[code] = value
+      const key = checkKey(code, '')
+      if (value.trim() === '') delete next[key]
+      else next[key] = { code, dose: value, qty: 1 }
+      return next
+    })
+  }
+
+  // 수량: 타이핑값도 ▲▼도 여기로 온다. 숫자가 아닌 입력은 버리고 1~99로 묶는다 —
+  // 오타로 들어간 값이 기록지에 그대로 인쇄되면 안 된다.
+  function setOrderQty(key, value) {
+    const qty = Math.min(QTY_MAX, Math.max(1, Number(String(value).replace(/\D/g, '')) || 1))
+    setOrderChecks((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], qty } } : prev))
+  }
+
+  // 실제로 켜진 경로 = 수동 보정이 있으면 그 값, 없으면 자동 계산.
+  function effectiveRouteCodes() {
+    const auto = autoRouteCodes(orderChecks, orderItems)
+    return ROUTE_CODES.filter((code) => routeOverride[code] ?? auto.has(code))
+  }
+
+  // 경로 박스 수동 보정. 자동 계산과 다른 값을 눌렀을 때만 보정으로 남는다.
+  function toggleRouteItem(code) {
+    const auto = autoRouteCodes(orderChecks, orderItems)
+    const now = routeOverride[code] ?? auto.has(code)
+    setRouteOverride((prev) => {
+      const next = { ...prev }
+      if (auto.has(code) === !now) delete next[code]
+      else next[code] = !now
       return next
     })
   }
@@ -4727,8 +4884,12 @@ function App() {
     if (Object.keys(orderChecks).length > 0
         && !window.confirm(`현재 체크를 '${bundle.name}' 묶음으로 바꿀까요?`)) return
     const next = {}
-    bundle.items.forEach((it) => { next[it.code] = it.dose ?? '' })
+    bundle.items.forEach((it) => {
+      next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+    })
     setOrderChecks(next)
+    // 묶음이 항목을 통째로 정의하므로 경로도 자동 계산으로 되돌린다.
+    setRouteOverride({})
   }
 
   // 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 되돌린다.
@@ -4753,9 +4914,9 @@ function App() {
   async function handleSavePrescription() {
     if (!prescriptionBed?.sessionId) return
     setActionError('')
-    const items = Object.entries(orderChecks).map(([code, dose]) => (
-      dose === '' ? { code } : { code, dose }
-    ))
+    // 경로 박스도 order_items 행이라 함께 저장한다(기록지·CSV가 이 행을 읽는다).
+    const items = Object.values(orderChecks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty }))
+    effectiveRouteCodes().forEach((code) => items.push({ code, dose: '', qty: 1 }))
     try {
       await savePrescription(prescriptionBed.sessionId, { items, visitSymptom })
       await refreshBoard()
@@ -6189,6 +6350,9 @@ function App() {
                 onToggle={toggleOrderItem}
                 onDose={selectOrderDose}
                 onFreeText={setOrderFreeText}
+                onQty={setOrderQty}
+                routeChecked={new Set(effectiveRouteCodes())}
+                onToggleRoute={toggleRouteItem}
               />
 
               {actionError && <p role="alert" className="field__error">{actionError}</p>}
