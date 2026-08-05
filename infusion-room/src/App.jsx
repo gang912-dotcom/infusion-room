@@ -5326,11 +5326,11 @@ function App() {
         >
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
           <p className="bed-card__number">{bed.number}</p>
-          <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
-          <p className="bed-card__chart">
-            <Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee>
+          <p className="bed-card__patient">
+            <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
             <PrescriptionMark done={bed.hasPrescription} />
           </p>
+          <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
           {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
           {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
           {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
@@ -5415,11 +5415,11 @@ function App() {
           </button>
         )}
         <p className="bed-card__number">{bed.number}</p>
-        <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
-        <p className="bed-card__chart">
-          <Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee>
+        <p className="bed-card__patient">
+          <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
           <PrescriptionMark done={bed.hasPrescription} />
         </p>
+        <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
         {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
         {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
         {roundStatus && (

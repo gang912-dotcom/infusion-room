@@ -663,11 +663,22 @@
   color: var(--status-occupied);
 }
 
+/* 이름(Marquee) + 처방 표식을 한 줄에. 이름이 남는 폭을 쓰고 표식은 안 줄어든다.
+   차트번호 줄에 뒀더니 번호가 잘렸다 — 번호는 끝까지 보여야 하는 값이다. */
 .bed-card__patient {
   margin: 6px 0 0;
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bed-card__patient > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .bed-card__chart {
@@ -675,16 +686,6 @@
   font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
-  /* 차트번호(Marquee) + 처방 표식을 한 줄에. Marquee가 남는 폭을 쓰고 표식은 안 줄어든다. */
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.bed-card__chart > :first-child {
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
 /* 처방 미작성 — 경고가 아니라 안내다. 배정 직후엔 모든 카드가 이 상태라 조용해야 한다. */
