@@ -20,6 +20,15 @@
   --track-bg: #2a2a2a;
   --number-bg: #2a2a2a;
   --hover-tint: rgba(255, 255, 255, 0.04);
+  /* 흰 글자를 얹는 '꽉 찬' 배경 전용 색 ─────────────────────────────
+     --status-* 는 카드 틴트·테두리·상태 글자용으로 밝게 잡혀 있다. 그 위에 흰 글자를
+     올리면 대비가 무너진다(실측: 초록 1.89 · 빨강 3.76 · 주황 2.03 · 회색 2.54 — 13곳).
+     이 네 값은 두 테마에서 같고 흰 글자 기준 5.7:1 이상이다. 흰 글자를 쓸 배경이면
+     반드시 이쪽을 쓸 것. */
+  --solid-green: #157347; /* 흰 글자 5.87 */
+  --solid-red: #c0271f;   /* 흰 글자 5.91 */
+  --solid-amber: #96560a; /* 흰 글자 5.78 */
+  --solid-gray: #4b5563;  /* 흰 글자 7.56 */
   /* 수액간호기록지 버튼 틴트. 스펙은 #e9f4fb 인라인이었는데 그 색은 라이트 전용이다 —
      다크에서 밝은 본문색이 얹혀 글자가 사라진다. 테마별로 갈라 둔다. */
   --record-btn-bg: rgba(120, 190, 235, 0.16);
@@ -698,7 +707,7 @@
   color: #ffffff;
   /* --status-occupied는 다크에서 #5fd37e다 — 흰 체크를 얹으면 대비 1.89로 무너진다.
      두 테마 모두 같은 진한 초록을 쓴다(조치 칩 활성과 같은 값). */
-  background: #157347;
+  background: var(--solid-green);
 }
 
 .bed-card__rx--done svg {
@@ -1180,7 +1189,7 @@
 
 .btn-confirm--yes {
   color: #ffffff;
-  background: var(--status-occupied);
+  background: var(--solid-green);
 }
 
 .btn-confirm--yes:hover {
@@ -2421,7 +2430,7 @@
 }
 
 .dm-mode-btn--active {
-  background: var(--status-occupied);
+  background: var(--solid-green);
   color: #ffffff;
   border-color: var(--status-occupied);
   font-weight: 600;
@@ -2573,7 +2582,7 @@
 
 .dm-btn--delete {
   color: #ffffff;
-  background: var(--status-completed);
+  background: var(--solid-red);
 }
 
 .dm-btn--delete:not(:disabled):hover {
@@ -2597,7 +2606,7 @@
 
 .dm-btn--restore {
   color: #ffffff;
-  background: var(--status-occupied);
+  background: var(--solid-green);
 }
 
 .dm-btn--restore:not(:disabled):hover {
@@ -2777,7 +2786,7 @@
 }
 
 .btn-confirm--danger {
-  background: var(--status-completed) !important;
+  background: var(--solid-red) !important;
   color: #ffffff !important;
 }
 
@@ -2860,7 +2869,7 @@
 
 .note-segment__btn--active {
   color: #ffffff;
-  background: var(--status-occupied);
+  background: var(--solid-green);
   border-color: var(--status-occupied);
 }
 
@@ -3118,7 +3127,7 @@
 
 .chip.chip--active {
   color: #ffffff;
-  background: var(--status-occupied);
+  background: var(--solid-green);
   border-color: var(--status-occupied);
 }
 
@@ -3131,7 +3140,7 @@
 
 .chip--symptom.chip--active {
   color: #ffffff;
-  background: var(--status-occupied);
+  background: var(--solid-green);
   border-color: var(--status-occupied);
 }
 
@@ -3146,7 +3155,7 @@
    4.5에 못 미쳤다. 밝은 초록 + 흰 글자는 이 앱에서 반복된 함정이다(1.89 사례). */
 .chip--action.chip--active {
   color: #ffffff;
-  background: #157347;
+  background: var(--solid-green);
   border-color: #157347;
 }
 
@@ -3159,7 +3168,7 @@
 
 .chip--category-warning.chip--active {
   color: #ffffff;
-  background: var(--status-completed);
+  background: var(--solid-red);
   border-color: var(--status-completed);
 }
 
@@ -3171,7 +3180,7 @@
 
 .chip--category-caution.chip--active {
   color: #ffffff;
-  background: var(--status-warning);
+  background: var(--solid-amber);
   border-color: var(--status-warning);
 }
 
@@ -3183,7 +3192,7 @@
 
 .chip--category-info.chip--active {
   color: #ffffff;
-  background: var(--text-secondary);
+  background: var(--solid-gray);
   border-color: var(--text-secondary);
 }
 
@@ -3278,17 +3287,17 @@
 
 .badge--warning {
   color: #ffffff;
-  background: var(--status-completed);
+  background: var(--solid-red);
 }
 
 .badge--caution {
   color: #ffffff;
-  background: var(--status-warning);
+  background: var(--solid-amber);
 }
 
 .badge--info {
   color: #ffffff;
-  background: var(--text-secondary);
+  background: var(--solid-gray);
 }
 
 .briefing__history-list li {
@@ -4150,7 +4159,7 @@
    활성 짝도 같은 특정성으로 올려 둔다. 대비는 흰 글자 + #157347 배경 기준으로 잰다. */
 :root[data-theme='light'] .app .chip--action.chip--active{
   color: #ffffff;
-  background: #157347;
+  background: var(--solid-green);
   border-color: #157347;
 }
 
