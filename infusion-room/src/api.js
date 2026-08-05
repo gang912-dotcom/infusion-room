@@ -86,6 +86,7 @@ function mapBoardToBeds(board) {
       specialNote: s.special_note ?? null,
       // 환자 메모 — 차트번호 기준이라 방문을 넘어 따라온다(특이사항은 방문 단위).
       dayMemo: s.day_memo ?? null,
+      hasPrescription: !!s.has_prescription,
       examRoom: s.exam_room ?? null,
       visitSymptom: s.visit_symptom ?? null,
       // 카드 우상단 바이탈 — 서버가 '필드별 최신'으로 골라 보낸다

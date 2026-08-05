@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { getRevision } from '../lib/revision.js'
+import { ROUTE_GROUP } from '../lib/record.js'
 
 const router = Router()
 
@@ -46,6 +47,17 @@ const lastPulseStmt = db.prepare(`
 `)
 
 const noteCountStmt = db.prepare('SELECT COUNT(*) c FROM session_notes WHERE session_id = ? AND deleted = 0')
+
+// 처방 작성 여부만 카드에 필요하다 — 항목 40여 개를 3초 폴링마다 실을 이유는 없으니
+// note_count와 같이 정수 하나만 센다.
+// 투여경로(IV/IM/SC)는 제외한다. 그건 항목에서 자동으로 켜지는 체크박스라, 그것만 남은
+// 상태를 '처방 작성됨'으로 볼 수 없다. order_items에서 사라진 code는 세어 준다
+// (라벨을 못 풀어도 처방은 있었던 것이므로).
+const orderCountStmt = db.prepare(`
+  SELECT COUNT(*) c FROM session_orders so
+  LEFT JOIN order_items oi ON oi.code = so.item_code
+  WHERE so.session_id = ? AND (oi.group_key IS NULL OR oi.group_key <> ?)
+`)
 
 const settingsStmt = db.prepare('SELECT key, value FROM settings')
 
@@ -109,6 +121,7 @@ router.get('/board', (req, res) => {
           : null,
         latest_pulse: lastPulse ? { value: lastPulse.pulse, occurred_at: lastPulse.occurred_at } : null,
         note_count: noteCountStmt.get(session.id).c,
+        has_prescription: orderCountStmt.get(session.id, ROUTE_GROUP).c > 0,
         special_note: session.special_note,
         day_memo: session.day_memo,
         exam_room: session.exam_room,

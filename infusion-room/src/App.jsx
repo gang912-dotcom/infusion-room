@@ -697,6 +697,21 @@ function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
 
+// 처방 작성 여부 — 카드에서 한눈에 구분하려고 차트번호 옆에 둔다.
+// 미작성은 회색 작은 글씨로 조용히, 작성됨은 체크가 눈에 띄게.
+// 두 상태를 다 표시하는 이유: 한쪽만 표시하면 '표식 없음'이 미작성인지 데이터 없음인지
+// 구분이 안 돼 놓치게 된다. 색만으로 전달하지 않으려고 아이콘·글씨를 함께 쓴다.
+function PrescriptionMark({ done }) {
+  if (done) {
+    return (
+      <span className="bed-card__rx bed-card__rx--done" title="처방 작성됨" aria-label="처방 작성됨">
+        <Icon name="check" />
+      </span>
+    )
+  }
+  return <span className="bed-card__rx">처방 미작성</span>
+}
+
 // 베드 카드용 요약 다줄: 이 방문의 특이사항 → 당일 메모 → 금일 증상(session_note) 순,
 // 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로
 //
@@ -5302,7 +5317,10 @@ function App() {
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
           <p className="bed-card__number">{bed.number}</p>
           <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
-          <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+          <p className="bed-card__chart">
+            <Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee>
+            <PrescriptionMark done={bed.hasPrescription} />
+          </p>
           {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
           {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
           {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
@@ -5388,7 +5406,10 @@ function App() {
         )}
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient"><Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee></p>
-        <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+        <p className="bed-card__chart">
+          <Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee>
+          <PrescriptionMark done={bed.hasPrescription} />
+        </p>
         {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
         {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
         {roundStatus && (
