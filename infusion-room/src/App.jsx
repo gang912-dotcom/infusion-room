@@ -4859,7 +4859,8 @@ function App() {
   function openModal(bed) {
     setSelectedBed(bed)
     setActionError('')
-    setEditStartOpen(false)
+    // 열 때도 되돌린다 — 다른 베드를 바로 열면 앞 환자의 편집 초안이 딸려온다.
+    resetInlineEdits()
     if (bed.status === 'vacant') {
       setPatientName('')
       setChartNumber('')
@@ -4927,11 +4928,22 @@ function App() {
     openModal(bed)
   }
 
+  // 인라인 편집(특이사항·당일 메모·시작 시각)은 상세를 닫으면 '취소'로 친다.
+  // 저장을 안 누르고 닫았는데 편집 상태가 남아 있으면, 다음에 열었을 때 쓰다 만 초안이
+  // 저장된 값처럼 보인다. 초안까지 비워야 다음 편집이 현재 값으로 다시 채워진다.
+  function resetInlineEdits() {
+    setEditStartOpen(false)
+    setSpecialNoteEditing(false)
+    setSpecialNoteDraft('')
+    setDayMemoEditing(false)
+    setDayMemoDraft('')
+  }
+
   function closeModal() {
     // 빈 베드 등록 모달을 닫는 거면 잠금 해제(취소로 간주).
     if (selectedBed?.status === 'vacant') stopLockAndRelease(selectedBed.id)
     setSelectedBed(null)
-    setEditStartOpen(false)
+    resetInlineEdits()
     // 모달이 열려 있는 동안은 폴링이 보드 갱신을 미룬다(입력 보호).
     // 닫는 즉시 한 번 강제 동기화해서, 그 사이 다른 단말이 건 잠금·변경을 바로 반영한다.
     refreshBoard()
@@ -4943,6 +4955,7 @@ function App() {
     if (!currentBed) return
     setCleanupReopenBed(currentBed)
     setSelectedBed(null)
+    resetInlineEdits() // 여기도 상세를 닫는 경로다 — 편집 중이던 초안을 들고 가면 안 된다
     setEndStaffId('') // 종료할 때마다 새로 고르게 한다(직전 선택이 남아 오선택되면 안 됨)
     setCleanupBed(currentBed)
   }
