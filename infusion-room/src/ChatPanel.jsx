@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getChat, sendChat, saveChatNotice } from './api'
+import { getChat, sendChat, saveChatNotice, setChatDeleted } from './api'
 
 // ─── 전체 채팅방 ─────────────────────────────────────────────────────
 // 계정 전원이 같은 방 하나를 본다. 읽음 확인도 방 목록도 없다(게임 채팅창).
@@ -72,13 +72,18 @@ export default function ChatPanel({ account, onClose, onSeen }) {
       const rolledOver = dayStartRef.current !== 0 && data.day_start !== dayStartRef.current
       dayStartRef.current = data.day_start
       setNotice(data.notice)
+      // 지워진 줄은 폴링이 '새 메시지'만 주기 때문에 저절로 사라지지 않는다 —
+      // 서버가 준 당일 삭제 id로 걷어낸다(관리자가 지우면 모든 단말에서 같이 사라진다).
+      const gone = new Set(data.deleted_ids ?? [])
       if (rolledOver) {
         // 자정을 넘겼다 — 어제 대화를 비우고 오늘 것만 남긴다.
         setMessages(data.messages)
         sinceRef.current = data.messages.at(-1)?.id ?? 0
       } else if (data.messages.length) {
         sinceRef.current = data.messages[data.messages.length - 1].id
-        setMessages((prev) => [...prev, ...data.messages])
+        setMessages((prev) => [...prev, ...data.messages].filter((m) => !gone.has(m.id)))
+      } else if (gone.size) {
+        setMessages((prev) => (prev.some((m) => gone.has(m.id)) ? prev.filter((m) => !gone.has(m.id)) : prev))
       }
       // 창이 열려 있는 동안 본 것으로 친다 — 배지가 남지 않게.
       onSeen?.(data.latest_id)
@@ -161,6 +166,17 @@ export default function ChatPanel({ account, onClose, onSeen }) {
     submit()
   }
 
+  // 관리자는 채팅창에서 바로 지운다. 소프트 삭제라 관리 페이지에서 되돌릴 수 있어
+  // 확인 창을 두지 않았다 — 잘못 눌러도 복구 가능하다.
+  async function removeMessage(id) {
+    try {
+      await setChatDeleted([id], true)
+      setMessages((prev) => prev.filter((m) => m.id !== id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function submitNotice() {
     try {
       const { notice: next } = await saveChatNotice(noticeDraft.trim())
@@ -231,6 +247,18 @@ export default function ChatPanel({ account, onClose, onSeen }) {
             <span className="chat-msg__who">{m.author}</span>
             <span className="chat-msg__body">{m.content}</span>
             <span className="chat-msg__at">{hhmm(m.created_at)}</span>
+            {/* 아이패드엔 hover가 없어 관리자에게는 항상 보이는 버튼으로 둔다. */}
+            {isAdmin && (
+              <button
+                type="button"
+                className="chat-msg__del"
+                onClick={() => removeMessage(m.id)}
+                aria-label={`${m.author} 메시지 삭제`}
+                title="삭제 (관리 페이지에서 복구 가능)"
+              >
+                ✕
+              </button>
+            )}
           </div>
         ))}
       </div>

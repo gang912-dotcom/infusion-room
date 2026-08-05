@@ -36,6 +36,13 @@ const latestIdStmt = db.prepare(
   'SELECT COALESCE(MAX(id), 0) m FROM chat_messages WHERE created_at >= ? AND deleted = 0',
 )
 
+// 당일 지워진 id 목록. 폴링은 '새 메시지'만 가져오므로 이게 없으면 관리자가 지운 뒤에도
+// 이미 열려 있는 다른 채팅창에는 그 줄이 그대로 남는다(새로고침해야 사라진다).
+// 당일 것만이라 목록이 길어질 일이 없다.
+const deletedIdsStmt = db.prepare(
+  'SELECT id FROM chat_messages WHERE created_at >= ? AND deleted = 1',
+)
+
 // 공지는 한 줄이고 이력이 필요 없어 settings에 둔다(테이블을 새로 만들 이유가 없다).
 const NOTICE_KEYS = { text: 'chat_notice', by: 'chat_notice_by', at: 'chat_notice_at' }
 const getSettingStmt = db.prepare('SELECT value FROM settings WHERE key = ?')
@@ -64,6 +71,7 @@ router.get('/chat', (req, res) => {
     notice: readNotice(),
     latest_id: latestIdStmt.get(dayStart).m,
     day_start: dayStart,
+    deleted_ids: deletedIdsStmt.all(dayStart).map((r) => r.id),
   })
 })
 

@@ -5052,3 +5052,18 @@
   text-decoration: none;
   white-space: nowrap;
 }
+
+/* 채팅 줄 삭제 버튼 — 관리자에게만 보인다. 아이패드엔 hover가 없어 항상 표시하고,
+   대신 작고 흐리게 둬서 대화를 읽는 데 방해되지 않게 한다. */
+.chat-msg__del {
+  flex: none;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.chat-msg__del:hover { color: var(--status-completed); }
