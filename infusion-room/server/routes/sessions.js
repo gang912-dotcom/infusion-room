@@ -29,6 +29,31 @@ function getSessionOr404(id, res) {
   return session
 }
 
+// ─── 시작 시각 허용 범위 ─────────────────────────────────────────────
+// 배정 시각보다 앞설 수 있다. 바빠서 **먼저 투여하고 등록을 나중에** 하는 경우가 있어
+// 배정 시각을 하한으로 두면 그 정정이 막힌다(운영에서 실제로 걸렸다).
+// 미래는 막는다. 하루보다 과거는 오타로 본다 — 오전/오후 혼동(05:15 ↔ 17:15)이
+// 12시간 차이라 그대로 두면 진행률·이용시간이 통째로 틀어진다.
+const STARTED_AT_MAX_BACK_MS = 24 * 60 * 60 * 1000
+
+// 통과하면 true. 실패하면 응답까지 보내고 false를 준다.
+function checkStartedAt(startedAt, res) {
+  if (!Number.isFinite(startedAt)) {
+    res.status(400).json({ error: '시작 시각이 올바르지 않습니다' })
+    return false
+  }
+  const now = Date.now()
+  if (startedAt > now) {
+    res.status(400).json({ error: '시작 시각은 현재 시각보다 뒤일 수 없습니다' })
+    return false
+  }
+  if (startedAt < now - STARTED_AT_MAX_BACK_MS) {
+    res.status(400).json({ error: '시작 시각이 하루 이상 과거입니다 — 오전/오후를 확인해주세요' })
+    return false
+  }
+  return true
+}
+
 // ─── assign — 라인실에서 베드 배정 ─────────────────────────────────
 router.post('/sessions/assign', (req, res) => {
   const {
@@ -150,11 +175,7 @@ router.post('/sessions/:id/start', (req, res) => {
 
   const now = Date.now()
   const startedAt = req.body?.started_at !== undefined ? Number(req.body.started_at) : now
-  try {
-    assertInRange(startedAt, session.assigned_at, now, '시작 시각')
-  } catch (err) {
-    return res.status(err.status).json({ error: err.message })
-  }
+  if (!checkStartedAt(startedAt, res)) return
 
   db.prepare(
     'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ? WHERE id = ?',
@@ -217,21 +238,8 @@ router.patch('/sessions/:id/started-at', (req, res) => {
     return res.status(400).json({ error: '아직 시작 전인 세션입니다' })
   }
 
-  // 시작 시각은 배정 시각 이후 ~ 지금 사이여야 한다(시작 라우트와 동일 규칙).
-  // assertInRange의 '허용 범위를 벗어났습니다'로는 근무자가 무엇이 문제인지 알 수 없다 —
-  // 배정보다 앞으로 당기려다 막히는 경우가 대부분이라 경계값을 문구에 넣는다.
   const startedAt = req.body?.started_at !== undefined ? Number(req.body.started_at) : NaN
-  const minAt = session.assigned_at
-  const maxAt = Date.now()
-  if (!Number.isFinite(startedAt)) {
-    return res.status(400).json({ error: '시작 시각이 올바르지 않습니다' })
-  }
-  if (startedAt < minAt || startedAt > maxAt) {
-    const hhmm = (t) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-    return res.status(400).json({
-      error: `시작 시각은 배정 시각(${hhmm(minAt)}) 이후, 현재 시각(${hhmm(maxAt)}) 이전이어야 합니다`,
-    })
-  }
+  if (!checkStartedAt(startedAt, res)) return
 
   db.prepare('UPDATE sessions SET started_at = ? WHERE id = ?').run(startedAt, session.id)
   bumpRevision(db)
