@@ -83,9 +83,11 @@ const ACCOUNT_ROLE_OPTIONS = [
   { value: 'staff', label: '직원' },
 ]
 
+// 라운딩 간격(1회차 15분 / 이후 30분)과 '곧' 리드타임은 화면에서 빼뒀다.
+// settings 테이블에 행은 남아 있지만 코드가 상수를 쓰기 때문에 바꿔도 아무 일이 없다 —
+// 값 자체가 원장님 지시로 고정이라, 안 먹는 입력칸을 두면 "바꿨는데 왜 그대로냐"가 된다.
+// 다시 조정 가능하게 하려면 여기 줄을 되살리고 getRoundStatus가 상수 대신 이 값을 읽게 해야 한다.
 const SETTINGS_META = [
-  { key: 'round_interval_min', label: '라운딩 간격', unit: '분', step: 1 },
-  { key: 'round_soon_lead_min', label: '곧 리드타임', unit: '분', step: 1 },
   { key: 'fever_mild_min', label: '미열 기준', unit: '℃', step: 0.1 },
   { key: 'fever_high_min', label: '고열 기준', unit: '℃', step: 0.1 },
   { key: 'default_duration_min', label: '기본 소요시간', unit: '분', step: 1 },
@@ -119,7 +121,10 @@ const ACTION_OPTIONS = [
 // ─── 라운딩(정기 순회 체크) 설정 상수 ──────────────────────────────
 // 상태 칩(양호/수면 중/…)은 제거됐다 — 라운딩은 시각 + 메모만.
 // round_states 테이블·rounds.state 컬럼은 방치(마이그레이션 없음).
-const ROUND_INTERVAL_MIN = 30 // 라운딩 간격(분)
+const ROUND_INTERVAL_MIN = 30 // 2회차 이후 라운딩 간격(분)
+// 1회차만 짧다 — 투여 시작 직후가 이상반응이 나오는 구간이라 15분 뒤에 한 번 본다.
+// 그 라운딩을 기록한 뒤부터는 30분 간격이다. 원장님 지시로 고정값이다(설정 아님).
+const ROUND_FIRST_INTERVAL_MIN = 15
 const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
 
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
@@ -312,20 +317,25 @@ function getLatestSessionRound(rounds, sessionId) {
 }
 
 // 카드 라운딩 상태: anchor = 마지막 라운딩 occurredAt(없으면 수액 시작시각).
-// 경과 < 20분 → ok(남은 30−경과), 20~30분 → soon(남은 30−경과), ≥30분 → due(anchor 이후 경과).
+// 간격은 1회차만 15분이고 그 뒤로는 30분이다 — 라운딩 기록이 하나도 없으면 1회차다.
+// 경과 < 간격−리드 → ok(남은 시간), 리드 구간 → soon(남은 시간), 간격 이상 → due(anchor 이후 경과).
 // due의 분값은 "예정 시각을 얼마나 넘겼나"가 아니라 anchor 이후 실제 경과다 —
 // 30분 규칙에서 "9분 경과"라고 뜨면 마지막으로 본 게 언제인지 알 수 없어 헷갈렸다.
 // A-3의 soon은 순수 로컬 타이머 기준(같은 수액실 묶음 필터는 A-4에서).
 function getRoundStatus(bed, latestRound, now) {
   const anchor = latestRound ? new Date(latestRound.occurredAt).getTime() : bed.startTime
   if (!anchor) return null
+  const interval = latestRound ? ROUND_INTERVAL_MIN : ROUND_FIRST_INTERVAL_MIN
+  // 리드타임 10분은 30분 간격에 맞춰 정한 값이다. 15분에 그대로 쓰면 창의 2/3가 'soon'이라
+  // 힌트가 의미를 잃는다 → 간격의 1/3을 넘지 않게 묶는다(30분은 10분 그대로, 15분은 5분).
+  const lead = Math.min(ROUND_SOON_LEAD_MIN, Math.floor(interval / 3))
   const elapsedMin = Math.max(0, Math.floor((now - anchor) / 60000))
-  const soonAt = ROUND_INTERVAL_MIN - ROUND_SOON_LEAD_MIN // 20
+  const soonAt = interval - lead
   if (elapsedMin < soonAt) {
-    return { status: 'ok', minutes: ROUND_INTERVAL_MIN - elapsedMin }
+    return { status: 'ok', minutes: interval - elapsedMin }
   }
-  if (elapsedMin < ROUND_INTERVAL_MIN) {
-    return { status: 'soon', minutes: ROUND_INTERVAL_MIN - elapsedMin }
+  if (elapsedMin < interval) {
+    return { status: 'soon', minutes: interval - elapsedMin }
   }
   return { status: 'due', minutes: elapsedMin }
 }
