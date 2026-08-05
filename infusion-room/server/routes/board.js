@@ -61,6 +61,10 @@ const orderCountStmt = db.prepare(`
 
 const settingsStmt = db.prepare('SELECT key, value FROM settings')
 
+// 채팅 최신 id — 창이 닫혀 있어도 배지를 띄우려면 필요하다. 보드는 어차피 3초마다
+// 폴링하므로 여기 숫자 하나를 얹으면 채팅용 요청이 따로 늘지 않는다.
+const chatLatestStmt = db.prepare('SELECT COALESCE(MAX(id), 0) m FROM chat_messages')
+
 // 활성 등록 잠금(5분 안에 갱신된 것)만. 만료된 건 "없는 잠금"으로 친다.
 const LOCK_TTL_MS = 5 * 60 * 1000
 const activeLockStmt = db.prepare(
@@ -74,7 +78,12 @@ router.get('/board', (req, res) => {
   const since = req.query.since !== undefined ? Number(req.query.since) : null
 
   if (since !== null && !Number.isNaN(since) && since === revision) {
-    return res.json({ server_now: serverNow, revision, unchanged: true })
+    // chat_latest_id는 여기에도 실어야 한다. 채팅은 일부러 revision을 안 올리므로
+    // (한 줄에 전 단말이 보드를 다시 그릴 이유가 없다) 이걸 빼면 보드가 조용한 동안
+    // 채팅 배지가 영영 갱신되지 않는다.
+    return res.json({
+      server_now: serverNow, revision, unchanged: true, chat_latest_id: chatLatestStmt.get().m,
+    })
   }
 
   const settings = Object.fromEntries(
@@ -130,7 +139,7 @@ router.get('/board', (req, res) => {
     }
   })
 
-  res.json({ server_now: serverNow, revision, settings, beds })
+  res.json({ server_now: serverNow, revision, settings, beds, chat_latest_id: chatLatestStmt.get().m })
 })
 
 export default router

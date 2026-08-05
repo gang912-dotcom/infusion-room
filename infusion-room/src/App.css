@@ -4845,3 +4845,190 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ─── 전체 채팅방 ─────────────────────────────────────────────────────
+   쪽지(msg-cards)와 별개다. 위치·크기를 근무자가 직접 옮기고 PC별로 저장한다.
+   position: fixed라 보드 스크롤과 무관하게 떠 있다. */
+.chat-panel {
+  position: fixed;
+  z-index: 320; /* 쪽지 카드(300)보다 위. 모달 오버레이보다는 아래다 */
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  min-height: 220px;
+  background: var(--panel-bg, var(--card-bg));
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+/* 제목줄을 끌어 창을 옮긴다. touch-action: none이 없으면 아이패드에서 드래그 대신
+   페이지가 스크롤돼 창이 안 움직인다. */
+.chat-panel__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--number-bg);
+  border-bottom: 1px solid var(--card-border);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.chat-panel__title { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+
+.chat-panel__close {
+  padding: 2px 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* 공지 — 관리자만 쓴다. 스크롤과 무관하게 맨 위에 고정(목록 바깥이라 자연히 고정된다). */
+.chat-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--record-btn-bg);
+  border-bottom: 1px solid var(--record-btn-border);
+}
+
+.chat-notice__text {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+/* 공지 배경(틴트) 위에서는 --text-muted가 다크에서 3.89로 떨어진다 — 한 단계 밝은 값. */
+.chat-notice__by { font-size: 11px; color: var(--text-secondary); }
+
+.chat-notice__edit,
+.chat-notice__add {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chat-notice__add { margin: 8px 10px 0; align-self: flex-start; }
+.chat-notice--edit { flex-direction: column; align-items: stretch; }
+
+.chat-notice__input {
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.chat-notice__actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-log__empty { margin: auto; font-size: 12px; color: var(--text-muted); }
+
+.chat-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.chat-msg__who { font-weight: 800; color: var(--text-secondary); flex: none; }
+.chat-msg__body { color: var(--text-primary); word-break: break-word; flex: 1 1 auto; min-width: 0; }
+.chat-msg__at { font-size: 10px; color: var(--text-muted); flex: none; }
+
+/* 내 말은 이름을 강조해 눈으로 빠르게 가른다(말풍선까지 갈 필요는 없다 — 로그형 채팅이다).
+   --solid-green은 '흰 글자를 얹는 배경'용이라 글자색으로 쓰면 다크에서 2.84로 무너진다.
+   글자에는 상태색 초록(--status-occupied)을 쓴다 — 카드에서 이미 글자로 쓰는 값이다. */
+.chat-msg--mine .chat-msg__who { color: var(--status-occupied); }
+
+/* 라이트에서 --status-occupied(#248a3d)는 4.40으로 0.1이 모자란다. 글자로 쓸 때만
+   한 단계 진한 초록으로 내린다(--solid-green은 배경용이지만 글자로도 5.87이다).
+   다크는 8.82라 그대로 둔다 — 여기서 같은 값을 쓰면 오히려 어두워진다. */
+:root[data-theme='light'] .app .chat-msg--mine .chat-msg__who { color: var(--solid-green); }
+
+.chat-panel__error {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--status-completed);
+}
+
+.chat-input {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--card-border);
+}
+
+.chat-input__box {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  resize: none;
+}
+
+.chat-panel__btn {
+  flex: none;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.chat-panel__btn--send { color: #ffffff; background: var(--solid-green); border-color: var(--solid-green); }
+
+/* 우하단 모서리 손잡이. 아이패드에서도 잡히도록 18px로 넉넉히 잡았다. */
+.chat-panel__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 55%, var(--text-muted) 55%, var(--text-muted) 65%, transparent 65%,
+      transparent 75%, var(--text-muted) 75%, var(--text-muted) 85%, transparent 85%);
+}
+
+/* 채팅이 켜져 있을 때 헤더 칩 강조 */
+.header-msg-btn--on { color: var(--status-occupied); border-color: var(--status-occupied); }

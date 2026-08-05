@@ -310,3 +310,16 @@ CREATE TABLE IF NOT EXISTS patient_memos (
   note       TEXT NOT NULL DEFAULT '',
   updated_at INTEGER
 );
+
+-- ─── 전체 채팅방 ─────────────────────────────────────────────────────
+-- 계정 전원이 같은 방 하나를 본다. 방이 여러 개일 필요도, 읽음 확인도 없다(게임 채팅창).
+-- 쪽지(messages)와는 다른 것이다: 쪽지는 1:1이고 10분 뒤 화면에서 사라지지만,
+-- 채팅은 전체 공개이고 계속 남는다.
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  content    TEXT    NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(id DESC);

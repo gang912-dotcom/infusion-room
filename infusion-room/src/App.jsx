@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import ChatPanel from './ChatPanel'
 import logoIcon from './assets/logo-icon-white.png'
 import logoIconColor from './assets/logo-icon.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
@@ -203,6 +204,11 @@ function Icon({ name, className }) {
       </>
     ),
     droplet: <path d="M12 3.2c3 3.9 6 6.6 6 10.1a6 6 0 0 1-12 0c0-3.5 3-6.2 6-10.1Z" />,
+    chat: (
+      <>
+        <path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.9 8.9 0 0 1-3.8-.8L3 21l1.9-5.4A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z" />
+      </>
+    ),
     send: (
       <>
         <path d="M21 3 10.5 13.5" />
@@ -4145,6 +4151,12 @@ function App() {
   // 받은 쪽지(살아있는 것만). 서버 폴링 결과로 갱신하되 카드의 드래그 위치(pos)는 보존한다.
   const [inboxMessages, setInboxMessages] = useState([])
   const [composeOpen, setComposeOpen] = useState(false)
+  // 전체 채팅 — 창은 이 PC에만 기억한다(단말마다 화면이 다르다).
+  // 마지막으로 본 메시지 id도 여기 둬야 다른 단말의 배지와 섞이지 않는다.
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatLatestId, setChatLatestId] = useState(0)
+  const [chatSeenId, setChatSeenId] = useState(() => Number(localStorage.getItem('infusion-room-chat-seen')) || 0)
+  const chatUnread = Math.max(0, chatLatestId - chatSeenId)
   const [composeHeld, composeClosing] = useModalExit(composeOpen)
 
   // 확인·답장으로 닫은 쪽지 id. 읽음처리 요청이 서버에 반영되기 전에 폴링이 돌면
@@ -4553,6 +4565,20 @@ function App() {
 
   // 액션(배정/시작/종료 등) 직후 호출 — 폴링과 달리 항상 즉시 반영해야 하므로
   // isModalBusyRef를 보지 않는다(내가 방금 연 모달이 그 대상이라 오히려 반영이 필요함).
+  // 채팅을 본 시점을 이 PC에 남긴다 — 새로고침해도 배지가 되살아나지 않게.
+  function markChatSeen(latestId) {
+    if (!Number.isFinite(latestId) || latestId <= 0) return
+    setChatSeenId((prev) => {
+      if (latestId <= prev) return prev
+      try {
+        localStorage.setItem('infusion-room-chat-seen', String(latestId))
+      } catch {
+        // 저장 실패해도 이번 세션 동안은 배지가 정상 동작한다
+      }
+      return latestId
+    })
+  }
+
   async function refreshBoard() {
     try {
       const result = await getBoard(revisionRef.current)
@@ -4562,6 +4588,9 @@ function App() {
         setBeds(result.beds)
         revisionRef.current = result.revision
       }
+      // 채팅 배지 — 창이 닫혀 있어도 이 값으로 새 메시지 여부를 안다(추가 요청 없음).
+      // unchanged 응답에도 실려 온다(채팅은 보드 revision을 올리지 않으므로).
+      if (Number.isFinite(result.chatLatestId)) setChatLatestId(result.chatLatestId)
       setLastSyncAt(result.serverNow)
       setOffline(false)
     } catch (err) {
@@ -5546,6 +5575,26 @@ function App() {
                 <span className="header-msg-btn__badge">{inboxMessages.length}</span>
               )}
             </button>
+            {/* 전체 채팅 — 쪽지와 별개다. 눌러서 창을 켜고 끈다.
+                배지는 마지막으로 본 id 이후의 개수(보드 폴링이 최신 id를 실어 온다). */}
+            <button
+              type="button"
+              className={`header-msg-btn${chatOpen ? ' header-msg-btn--on' : ''}`}
+              onClick={() => {
+                setChatOpen((prev) => {
+                  if (!prev) markChatSeen(chatLatestId)
+                  return !prev
+                })
+              }}
+              aria-pressed={chatOpen}
+              aria-label={chatUnread > 0 ? `전체 채팅 (새 메시지 ${chatUnread})` : '전체 채팅'}
+              title="전체 채팅"
+            >
+              <Icon name="chat" />
+              {!chatOpen && chatUnread > 0 && (
+                <span className="header-msg-btn__badge">{chatUnread > 99 ? '99+' : chatUnread}</span>
+              )}
+            </button>
             <span className="header-account__name">{account.displayName}</span>
             <button type="button" className="header-account__logout" onClick={handleLogout}>
               로그아웃
@@ -6519,6 +6568,14 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {chatOpen && (
+        <ChatPanel
+          account={account}
+          onClose={() => setChatOpen(false)}
+          onSeen={markChatSeen}
+        />
       )}
 
       {/* ── 처방 작성 (수액 Order 체크 + 내원당시증상) ── */}

@@ -148,7 +148,10 @@ export async function getBoard(sinceRevision) {
   if (board.unchanged) {
     // 변경이 없다는 건 "이 시점 기준으로 캐시가 최신"이라는 뜻 — 시각만 갱신한다.
     touchBoardCacheTime(board.server_now)
-    return { unchanged: true, revision: board.revision, serverNow: board.server_now }
+    return {
+      unchanged: true, revision: board.revision, serverNow: board.server_now,
+      chatLatestId: board.chat_latest_id ?? 0,
+    }
   }
   const beds = mapBoardToBeds(board)
   writeBoardCache(beds)
@@ -158,6 +161,7 @@ export async function getBoard(sinceRevision) {
     revision: board.revision,
     serverNow: board.server_now,
     beds,
+    chatLatestId: board.chat_latest_id ?? 0,
   }
 }
 
@@ -693,4 +697,24 @@ export async function editVitals(id, patch) {
 // 전용 엔드포인트를 새로 만들지 않고 기존 조회를 재사용한다(노트가 많아지면 그때 서버로 옮겨도 됨).
 export async function getPatientSessionNotes(patientId) {
   return apiFetch(`/patients/${patientId}/session-notes`)
+}
+
+// ─── 전체 채팅방 ─────────────────────────────────────────────────────
+// 방이 하나뿐이라 id가 없다. since를 주면 그 이후만 받는다(창이 열려 있을 때 2초 폴링).
+export async function getChat(sinceId) {
+  const q = sinceId ? `?since=${sinceId}` : ''
+  return apiFetch(`/chat${q}`)
+}
+
+export async function sendChat(content) {
+  return apiFetch('/chat', { method: 'POST', body: JSON.stringify({ content }) })
+}
+
+// 공지는 관리자만. 빈 문자열을 보내면 공지를 내린다.
+export async function saveChatNotice(text) {
+  return apiFetch('/admin/chat/notice', { method: 'PUT', body: JSON.stringify({ text }) })
+}
+
+export async function clearChat() {
+  return apiFetch('/admin/chat', { method: 'DELETE' })
 }
