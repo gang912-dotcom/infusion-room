@@ -48,6 +48,13 @@ if (!staffColumns.includes('signature')) {
   db.exec('ALTER TABLE staff ADD COLUMN signature TEXT')
 }
 
+// ─── 채팅 소프트 삭제 (2026-08-04) ────────────────────────────────────
+// schema.sql은 CREATE ... IF NOT EXISTS라 이미 만들어진 DB엔 새 컬럼이 안 생긴다.
+const chatColumns = db.prepare('PRAGMA table_info(chat_messages)').all().map((c) => c.name)
+if (chatColumns.length && !chatColumns.includes('deleted')) {
+  db.exec('ALTER TABLE chat_messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
+}
+
 // ─── 당일 메모 · 특이사항(기저질환) 정본 (2026-08-04) ─────────────────
 // 두 기능의 지속성이 맞바뀌었다.
 //   구 '환자 메모'(patient_memos, 차트 영구) → '당일 메모'(sessions.day_memo, 이 방문만)

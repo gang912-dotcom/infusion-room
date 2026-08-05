@@ -56,6 +56,9 @@ export default function ChatPanel({ account, onClose, onSeen }) {
 
   const listRef = useRef(null)
   const sinceRef = useRef(0)
+  // 서버가 알려주는 '오늘 0시'. 창을 열어둔 채 자정을 넘기면 이 값이 바뀌므로
+  // 그때 목록을 비운다 — 안 그러면 새벽에 어제 대화가 그대로 남는다.
+  const dayStartRef = useRef(0)
   // 사용자가 위로 올려 지난 대화를 보는 중이면 새 메시지가 와도 끌어내리지 않는다.
   const stickToBottomRef = useRef(true)
   const isAdmin = account?.role === 'admin'
@@ -63,9 +66,17 @@ export default function ChatPanel({ account, onClose, onSeen }) {
   // ── 폴링 ──
   const pull = useCallback(async () => {
     try {
+      // 요청은 늘 하나다. id가 단조증가라 since가 어제 것이어도 서버가 오늘 것만 준다
+      // (id > since AND created_at >= 오늘 0시). 클라는 목록을 이어 붙일지 갈아끼울지만 정한다.
       const data = await getChat(sinceRef.current)
+      const rolledOver = dayStartRef.current !== 0 && data.day_start !== dayStartRef.current
+      dayStartRef.current = data.day_start
       setNotice(data.notice)
-      if (data.messages.length) {
+      if (rolledOver) {
+        // 자정을 넘겼다 — 어제 대화를 비우고 오늘 것만 남긴다.
+        setMessages(data.messages)
+        sinceRef.current = data.messages.at(-1)?.id ?? 0
+      } else if (data.messages.length) {
         sinceRef.current = data.messages[data.messages.length - 1].id
         setMessages((prev) => [...prev, ...data.messages])
       }

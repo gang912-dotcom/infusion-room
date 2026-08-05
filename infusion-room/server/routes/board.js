@@ -63,7 +63,17 @@ const settingsStmt = db.prepare('SELECT key, value FROM settings')
 
 // 채팅 최신 id — 창이 닫혀 있어도 배지를 띄우려면 필요하다. 보드는 어차피 3초마다
 // 폴링하므로 여기 숫자 하나를 얹으면 채팅용 요청이 따로 늘지 않는다.
-const chatLatestStmt = db.prepare('SELECT COALESCE(MAX(id), 0) m FROM chat_messages')
+// 기준은 채팅창과 같아야 한다(당일 + 안 지워진 것) — 어긋나면 열어도 안 사라지는
+// 배지가 생긴다(어제 메시지나 관리자가 지운 메시지로 배지가 뜨는 식).
+const chatLatestStmt = db.prepare(
+  'SELECT COALESCE(MAX(id), 0) m FROM chat_messages WHERE created_at >= ? AND deleted = 0',
+)
+
+function chatDayStart() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
 
 // 활성 등록 잠금(5분 안에 갱신된 것)만. 만료된 건 "없는 잠금"으로 친다.
 const LOCK_TTL_MS = 5 * 60 * 1000
@@ -82,7 +92,7 @@ router.get('/board', (req, res) => {
     // (한 줄에 전 단말이 보드를 다시 그릴 이유가 없다) 이걸 빼면 보드가 조용한 동안
     // 채팅 배지가 영영 갱신되지 않는다.
     return res.json({
-      server_now: serverNow, revision, unchanged: true, chat_latest_id: chatLatestStmt.get().m,
+      server_now: serverNow, revision, unchanged: true, chat_latest_id: chatLatestStmt.get(chatDayStart()).m,
     })
   }
 
@@ -139,7 +149,7 @@ router.get('/board', (req, res) => {
     }
   })
 
-  res.json({ server_now: serverNow, revision, settings, beds, chat_latest_id: chatLatestStmt.get().m })
+  res.json({ server_now: serverNow, revision, settings, beds, chat_latest_id: chatLatestStmt.get(chatDayStart()).m })
 })
 
 export default router

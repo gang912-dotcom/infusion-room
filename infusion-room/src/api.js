@@ -715,6 +715,21 @@ export async function saveChatNotice(text) {
   return apiFetch('/admin/chat/notice', { method: 'PUT', body: JSON.stringify({ text }) })
 }
 
-export async function clearChat() {
-  return apiFetch('/admin/chat', { method: 'DELETE' })
+// ─── 채팅 내역 (관리자) ──────────────────────────────────────────────
+// 채팅창은 당일 것만 보여준다. 지난 대화는 여기서 날짜별로 본다.
+export async function listChatDates() {
+  return apiFetch('/admin/chat/dates')
+}
+
+// date는 'YYYY-MM-DD'. 지운 것도 함께 온다(deleted 플래그로 구분).
+export async function listChatByDate(date) {
+  return apiFetch(`/admin/chat?date=${encodeURIComponent(date)}`)
+}
+
+// 선택 삭제/복구 — 소프트다. 지워도 내역에는 '삭제됨'으로 남는다.
+export async function setChatDeleted(ids, deleted) {
+  return apiFetch('/admin/chat/deleted', {
+    method: 'POST',
+    body: JSON.stringify({ ids, deleted }),
+  })
 }

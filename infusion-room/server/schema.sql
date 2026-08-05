@@ -319,7 +319,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id INTEGER NOT NULL REFERENCES accounts(id),
   content    TEXT    NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  -- 관리자가 지운 것. 소프트 삭제인 이유: 채팅창에서는 감추되 관리 페이지의 날짜별
+  -- 내역에는 '삭제됨'으로 남아야 한다(내역 관리가 목적이라 진짜로 지우면 곤란하다).
+  deleted    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(id DESC);

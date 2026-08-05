@@ -5032,3 +5032,23 @@
 
 /* 채팅이 켜져 있을 때 헤더 칩 강조 */
 .header-msg-btn--on { color: var(--status-occupied); border-color: var(--status-occupied); }
+
+/* ─── 관리자: 채팅 내역 ────────────────────────────────────────────── */
+.dm-chat-log__date { width: auto; min-width: 200px; }
+
+/* 지운 메시지 — 목록에서 빼지 않고 취소선으로 남긴다(내역 관리가 목적이라 사라지면 안 된다).
+   --text-muted는 다크에서 3.09로 떨어진다. 읽어야 하는 내역이라 --text-secondary를 쓰고,
+   구분은 색이 아니라 취소선 + '삭제됨' 태그가 맡는다. */
+.dm-chat-log__row--deleted td { color: var(--text-secondary); text-decoration: line-through; }
+
+.dm-chat-log__tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--solid-gray);
+  border-radius: 999px;
+  text-decoration: none;
+  white-space: nowrap;
+}

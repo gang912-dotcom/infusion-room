@@ -24,6 +24,7 @@ import {
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   getSessionRecord, saveDayMemo, purgeSessions,
+  listChatDates, listChatByDate, setChatDeleted,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
@@ -3096,6 +3097,151 @@ function SettingsManageSection({ offline }) {
   )
 }
 
+// ─── 관리자 설정 — 채팅 내역 (날짜별) ──────────────────────────────
+// 채팅창은 당일 것만 보여준다. 지난 대화는 여기서 날짜별로 본다.
+// 삭제는 소프트다 — 채팅창에서만 사라지고 여기엔 '삭제됨'으로 남는다(내역 관리가 목적).
+function ChatLogSection({ offline }) {
+  const [dates, setDates] = useState([])
+  const [date, setDate] = useState('')
+  const [rows, setRows] = useState([])
+  const [checked, setChecked] = useState(new Set())
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    listChatDates()
+      .then((list) => {
+        setDates(list)
+        // 기본은 가장 최근 날짜(대개 오늘) — 관리자가 매번 고르지 않아도 되게.
+        if (list.length) setDate((prev) => prev || list[0].date)
+      })
+      .catch((err) => setError(err.message))
+  }, [])
+
+  // 선택 해제는 날짜를 바꾸는 지점(select onChange)에서 한다 —
+  // effect 본문에서 setState를 동기로 부르면 eslint 베이스라인(1건)을 넘는다.
+  useEffect(() => {
+    if (!date) return
+    listChatByDate(date).then(setRows).catch((err) => setError(err.message))
+  }, [date])
+
+  async function apply(deleted) {
+    if (checked.size === 0) return
+    setBusy(true)
+    setError('')
+    try {
+      await setChatDeleted([...checked], deleted)
+      setRows(await listChatByDate(date))
+      setChecked(new Set())
+      setDates(await listChatDates())
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function toggle(id) {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allChecked = rows.length > 0 && rows.every((r) => checked.has(r.id))
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header">
+        <h4>채팅 내역 ({dates.length ? `${dates.length}일` : '없음'})</h4>
+        <select
+          className="field__input dm-chat-log__date"
+          value={date}
+          onChange={(e) => { setChecked(new Set()); setDate(e.target.value) }}
+          aria-label="채팅 날짜"
+        >
+          {dates.length === 0 && <option value="">기록 없음</option>}
+          {dates.map((d) => (
+            <option key={d.date} value={d.date}>
+              {d.date} ({d.total}건{d.deleted_count > 0 ? ` · 삭제 ${d.deleted_count}` : ''})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {error && <p role="alert" className="field__error">{error}</p>}
+
+      {rows.length === 0 ? (
+        <div className="dm-empty">이 날짜의 대화가 없습니다</div>
+      ) : (
+        <>
+          <div className="dm-actions">
+            <button
+              type="button"
+              className="dm-btn dm-btn--purge"
+              onClick={() => apply(true)}
+              disabled={offline || busy || checked.size === 0}
+            >
+              선택 삭제
+            </button>
+            <button
+              type="button"
+              className="dm-btn dm-btn--restore"
+              onClick={() => apply(false)}
+              disabled={offline || busy || checked.size === 0}
+            >
+              선택 복구
+            </button>
+            {checked.size > 0 && <span className="dm-actions__selected">{checked.size}건 선택됨</span>}
+          </div>
+
+          <div className="dm-table-wrap">
+            <table className="dm-table">
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))}
+                      aria-label="전체 선택"
+                    />
+                  </th>
+                  <th>시각</th>
+                  <th>보낸 사람</th>
+                  <th>내용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className={r.deleted ? 'dm-chat-log__row--deleted' : undefined}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={checked.has(r.id)}
+                        onChange={() => toggle(r.id)}
+                        aria-label={`${r.author} 메시지 선택`}
+                      />
+                    </td>
+                    <td>{new Date(r.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>{r.author}</td>
+                    <td>
+                      {r.content}
+                      {r.deleted === 1 && <span className="dm-chat-log__tag">삭제됨</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── 데이터관리 화면 ─────────────────────────────────────────────
 function DataManageView({
   allHistory,
@@ -3543,6 +3689,7 @@ function DataManageView({
           <OrderItemManageSection offline={offline} />
           <OrderBundleManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
+          <ChatLogSection offline={offline} />
           <MessageLogSection />
         </div>
       )}
