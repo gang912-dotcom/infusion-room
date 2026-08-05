@@ -690,15 +690,22 @@
   font-weight: 500;
 }
 
-/* 처방 미작성 — 차트번호 바로 아래 줄. 이름 옆에 두면 이름을 눌러 잘린다.
-   빨간 글씨는 카드의 다른 경고 줄(특이사항)과 같은 색을 쓴다.
-   카드가 flex column에 gap: 6px라 그냥 두면 8px가 떠서 따로 노는 줄처럼 보였다 →
-   음수 마진으로 gap을 상쇄해 차트번호에 붙인다(실효 2px). */
+/* 진료실 칩과 처방 미작성을 한 줄에. 미작성을 독립된 줄로 두면 이 카드만 한 줄이 늘어
+   옆 카드들과 줄이 어긋난다(카드가 격자로 늘어서 있어 바로 티가 난다). */
+.bed-card__exam-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 처방 미작성 — 빨간 글씨는 카드의 다른 경고 줄(특이사항)과 같은 색을 쓴다. */
 .bed-card__rx-todo {
-  margin: -4px 0 0;
+  margin: 0;
   font-size: 12px;
   font-weight: 700;
   color: var(--status-completed);
+  white-space: nowrap;
 }
 
 /* 작성됨 — 글씨 없이 체크만. 초록 원 안에 흰 체크라 멀리서도 잡힌다. */
@@ -726,8 +733,8 @@
    틴트 배경 + 상태색 글자는 라이트 테마에서 대비가 자주 깨져, 이미 검증된
    번호 알약과 같은 중립 색 조합을 쓴다. */
 .bed-card__exam-room {
-  margin: 2px 0 0;
-  align-self: flex-start;
+  margin: 0;
+  flex: none;
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 700;
