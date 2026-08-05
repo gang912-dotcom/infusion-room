@@ -224,4 +224,51 @@ router.patch('/settings/:key', (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── 휴지통 완전삭제 ─────────────────────────────────────────────────
+// 소프트삭제(deleted=1)된 세션을 DB에서 실제로 지운다. 되돌릴 수 없다.
+// 관리자 전용인 이유: 데이터관리 탭 자체는 모든 근무자가 볼 수 있고, 여기는 복구가 없다.
+//
+// **deleted=1인 것만 지운다.** 살아 있는 세션 id가 섞여 오면 그건 무시한다 —
+// 실수로든 버그로든 진행 중 기록이 사라지는 경로를 만들지 않는다.
+//
+// 자식 행을 먼저 지워야 한다(foreign_keys = ON). session_notes는 손자
+// (session_note_symptoms·session_note_actions)까지 있어 순서가 있다.
+const PURGE_CHILDREN = [
+  'DELETE FROM session_note_symptoms WHERE note_id IN (SELECT id FROM session_notes WHERE session_id = ?)',
+  'DELETE FROM session_note_actions  WHERE note_id IN (SELECT id FROM session_notes WHERE session_id = ?)',
+  'DELETE FROM session_notes  WHERE session_id = ?',
+  'DELETE FROM rounds         WHERE session_id = ?',
+  'DELETE FROM vitals         WHERE session_id = ?',
+  'DELETE FROM session_orders WHERE session_id = ?',
+]
+
+router.post('/sessions/purge', (req, res) => {
+  const { ids } = req.body ?? {}
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '지울 대상이 없습니다' })
+  }
+  if (!ids.every((id) => Number.isInteger(id))) {
+    return res.status(400).json({ error: 'ids는 정수 배열이어야 합니다' })
+  }
+
+  const isDeleted = db.prepare('SELECT 1 FROM sessions WHERE id = ? AND deleted = 1')
+  const children = PURGE_CHILDREN.map((sql) => db.prepare(sql))
+  const removeSession = db.prepare('DELETE FROM sessions WHERE id = ? AND deleted = 1')
+
+  const purged = []
+  const skipped = []
+  db.transaction(() => {
+    for (const id of ids) {
+      if (!isDeleted.get(id)) { skipped.push(id); continue }
+      for (const stmt of children) stmt.run(id)
+      removeSession.run(id)
+      purged.push(id)
+    }
+  })()
+
+  // 되돌릴 수 없는 삭제다 — 건수를 감사 기록에 남긴다(id는 이미 사라져 참조가 무의미).
+  logAccess(req, ACTIONS.SESSION_PURGE, { targetType: `count:${purged.length}` })
+  res.json({ purged: purged.length, skipped: skipped.length })
+})
+
 export default router

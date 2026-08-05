@@ -22,7 +22,7 @@ import {
   acquireBedLock, releaseBedLock,
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
-  getSessionRecord, saveDayMemo,
+  getSessionRecord, saveDayMemo, purgeSessions,
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
@@ -3080,6 +3080,7 @@ function DataManageView({
 
   // 삭제 확인 팝업
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [purging, setPurging] = useState(false)
   const [deleteConfirmHeld, deleteConfirmClosing] = useModalExit(deleteConfirm)
 
   // 휴지통 모드
@@ -3166,6 +3167,35 @@ function DataManageView({
     onUpdateSessionNotes((prev) => cascadeSessionNoteDeleted(targets, prev, true))
     setCheckedIds(new Set())
     setDeleteConfirm(false)
+  }
+
+  // ── 선택 완전삭제 (DB에서 제거, 복구 없음) ──
+  // 소프트삭제된 것만 대상이다. 서버도 deleted=1만 지우지만 여기서도 걸러서
+  // 확인 문구의 건수가 실제로 지워질 건수와 같게 한다.
+  async function handlePurge() {
+    const targets = allHistory.filter((e) => checkedIds.has(e.id) && e.deleted)
+    if (targets.length === 0) return
+    if (!window.confirm(
+      `${targets.length}건을 완전삭제합니다.\n\n`
+      + '바이탈·라운딩·증상·처방까지 함께 지워지고 되돌릴 수 없습니다.\n계속할까요?',
+    )) return
+
+    setPurging(true)
+    try {
+      const { purged } = await purgeSessions(targets.map((e) => e.sessionId))
+      const gone = new Set(targets.map((e) => e.sessionId))
+      // 서버에서 사라졌으니 화면에서도 빼야 한다(복구 대상이 아니라 존재하지 않는 기록이다).
+      onUpdateHistory((prev) => prev.filter((e) => !gone.has(e.sessionId)))
+      onUpdateSessionNotes((prev) => prev.filter((n) => !gone.has(n.sessionId)))
+      setCheckedIds(new Set())
+      if (purged !== targets.length) {
+        alert(`${purged}건만 삭제됐습니다. 나머지는 이미 없거나 복구된 기록입니다.`)
+      }
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setPurging(false)
+    }
   }
 
   // ── 선택 복구 (deleted: false) ──
@@ -3309,14 +3339,27 @@ function DataManageView({
             선택 삭제
           </button>
         ) : (
-          <button
-            type="button"
-            className="dm-btn dm-btn--restore"
-            onClick={handleRestore}
-            disabled={offline || checkedCount === 0}
-          >
-            선택 복구
-          </button>
+          <>
+            <button
+              type="button"
+              className="dm-btn dm-btn--restore"
+              onClick={handleRestore}
+              disabled={offline || checkedCount === 0}
+            >
+              선택 복구
+            </button>
+            {/* 완전삭제는 복구가 없다 → 관리자만 보인다(데이터관리 탭 자체는 전원 공개다). */}
+            {account?.role === 'admin' && (
+              <button
+                type="button"
+                className="dm-btn dm-btn--purge"
+                onClick={handlePurge}
+                disabled={offline || checkedCount === 0 || purging}
+              >
+                {purging ? '삭제 중...' : '완전삭제'}
+              </button>
+            )}
+          </>
         )}
         {checkedCount > 0 && (
           <span className="dm-actions__selected">{checkedCount}건 선택됨</span>

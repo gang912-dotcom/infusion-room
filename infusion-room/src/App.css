@@ -2541,6 +2541,21 @@
   filter: brightness(0.88);
 }
 
+/* 완전삭제 — 되돌릴 수 없는 동작이라 눈에 띄어야 하지만, 흰 글자 + 빨강 배경은
+   다크에서 대비가 3.3 수준으로 떨어진다(선택 삭제 버튼이 그 방식이다).
+   본문색 글자 + 붉은 틴트 + 붉은 테두리로 강조해 대비 함정을 피한다.
+   선택 삭제(빨강)와는 같은 화면에 뜨지 않는다 — 휴지통 모드에만 있다. */
+.dm-btn--purge {
+  color: var(--text-primary);
+  background: var(--status-completed-bg);
+  border: 1px solid var(--status-completed);
+}
+
+.dm-btn--purge:not(:disabled):hover {
+  background: var(--status-completed);
+  color: #ffffff;
+}
+
 .dm-btn--restore {
   color: #ffffff;
   background: var(--status-occupied);

@@ -377,6 +377,11 @@ export async function toggleHistoryDeleted(sessionId, deleted) {
   return apiFetch(`/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ deleted }) })
 }
 
+// 휴지통 완전삭제 — 관리자 전용. 되돌릴 수 없다. 서버가 deleted=1인 것만 지운다.
+export async function purgeSessions(ids) {
+  return apiFetch('/admin/sessions/purge', { method: 'POST', body: JSON.stringify({ ids }) })
+}
+
 // ─── rounds ─────────────────────────────────────────────────────────
 function mapRoundRow(row) {
   return {
