@@ -4913,6 +4913,7 @@ function App() {
 
   function openStartEdit() {
     if (!currentBed?.startTime) return
+    setActionError('')
     setStartDraft(currentBed.startTime)
     setEditStartOpen(true)
   }
@@ -4928,6 +4929,7 @@ function App() {
 
   async function handleSaveStartEdit() {
     if (!selectedBed) return
+    setActionError('')
     try {
       await updateSessionStartedAt(selectedBed.sessionId, startDraft)
       await refreshBoard()
@@ -6051,6 +6053,9 @@ function App() {
                         onChange={(e) => setStartDraftTime(e.target.value)}
                       />
                     </div>
+                    {/* 이 폼에 오류 자리가 없어서, 서버가 거절해도 화면에 아무 반응이 없었다
+                        ("시작시간 변경이 안 된다"의 원인). 배정 시각보다 앞으로 당기면 거절된다. */}
+                    {actionError && <p role="alert" className="field__error">{actionError}</p>}
                     <div className="start-edit__actions">
                       <button type="button" className="dm-note-btn" onClick={() => setEditStartOpen(false)}>
                         취소

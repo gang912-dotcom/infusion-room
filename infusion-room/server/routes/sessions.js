@@ -217,12 +217,20 @@ router.patch('/sessions/:id/started-at', (req, res) => {
     return res.status(400).json({ error: '아직 시작 전인 세션입니다' })
   }
 
+  // 시작 시각은 배정 시각 이후 ~ 지금 사이여야 한다(시작 라우트와 동일 규칙).
+  // assertInRange의 '허용 범위를 벗어났습니다'로는 근무자가 무엇이 문제인지 알 수 없다 —
+  // 배정보다 앞으로 당기려다 막히는 경우가 대부분이라 경계값을 문구에 넣는다.
   const startedAt = req.body?.started_at !== undefined ? Number(req.body.started_at) : NaN
-  try {
-    // 시작 시각은 배정 시각 이후 ~ 지금 사이여야 한다(시작 라우트와 동일 규칙).
-    assertInRange(startedAt, session.assigned_at, Date.now(), '시작 시각')
-  } catch (err) {
-    return res.status(err.status).json({ error: err.message })
+  const minAt = session.assigned_at
+  const maxAt = Date.now()
+  if (!Number.isFinite(startedAt)) {
+    return res.status(400).json({ error: '시작 시각이 올바르지 않습니다' })
+  }
+  if (startedAt < minAt || startedAt > maxAt) {
+    const hhmm = (t) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    return res.status(400).json({
+      error: `시작 시각은 배정 시각(${hhmm(minAt)}) 이후, 현재 시각(${hhmm(maxAt)}) 이전이어야 합니다`,
+    })
   }
 
   db.prepare('UPDATE sessions SET started_at = ? WHERE id = ?').run(startedAt, session.id)
