@@ -147,7 +147,10 @@ const ORDER_SEED = [
   { code: 'b6', label: 'B6', group: '기본' },
   { code: 'b12', label: 'B12', group: '기본' },
   { code: 'gcbbon', label: '지씨비본', group: '기본' },
-  { code: 'furiamin', label: '후리아민/페디아민', group: '기본' },
+  // 종이 기록지의 '후리아민/페디아민'은 둘 중 하나에 동그라미를 치는 칸이었다.
+  // 앱에서는 각각 체크해야 하므로 별개 항목이다.
+  { code: 'furiamin', label: '후리아민', group: '기본' },
+  { code: 'pediamin', label: '페디아민', group: '기본' },
   { code: 'lainec', label: '라이넥', group: '기본' },
   { code: 'mpc_basic', label: 'MPC FILTER SET', group: '기본' },
   { code: 'denogan', label: '데노간', group: '기본' },
@@ -310,6 +313,26 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'order_route_seeded'").get()
   db.transaction(() => {
     ROUTE_SEED.forEach((r, i) => insRoute.run(r.code, r.label, '투여경로', i - ROUTE_SEED.length))
     insFlag.run('order_route_seeded', '1', Date.now())
+  })()
+}
+
+// ─── 후리아민 / 페디아민 분리 (2026-08-04) ────────────────────────────
+// 종이 기록지에는 '후리아민/페디아민' 한 칸에 동그라미로 골랐다. 앱에서는 각각 체크해야
+// 하므로 별개 항목으로 나눈다. furiamin code는 묶음 4개가 참조하므로 유지하고 라벨만 바꾼다
+// (code를 바꾸면 과거 기록·묶음 참조가 끊긴다).
+// sort_order를 x.5로 두는 이유: 후리아민 바로 뒤에 놓으면서 뒤 항목을 재번호하지 않기 위해서다.
+// SQLite는 INTEGER 선언 컬럼에도 10.5를 real로 보존한다(qty와 같은 성질).
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'furiamin_split'").get()) {
+  db.transaction(() => {
+    db.prepare("UPDATE order_items SET label = '후리아민' WHERE code = 'furiamin'").run()
+    const after = db.prepare("SELECT group_key, sort_order, route FROM order_items WHERE code = 'furiamin'").get()
+    if (after) {
+      db.prepare(`INSERT OR IGNORE INTO order_items (code, label, group_key, sort_order, route)
+                  VALUES ('pediamin', '페디아민', ?, ?, ?)`)
+        .run(after.group_key, after.sort_order + 0.5, after.route)
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('furiamin_split', '1', Date.now())
   })()
 }
 
