@@ -4200,10 +4200,41 @@ function App() {
     if (!account) return
     refreshBoard()
     refreshRecords()
-    getStaffList().then(setStaffList).catch((err) => console.error('직원 목록 로딩 실패', err))
-    // 오더 항목은 거의 안 바뀌므로 로그인 후 한 번만 받아 캐시한다(3b에서 관리자가 고치면 재로그인/새로고침).
-    getOrderItems().then(setOrderItems).catch((err) => console.error('오더 항목 로딩 실패', err))
-    getOrderBundles().then(setOrderBundles).catch((err) => console.error('묶음처방 로딩 실패', err))
+  }, [account])
+
+  // 참조 데이터(직원 목록·오더 항목·묶음처방) — 거의 안 바뀌므로 로그인 후 받아 캐시한다.
+  //
+  // 예전에는 한 번만 받고 실패하면 console.error만 찍었다. 그러면 목록이 빈 배열로 굳어
+  // **드롭다운에 고를 것이 없어진다** — 실제로 "라인 제거 담당자를 못 골라 종료가 안 되고,
+  // 앱을 껐다 켜니 됐다"로 보고됐다. deploy.bat이 서비스를 재시작하는 순간이나 순간적인
+  // 끊김이면 충분히 걸린다. 처방 체크리스트가 텅 비는 것도 같은 원인이었다.
+  //
+  // 그래서 실패하면 보드 폴링과 같은 간격(3→6→12→24→30초)으로 다시 받는다.
+  // setState가 전부 async 콜백 안이라 setState-in-effect 규칙에 걸리지 않는다.
+  useEffect(() => {
+    if (!account) return
+    let cancelled = false
+    let timer
+
+    async function loadReference(attempt = 0) {
+      try {
+        const [staff, items, bundles] = await Promise.all([
+          getStaffList(), getOrderItems(), getOrderBundles(),
+        ])
+        if (cancelled) return
+        setStaffList(staff)
+        setOrderItems(items)
+        setOrderBundles(bundles)
+      } catch (err) {
+        if (cancelled) return
+        const wait = Math.min(30000, 3000 * 2 ** attempt)
+        console.error(`참조 데이터 로딩 실패 — ${wait / 1000}초 후 재시도`, err)
+        timer = setTimeout(() => loadReference(attempt + 1), wait)
+      }
+    }
+    loadReference()
+
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [account])
 
   // 열려 있는 모달(배정/시작 폼, 라운딩, 베드이동, 정리 확인)이 있는 동안은 폴링이
@@ -5690,7 +5721,8 @@ function App() {
                   value={endStaffId}
                   onChange={(e) => setEndStaffId(e.target.value)}
                 >
-                  <option value="" disabled>선택</option>
+                  {/* 목록이 비면 이유를 보여준다 — 예전엔 '선택'만 남아 죽은 칸처럼 보였다. */}
+                  <option value="" disabled>{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
                   {staffList.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -5787,7 +5819,7 @@ function App() {
                       maybeAlertBaselineNote(lookupInfo, e.target.value)
                     }}
                   >
-                    <option value="">선택</option>
+                    <option value="">{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
                     {staffList.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -5880,7 +5912,7 @@ function App() {
                     value={mixStaffId}
                     onChange={(e) => setMixStaffId(e.target.value)}
                   >
-                    <option value="">선택</option>
+                    <option value="">{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
                     {staffList.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
