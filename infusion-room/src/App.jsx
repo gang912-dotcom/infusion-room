@@ -4292,6 +4292,9 @@ function App() {
   const [roundModalBedId, setRoundModalBedId] = useState(null)
   const [editingRoundId, setEditingRoundId] = useState(null)
   const [roundOccurredAt, setRoundOccurredAt] = useState(() => Date.now())
+  // 라운딩 메모 입력 칸은 없앴다(증상은 '금일 증상' 탭 하나로 모은다). 상태는 남긴다 —
+  // 지난 라운딩의 시각만 고칠 때 그 메모를 그대로 돌려보내야 지워지지 않는다.
+  // 새 라운딩은 ''로 저장된다.
   const [roundMemo, setRoundMemo] = useState('')
 
   // ─── 쪽지 ──────────────────────────────────────────────────────
@@ -6425,7 +6428,7 @@ function App() {
                             aria-label="당일 메모"
                             autoFocus
                           />
-                          <p className="rec-empty">이 메모는 같은 환자에게 계속 표시됩니다</p>
+                          <p className="rec-empty">당일 메모는 다음 내원 시 노출되지 않습니다</p>
                           <div className="rec-item__actions">
                             <button
                               type="button"
@@ -6931,17 +6934,9 @@ function App() {
 
                 <OccurredAtPicker valueMs={roundOccurredAt} onChange={setRoundOccurredAt} nowMs={now} />
 
-                <label className="field">
-                  <span className="field__label">증상 기록 (선택)</span>
-                  <input
-                    type="text"
-                    className="field__input"
-                    value={roundMemo}
-                    onChange={(e) => setRoundMemo(e.target.value)}
-                    placeholder="발열, 혈관통 등 관찰한 증상"
-                  />
-                </label>
-
+                {/* 증상 입력 칸은 뺐다 — 증상은 '금일 증상' 탭 하나로 모은다.
+                    라운딩은 '언제 봤나'만 남긴다. rounds.memo 컬럼과 지난 기록은 그대로 두고
+                    (기록지가 옛 메모를 읽는다) 새 라운딩만 메모 없이 저장된다. */}
                 <div className="round-actions">
                   <button type="button" className="btn-round-cancel" onClick={closeRoundModal}>
                     취소
