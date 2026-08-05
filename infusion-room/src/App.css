@@ -690,10 +690,12 @@
   font-weight: 500;
 }
 
-/* 처방 미작성 — 이름 아래 독립된 줄. 이름 옆에 두면 이름을 눌러 잘린다.
-   빨간 글씨는 카드의 다른 경고 줄(특이사항)과 같은 색을 쓴다. */
+/* 처방 미작성 — 차트번호 바로 아래 줄. 이름 옆에 두면 이름을 눌러 잘린다.
+   빨간 글씨는 카드의 다른 경고 줄(특이사항)과 같은 색을 쓴다.
+   카드가 flex column에 gap: 6px라 그냥 두면 8px가 떠서 따로 노는 줄처럼 보였다 →
+   음수 마진으로 gap을 상쇄해 차트번호에 붙인다(실효 2px). */
 .bed-card__rx-todo {
-  margin: 2px 0 0;
+  margin: -4px 0 0;
   font-size: 12px;
   font-weight: 700;
   color: var(--status-completed);

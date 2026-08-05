@@ -5334,8 +5334,8 @@ function App() {
             <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
             <PrescriptionCheck done={bed.hasPrescription} />
           </p>
-          <PrescriptionTodo done={bed.hasPrescription} />
           <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+          <PrescriptionTodo done={bed.hasPrescription} />
           {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
           {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
           {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
@@ -5424,8 +5424,8 @@ function App() {
           <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
           <PrescriptionCheck done={bed.hasPrescription} />
         </p>
-        <PrescriptionTodo done={bed.hasPrescription} />
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+        <PrescriptionTodo done={bed.hasPrescription} />
         {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
         {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
         {roundStatus && (
