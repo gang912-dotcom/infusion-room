@@ -707,19 +707,23 @@ function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
 
-// 처방 작성 여부 — 카드에서 한눈에 구분하려고 차트번호 옆에 둔다.
-// 미작성은 회색 작은 글씨로 조용히, 작성됨은 체크가 눈에 띄게.
+// 처방 작성 여부 — 카드에서 한눈에 구분한다.
+// 작성됨은 이름 바로 옆 체크, 미작성은 이름 아래 빨간 줄(PrescriptionTodo)로 갈랐다.
+// 한 줄에 같이 두면 '처방 미작성' 글씨가 이름을 눌러 이름이 잘렸다.
 // 두 상태를 다 표시하는 이유: 한쪽만 표시하면 '표식 없음'이 미작성인지 데이터 없음인지
 // 구분이 안 돼 놓치게 된다. 색만으로 전달하지 않으려고 아이콘·글씨를 함께 쓴다.
-function PrescriptionMark({ done }) {
-  if (done) {
-    return (
-      <span className="bed-card__rx bed-card__rx--done" title="처방 작성됨" aria-label="처방 작성됨">
-        <Icon name="check" />
-      </span>
-    )
-  }
-  return <span className="bed-card__rx">처방 미작성</span>
+function PrescriptionCheck({ done }) {
+  if (!done) return null
+  return (
+    <span className="bed-card__rx-done" title="처방 작성됨" aria-label="처방 작성됨">
+      <Icon name="check" />
+    </span>
+  )
+}
+
+function PrescriptionTodo({ done }) {
+  if (done) return null
+  return <p className="bed-card__rx-todo">처방 미작성</p>
 }
 
 // 베드 카드용 요약 다줄: 이 방문의 특이사항 → 당일 메모 → 금일 증상(session_note) 순,
@@ -5328,8 +5332,9 @@ function App() {
           <p className="bed-card__number">{bed.number}</p>
           <p className="bed-card__patient">
             <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
-            <PrescriptionMark done={bed.hasPrescription} />
+            <PrescriptionCheck done={bed.hasPrescription} />
           </p>
+          <PrescriptionTodo done={bed.hasPrescription} />
           <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
           {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
           {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
@@ -5417,8 +5422,9 @@ function App() {
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient">
           <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
-          <PrescriptionMark done={bed.hasPrescription} />
+          <PrescriptionCheck done={bed.hasPrescription} />
         </p>
+        <PrescriptionTodo done={bed.hasPrescription} />
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
         {/* 진료실 — 우상단은 칩·바이탈이 쓰므로 왼쪽 아래에 둔다. 미선택이면 아예 안 뜬다. */}
         {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}

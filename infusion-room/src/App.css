@@ -663,8 +663,10 @@
   color: var(--status-occupied);
 }
 
-/* 이름(Marquee) + 처방 표식을 한 줄에. 이름이 남는 폭을 쓰고 표식은 안 줄어든다.
-   차트번호 줄에 뒀더니 번호가 잘렸다 — 번호는 끝까지 보여야 하는 값이다. */
+/* 이름 + 처방 체크를 한 줄에. 체크는 이름 '끝에 바로' 붙는다 —
+   flex: 1로 두면 이름이 남는 폭을 다 먹어 체크가 오른쪽 끝에 고정된 것처럼 보이고,
+   이름이 길면 눌린다. 0 1 auto면 이름은 제 폭만 쓰고 넘칠 때만 줄어든다(그때는 마퀴가 흐른다).
+   차트번호 줄에 뒀더니 번호가 잘려서 이 줄로 옮겼다 — 번호는 끝까지 보여야 하는 값이다. */
 .bed-card__patient {
   margin: 6px 0 0;
   font-size: 16px;
@@ -678,7 +680,7 @@
 
 .bed-card__patient > :first-child {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .bed-card__chart {
@@ -688,17 +690,17 @@
   font-weight: 500;
 }
 
-/* 처방 미작성 — 경고가 아니라 안내다. 배정 직후엔 모든 카드가 이 상태라 조용해야 한다. */
-.bed-card__rx {
-  flex: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
+/* 처방 미작성 — 이름 아래 독립된 줄. 이름 옆에 두면 이름을 눌러 잘린다.
+   빨간 글씨는 카드의 다른 경고 줄(특이사항)과 같은 색을 쓴다. */
+.bed-card__rx-todo {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--status-completed);
 }
 
-/* 작성됨 — 글씨가 사라지고 체크만 남는다. 초록 원 안에 흰 체크라 멀리서도 잡힌다. */
-.bed-card__rx--done {
+/* 작성됨 — 글씨 없이 체크만. 초록 원 안에 흰 체크라 멀리서도 잡힌다. */
+.bed-card__rx-done {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -711,7 +713,7 @@
   background: var(--solid-green);
 }
 
-.bed-card__rx--done svg {
+.bed-card__rx-done svg {
   width: 12px;
   height: 12px;
   stroke-width: 3;
