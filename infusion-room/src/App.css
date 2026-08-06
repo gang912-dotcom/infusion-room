@@ -4695,12 +4695,19 @@
    누르면 현재 체크를 통째로 바꾸는 버튼이라, 체크리스트 위에 따로 떼어 놓는다. */
 /* 묶음이 0개여도 줄을 없애지 않는다 — 관리자가 등록하는 순간 체크리스트가 밀려 내려가
    근무자가 누르던 자리가 바뀐다. min-height는 버튼 높이(44px)와 같게 둬서 자리를 비워둔다.
-   개수가 늘면 줄바꿈으로 아래로 자라고, 넘치면 .modal__body가 세로로 스크롤한다. */
+   개수가 늘면 줄바꿈으로 아래로 자라고, 넘치면 .modal__body가 세로로 스크롤한다.
+
+   flex-shrink: 0이 없으면 그 '아래로 자라는' 것이 안 된다. .modal__body가 세로 flex라
+   본문이 넘치면 자식이 눌리는데, 세로 flex 항목을 내용보다 작아지지 않게 막아주는
+   min-height: auto를 위의 min-height: 44px가 덮어써서 딱 44px까지 눌린다.
+   눌린 만큼 넘친 칩은 뒤에 그려지는 체크리스트 카드에 가려 안 보일 뿐 아니라
+   그 자리를 누르면 카드의 항목이 눌린다(실측: 22개 → 144px가 44px로, 2·3줄 먹힘). */
 .order-bundles {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   min-height: 44px;
   margin-bottom: 12px;
 }
