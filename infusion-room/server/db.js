@@ -343,4 +343,157 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'furiamin_split'").get()) {
   })()
 }
 
+// ─── 묶음처방 15종 추가 (2026-08-06) ──────────────────────────────────
+// 원장님 EMR '묶음코드 등록 및 수정' 화면 사진 15장을 옮긴 것이다.
+// EMR 등록코드 → 우리 항목코드 매핑(사진에 이미 있던 200-10을 기존 DB와 대조해 확정):
+//   NS110/NS180→ns(dose)  nac2/nac3→nac  Gly5→licorice  Vc→merit 10g  Vc1→merit 5g
+//   Mgi→meganesium  MVC→panbicomp  bibon→gcbbon  TO→furiamin  to→pediamin
+//   La(태반)→lainec  dipep→dipeptiven  s4→vitd  ima3→immune  De→denogan
+//   ord→ord_basic  perami1→peramiflu  ivset→mpc_basic  ns10+gluta 두 줄→ns10_tathion 한 항목
+//   Mineral→mineral(미량원소) — 카탈로그에 없어 이 마이그레이션에서 함께 만든다
+// 사진의 '용량' 칸이 수량이다. EMR은 소수점을 쉼표로 쓴다(0,5 = 0.5) — 반 앰플이라
+// qty 소수 지원이 여기서 쓰인다. '연결=병명'인 줄은 진단코드라 처방이 아니다.
+// Mgi-1·B5-1 같은 -1 접미사는 청구코드가 같은 동일 제품의 반 앰플이라 같은 항목에 qty로 넣는다.
+const BUNDLE_ADD = [
+  // NS110 줄이 두 개다(같은 코드·같은 용량). PK가 (묶음, 항목, dose)라 두 행이 될 수 없고,
+  // 될 필요도 없다 — 백 두 개는 qty 2다(기존 '1'번 묶음도 같은 방식이다).
+  // 3번 묶음의 NS180+NS110만 dose가 달라서 2행이 된다.
+  { emr: '110-3', name: '실버 수액 (ima 없는거)', items: [
+    { code: 'ns', dose: '110', qty: 2 }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'mineral' },
+    { code: 'mpc_basic', qty: 2 },
+  ] },
+  { emr: '110-31', name: '실버 수액', items: [
+    { code: 'ns', dose: '110', qty: 2 }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'mineral' },
+    { code: 'immune' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { emr: '110-101', name: '부신기능저하증+비타민D', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'furiamin' },
+    { code: 'lainec', qty: 4 }, { code: 'vitd' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { emr: '110-102', name: '부신기능저하증+싸이모신알파', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'furiamin' },
+    { code: 'lainec', qty: 4 }, { code: 'immune' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  // EMR 이름이 110-10과 똑같은 '부신기능저하증'이다. 관리자 표에서 구분이 안 되므로
+  // 차이나는 부분을 이름에 붙였다(코드는 EMR 그대로다).
+  { emr: '110-104', name: '부신기능저하증 (+NS10 타치온)', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'furiamin' },
+    { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 }, { code: 'ns10_tathion' },
+  ] },
+  { emr: '200-202', name: '부신기능저하증(B6-3개) + 이뮤알파주', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice', qty: 2 },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'furiamin' },
+    { code: 'lainec', qty: 4 }, { code: 'immune' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { emr: '200-23', name: '부신기능저하증(200-2+데노간 or ord)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice', qty: 2 },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'denogan', qty: 2 },
+    { code: 'ord_basic', qty: 0.5 }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  // 이 묶음만 MVC(판비콤프)가 없다 — 사진에 줄 자체가 없다.
+  { emr: '200-004', name: '부신기능저하증(B6-3개)+글루타치온', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'furiamin' },
+    { code: 'lainec', qty: 4 }, { code: 'ns10_tathion' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  // corti1/corti2는 EMR 이름이 둘 다 '교감신경항진증'이라 수액백으로 구분해 붙였다.
+  { emr: 'corti1', name: '교감신경항진증 (110)', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'merit', dose: '5g' },
+    { code: 'meganesium', qty: 2 }, { code: 'b6', qty: 3 }, { code: 'b12' },
+    { code: 'lainec', qty: 4 }, { code: 'mpc_basic' }, { code: 'denogan', qty: 2 },
+  ] },
+  { emr: 'corti2', name: '교감신경항진증 (180)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'merit', dose: '10g' },
+    { code: 'meganesium', qty: 2 }, { code: 'b6', qty: 3 }, { code: 'b12' },
+    { code: 'lainec', qty: 4 }, { code: 'mpc_basic' }, { code: 'denogan', qty: 2 },
+  ] },
+  { emr: 'iv20', name: '소아수액 (편도선염, 고열증)-(고함량비타민)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'denogan', qty: 1.5 }, { code: 'ord_basic', qty: 0.5 }, { code: 'mpc_basic' },
+  ] },
+  { emr: 'iv20-1', name: '소아수액 (편도선염, 고열증)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium', qty: 0.5 }, { code: 'panbicomp' },
+    { code: 'b5', qty: 0.5 }, { code: 'b6', qty: 0.5 }, { code: 'b12', qty: 0.5 },
+    { code: 'gcbbon' }, { code: 'denogan', qty: 1.5 }, { code: 'ord_basic', qty: 0.5 },
+    { code: 'mpc_basic' },
+  ] },
+  { emr: 'iv20-11', name: '소아수액 (편도선염, 고열증)+저영양증(페디아민)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'gcbbon' }, { code: 'denogan', qty: 1.5 }, { code: 'ord_basic', qty: 0.5 },
+    { code: 'pediamin' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  // 페라미플루의 EMR 용법이 '1+ns50'이지만 n/s 50은 등록코드 줄이 아니라 희석액 표기라
+  // 항목으로 넣지 않았다 — 사진에 없는 것을 만들지 않는다.
+  { emr: 'iv20-3', name: '소아수액 (독감)', items: [
+    { code: 'ns', dose: '180' }, { code: 'licorice' }, { code: 'nac' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'b6' }, { code: 'b12' },
+    { code: 'panbicomp' }, { code: 'gcbbon' }, { code: 'denogan', qty: 1.5 },
+    { code: 'ord_basic', qty: 0.5 }, { code: 'peramiflu' }, { code: 'mpc_basic', qty: 2 },
+  ] },
+  { emr: '180', name: 'iv180(B6:3개 데노간2)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'mpc_basic' }, { code: 'denogan', qty: 2 },
+  ] },
+]
+
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260806'").get()) {
+  db.transaction(() => {
+    // 미량원소(EMR Mineral, 청구코드 681100281)는 카탈로그에 없던 항목이다.
+    // 실버 수액 두 종에만 쓰인다. 영양 첨가제라 디펩티벤 옆(치료제)에 두고,
+    // sort_order를 x.5로 잡아 뒤 항목을 재번호하지 않는다(페디아민과 같은 방식).
+    const beside = db.prepare("SELECT group_key, sort_order, route FROM order_items WHERE code = 'dipeptiven'").get()
+    if (beside) {
+      db.prepare(`INSERT OR IGNORE INTO order_items (code, label, group_key, sort_order, route)
+                  VALUES ('mineral', '미량원소', ?, ?, ?)`)
+        .run(beside.group_key, beside.sort_order + 0.5, beside.route)
+    }
+
+    const exists = db.prepare('SELECT 1 FROM order_bundles WHERE emr_code = ?')
+    const insBundle = db.prepare('INSERT INTO order_bundles (name, emr_code, sort_order) VALUES (?, ?, ?)')
+    const insItem = db.prepare(
+      'INSERT INTO order_bundle_items (bundle_id, item_code, dose, qty) VALUES (?, ?, ?, ?)',
+    )
+    // 항목코드가 카탈로그에 없으면 조용히 빈 묶음이 된다 — 먼저 막는다.
+    const known = new Set(db.prepare('SELECT code FROM order_items').all().map((r) => r.code))
+    for (const b of BUNDLE_ADD) {
+      for (const it of b.items) {
+        if (!known.has(it.code)) throw new Error(`묶음 ${b.emr}: 없는 항목코드 ${it.code}`)
+      }
+    }
+    let next = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 m FROM order_bundles').get().m
+    for (const b of BUNDLE_ADD) {
+      // 이미 있는 코드는 건너뛴다 — 관리자가 손으로 만들어 뒀을 수 있고, 덮으면 편집이 날아간다.
+      if (exists.get(b.emr)) continue
+      const { lastInsertRowid } = insBundle.run(b.name, b.emr, next++)
+      for (const it of b.items) {
+        insItem.run(lastInsertRowid, it.code, it.dose ?? '', it.qty ?? 1)
+      }
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('bundle_add_260806', '1', Date.now())
+  })()
+}
+
 export default db

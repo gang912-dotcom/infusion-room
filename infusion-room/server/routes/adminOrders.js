@@ -139,9 +139,12 @@ router.delete('/order-items/:id', (req, res) => {
 // 관리자 화면은 비활성 묶음도 본다.
 router.get('/order-bundles', (req, res) => {
   // 처방 확인 화면의 버튼 순서와 같게 — 관리자가 표에서 대조할 때 순서가 어긋나면 헷갈린다.
+  // 정렬식은 orders.js와 한 글자도 다르면 안 된다(두 번째 항은 corti1·iv20처럼 숫자로
+  // 시작하지 않는 코드를 맨 뒤로 보낸다 — CAST가 0으로 읽어 '0' 뒤에 끼어든다).
   const bundles = db.prepare(`
     SELECT * FROM order_bundles
-    ORDER BY (emr_code IS NULL), CAST(emr_code AS INTEGER), emr_code, sort_order, id
+    ORDER BY (emr_code IS NULL), (CAST(emr_code AS INTEGER) = 0 AND emr_code <> '0'),
+             CAST(emr_code AS INTEGER), emr_code, sort_order, id
   `).all()
   const itemsStmt = db.prepare('SELECT item_code AS code, dose, qty FROM order_bundle_items WHERE bundle_id = ?')
   res.json(bundles.map((b) => ({

@@ -43,9 +43,12 @@ router.get('/order-bundles', (req, res) => {
   // 버튼 순서 = 묶음코드 오름차순(0·1·2·3·110-10·200·200-10). 원장님이 부르는 순서와
   // 같아야 근무자가 찾는다. CAST는 앞자리 숫자만 읽어 '110-10'을 110으로 본다.
   // 코드가 같은 숫자로 시작하면 문자열로 가르고('200' → '200-10'), 코드가 없으면 뒤로.
+  // 숫자로 시작하지 않는 코드(corti1·iv20)도 CAST가 0으로 읽어 '0' 바로 뒤에 끼어든다 —
+  // 두 번째 항이 그걸 맨 뒤로 보낸다. 관리자 목록(adminOrders.js)과 같은 식이어야 한다.
   const bundles = db.prepare(`
     SELECT id, name, emr_code, sort_order FROM order_bundles WHERE is_active = 1
-    ORDER BY (emr_code IS NULL), CAST(emr_code AS INTEGER), emr_code, sort_order, id
+    ORDER BY (emr_code IS NULL), (CAST(emr_code AS INTEGER) = 0 AND emr_code <> '0'),
+             CAST(emr_code AS INTEGER), emr_code, sort_order, id
   `).all()
   const itemsStmt = db.prepare('SELECT item_code AS code, dose, qty FROM order_bundle_items WHERE bundle_id = ?')
   res.json(bundles.map((b) => ({
