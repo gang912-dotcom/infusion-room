@@ -2,7 +2,10 @@
 // beds, history, rounds, session_notes, patient_notes 전부 서버 기준.
 // localStorage는 더 이상 쓰지 않는다.
 
-const ROOM_LABELS = { room2: '2수액실', room3: '3수액실', floor2: '2층수액실' }
+// 방 라벨은 여기 한 벌만 둔다 — App.jsx의 탭도 이걸로 만든다.
+// 두 벌로 두면 이름을 바꿀 때 한쪽만 바뀌고, 통계는 라벨을 집계 키로 쓰기 때문에
+// 그 방 막대가 조용히 0이 된다. id(room3)는 DB·베드코드라 바꾸지 않는다.
+export const ROOM_LABELS = { room2: '2수액실', room3: '수액센터', floor2: '2층수액실' }
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`/api${path}`, {

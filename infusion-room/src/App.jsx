@@ -28,6 +28,7 @@ import {
   listSettings, updateSetting,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
+  ROOM_LABELS,
 } from './api'
 
 // 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
@@ -54,11 +55,12 @@ function CountUp({ value, ms = 500 }) {
   return <>{n}</>
 }
 
+// 방 탭은 api.js의 ROOM_LABELS에서 만든다(라벨 정본은 거기 한 곳이다).
+// 이용기록이 방을 라벨로 실어 오고 통계가 그 라벨을 집계 키로 쓰기 때문에
+// 두 벌을 따로 두면 이름을 바꿀 때 막대가 조용히 0이 된다.
 const TABS = [
   { id: 'all', label: '전체' },
-  { id: 'room2', label: '2수액실' },
-  { id: 'room3', label: '3수액실' },
-  { id: 'floor2', label: '2층수액실' },
+  ...Object.entries(ROOM_LABELS).map(([id, label]) => ({ id, label })),
   { id: 'history', label: '이용기록' },
   { id: 'patient', label: '환자 조회' },
   { id: 'stats', label: '통계' },
