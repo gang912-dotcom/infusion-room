@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
+import { QTY_MAX, roundQty } from '../lib/validation.js'
 
 const router = Router()
 
@@ -84,11 +85,8 @@ router.put('/sessions/:id/prescription', (req, res) => {
   // 존재하지 않는 code가 섞이면 통째로 거부한다 — 일부만 저장되면 기록지가 조용히 틀어진다.
   // 같은 항목을 dose만 달리해 두 번 보내는 건 정상이다(NS 180 + NS 110). 같은 (code, dose)가
   // 두 번 오면 PK가 막아 500이 나므로 여기서 400으로 잡는다.
-  // qty는 소수 첫째 자리까지 허용한다(반 앰플 0.5, 0.1 단위 분할). 상한을 두는 이유는
-  // 오타로 들어간 큰 수가 기록지에 그대로 인쇄되기 때문이다.
-  // 0.1의 배수인지 검사하지 않고 반올림해 받는다 — 부동소수 때문에 0.3이 검사에서
-  // 걸리는 일을 피하려고. SQLite는 INTEGER 선언 컬럼에도 0.5를 real로 보존한다.
-  const QTY_MAX = 99
+  // qty 규칙(0.01 단위·상한)은 lib/validation.js 한 곳에 있다 — 관리자 묶음 저장과
+  // 같은 규칙이어야 한다. SQLite는 INTEGER 선언 컬럼에도 0.5를 real로 보존한다.
   const known = new Set(db.prepare('SELECT code FROM order_items').all().map((r) => r.code))
   const seen = new Set()
   const parsed = []
@@ -107,8 +105,7 @@ router.put('/sessions/:id/prescription', (req, res) => {
     if (typeof rawQty !== 'number' || !Number.isFinite(rawQty) || rawQty <= 0 || rawQty > QTY_MAX) {
       return res.status(400).json({ error: `수량은 0보다 크고 ${QTY_MAX} 이하인 숫자여야 합니다: ${row.code}` })
     }
-    const qty = Math.round(rawQty * 10) / 10
-    parsed.push({ code: row.code, dose, qty })
+    parsed.push({ code: row.code, dose, qty: roundQty(rawQty) })
   }
 
   const trimmedSymptom = typeof visitSymptom === 'string' ? visitSymptom.trim() : ''

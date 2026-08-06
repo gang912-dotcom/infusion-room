@@ -152,19 +152,22 @@ const ROUTE_CODES = Object.values(ROUTE_ITEM_CODE)
 
 // 처방 체크 상태의 키. NS를 180·110 두 백 담는 처방이 있어 code 단독으로는 못 쓴다.
 // 자유입력(증류수 mL)은 타이핑마다 키가 바뀌면 커서가 튀므로 dose를 키에서 뺀다.
-// 수량은 소수 첫째 자리까지 허용한다 — 반 앰플(0.5), 0.1 단위 분할이 실제로 있다.
-// 반올림을 Math.round(n / 0.1) * 0.1로 하면 0.3이 0.30000000000000004가 되어
-// 기록지에 그대로 인쇄된다 → 10을 곱해 정수로 반올림한 뒤 다시 나눈다.
+// 수량은 소수 둘째 자리까지 허용한다 — 반 앰플(0.5)보다 잘게 나누는 분할이 실제로 있다.
+// 반올림을 Math.round(n / 0.01) * 0.01로 하면 0.3이 0.30000000000000004가 되어
+// 기록지에 그대로 인쇄된다 → 100을 곱해 정수로 반올림한 뒤 다시 나눈다.
 // 숫자·소수점만 남긴다. 소수점이 두 번 들어가면 NaN → 1로 떨어진다.
 // 상한을 두는 이유: 오타로 들어간 큰 수가 기록지에 그대로 인쇄된다.
+// 서버 쪽 짝은 server/lib/validation.js의 roundQty다 — 자릿수가 어긋나면 화면에서
+// 넣은 0.25가 저장에서 0.3으로 뭉개진다. 바꿀 때 두 곳을 같이 본다.
 const QTY_MAX = 99
-const QTY_MIN = 0.1
+const QTY_MIN = 0.01
+const QTY_DECIMALS = 100
 function normalizeQty(value) {
   const cleaned = String(value).replace(/[^\d.]/g, '')
   if (cleaned === '') return 1 // 칸을 비우면 기본값으로 돌린다
   const n = Number(cleaned)
   if (!Number.isFinite(n) || n <= 0) return 1
-  return Math.min(QTY_MAX, Math.max(QTY_MIN, Math.round(n * 10) / 10))
+  return Math.min(QTY_MAX, Math.max(QTY_MIN, Math.round(n * QTY_DECIMALS) / QTY_DECIMALS))
 }
 function checkKey(code, dose) {
   return `${code}|${dose ?? ''}`
@@ -1783,7 +1786,7 @@ function QtyStepper({ qty, onChange, label }) {
 
   // ▲▼는 편집 중이던 값을 기준으로 움직인다(버튼을 누르면 blur가 먼저 나지만,
   // 순서에 기대지 않고 draft를 직접 본다). QTY_MIN 아래로는 안 내려간다 —
-  // 음수를 넘기면 정규화가 부호를 떼어 0.1이 0.9로 '늘어난다'.
+  // 음수를 넘기면 정규화가 부호를 떼어 0.01이 0.99로 '늘어난다'.
   function step(delta) {
     const base = draft !== null ? normalizeQty(draft) : qty
     setDraft(null)
@@ -1804,7 +1807,7 @@ function QtyStepper({ qty, onChange, label }) {
         aria-label={`${label} 수량`}
       />
       <span className="qty__steps">
-        {/* ▲▼는 ±1이다(대부분 정수). 0.1 단위는 칸에 직접 타이핑한다. */}
+        {/* ▲▼는 ±1이다(대부분 정수). 0.01 단위는 칸에 직접 타이핑한다. */}
         <button type="button" className="qty__step" onClick={() => step(1)} aria-label={`${label} 수량 1 늘리기`}>▲</button>
         <button type="button" className="qty__step" onClick={() => step(-1)} aria-label={`${label} 수량 1 줄이기`}>▼</button>
       </span>

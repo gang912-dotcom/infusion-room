@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import db from '../db.js'
+import { QTY_MAX, roundQty } from '../lib/validation.js'
 
 // 관리자 전용 — index.js에서 '/api/admin' + requireAdmin으로 마운트된다.
 // 읽기용 GET /order-items, GET /order-bundles는 orders.js(모든 로그인 사용자)에 있다.
@@ -153,9 +154,6 @@ router.get('/order-bundles', (req, res) => {
   })))
 })
 
-// 오타로 들어간 큰 수가 기록지에 그대로 인쇄되므로 상한을 둔다(처방 저장과 같은 값).
-const BUNDLE_QTY_MAX = 99
-
 // items의 code가 하나라도 모르는 값이면 통째로 거부한다(3a의 처방 저장과 같은 규칙).
 function validateBundleItems(items, res) {
   if (items !== undefined && !Array.isArray(items)) {
@@ -182,12 +180,11 @@ function validateBundleItems(items, res) {
     seen.add(key)
 
     const rawQty = row.qty === undefined ? 1 : row.qty
-    if (typeof rawQty !== 'number' || !Number.isFinite(rawQty) || rawQty <= 0 || rawQty > BUNDLE_QTY_MAX) {
-      res.status(400).json({ error: `수량은 0보다 크고 ${BUNDLE_QTY_MAX} 이하인 숫자여야 합니다: ${row.code}` })
+    if (typeof rawQty !== 'number' || !Number.isFinite(rawQty) || rawQty <= 0 || rawQty > QTY_MAX) {
+      res.status(400).json({ error: `수량은 0보다 크고 ${QTY_MAX} 이하인 숫자여야 합니다: ${row.code}` })
       return null
     }
-    const qty = Math.round(rawQty * 10) / 10
-    parsed.push({ code: row.code, dose, qty })
+    parsed.push({ code: row.code, dose, qty: roundQty(rawQty) })
   }
   return parsed
 }
