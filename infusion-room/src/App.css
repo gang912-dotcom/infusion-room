@@ -4927,7 +4927,10 @@
 .chat-notice__add { margin: 8px 10px 0; align-self: flex-start; }
 .chat-notice--edit { flex-direction: column; align-items: stretch; }
 
+/* box-sizing이 없으면 width:100%에 padding·border가 더해져 18px 넘친다.
+   열 flex라 그 폭이 라인 폭이 되어 아래 취소/저장 줄까지 같이 밀려 나갔다. */
 .chat-notice__input {
+  box-sizing: border-box;
   width: 100%;
   padding: 6px 8px;
   font-family: inherit;
@@ -5016,19 +5019,30 @@
 
 .chat-panel__btn--send { color: #ffffff; background: var(--solid-green); border-color: var(--solid-green); }
 
-/* 우하단 모서리 손잡이. 아이패드에서도 잡히도록 18px로 넉넉히 잡았다. */
-.chat-panel__resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 18px;
-  height: 18px;
-  cursor: nwse-resize;
-  touch-action: none;
-  background:
-    linear-gradient(135deg, transparent 55%, var(--text-muted) 55%, var(--text-muted) 65%, transparent 65%,
-      transparent 75%, var(--text-muted) 75%, var(--text-muted) 85%, transparent 85%);
-}
+/* 크기 조절 손잡이 — 네 변 + 네 모서리. 눈에 보이는 표시는 없다(커서 모양만 바뀐다).
+   아이패드 터치를 감안해 변 8px, 모서리 16px. 모서리가 변을 덮어야 하므로
+   JSX에서 모서리를 뒤에 그린다(위치가 같은 층이면 나중 것이 위다 — z-index 불필요). */
+.chat-panel__grip { position: absolute; touch-action: none; }
+
+.chat-panel__grip--n { top: 0; left: 0; right: 0; height: 8px; cursor: ns-resize; }
+.chat-panel__grip--s { bottom: 0; left: 0; right: 0; height: 8px; cursor: ns-resize; }
+.chat-panel__grip--w { top: 0; bottom: 0; left: 0; width: 8px; cursor: ew-resize; }
+.chat-panel__grip--e { top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; }
+
+.chat-panel__grip--nw,
+.chat-panel__grip--ne,
+.chat-panel__grip--sw,
+.chat-panel__grip--se { width: 16px; height: 16px; }
+
+.chat-panel__grip--nw { top: 0; left: 0; cursor: nwse-resize; }
+.chat-panel__grip--ne { top: 0; right: 0; cursor: nesw-resize; }
+.chat-panel__grip--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.chat-panel__grip--se { bottom: 0; right: 0; cursor: nwse-resize; }
+
+/* 손잡이가 맨 뒤에 있어 모서리에 걸친 버튼을 덮는다. 그 두 개만 위로 올린다
+   (줄 전체를 올리면 헤더·입력줄 위에서 변을 못 잡는다). */
+.chat-panel__close,
+.chat-input .chat-panel__btn { position: relative; z-index: 1; }
 
 /* 채팅이 켜져 있을 때 헤더 칩 강조 */
 .header-msg-btn--on { color: var(--status-occupied); border-color: var(--status-occupied); }

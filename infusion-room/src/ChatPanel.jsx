@@ -125,11 +125,31 @@ export default function ChatPanel({ account, onClose, onSeen }) {
   function onPointerMove(e) {
     const d = dragRef.current
     if (!d) return
-    const dx = e.clientX - d.startX
-    const dy = e.clientY - d.startY
-    setBox(clampToScreen(d.mode === 'move'
-      ? { ...d.box, x: d.box.x + dx, y: d.box.y + dy }
-      : { ...d.box, w: d.box.w + dx, h: d.box.h + dy }))
+    const b = d.box
+    let dx = e.clientX - d.startX
+    let dy = e.clientY - d.startY
+    if (d.mode === 'move') {
+      setBox(clampToScreen({ ...b, x: b.x + dx, y: b.y + dy }))
+      return
+    }
+    // 서·북쪽은 위치도 같이 움직인다. w/h를 만든 뒤에 자르면 최소 크기에 닿았을 때
+    // x/y만 계속 밀려 반대편 변이 딸려온다 — 그래서 dx/dy를 먼저 자른다.
+    const next = { ...b }
+    if (d.mode.includes('w')) {
+      dx = Math.max(-b.x, Math.min(dx, b.w - MIN_W))
+      next.x = b.x + dx
+      next.w = b.w - dx
+    } else if (d.mode.includes('e')) {
+      next.w = Math.max(MIN_W, Math.min(b.w + dx, window.innerWidth - b.x))
+    }
+    if (d.mode.includes('n')) {
+      dy = Math.max(-b.y, Math.min(dy, b.h - MIN_H))
+      next.y = b.y + dy
+      next.h = b.h - dy
+    } else if (d.mode.includes('s')) {
+      next.h = Math.max(MIN_H, Math.min(b.h + dy, window.innerHeight - b.y))
+    }
+    setBox(next)
   }
 
   function endDrag() {
@@ -278,13 +298,17 @@ export default function ChatPanel({ account, onClose, onSeen }) {
         <button type="button" className="chat-panel__btn chat-panel__btn--send" onClick={submit}>전송</button>
       </div>
 
-      {/* 우하단 모서리를 끌어 크기 조절. 아이패드에서도 잡히도록 넉넉히 잡았다. */}
-      <span
-        className="chat-panel__resize"
-        onPointerDown={(e) => beginDrag(e, 'resize')}
-        role="separator"
-        aria-label="채팅창 크기 조절"
-      />
+      {/* 네 변·네 모서리 어디를 끌어도 크기가 바뀐다. 모서리가 변을 덮어야 하므로
+          변을 먼저, 모서리를 뒤에 그린다. 포인터로만 쓰는 손잡이라(키보드 조작 경로가
+          없다) 보조기기에는 감춘다 — 8개를 다 읽히면 소음만 된다. */}
+      {['n', 's', 'w', 'e', 'nw', 'ne', 'sw', 'se'].map((dir) => (
+        <span
+          key={dir}
+          className={`chat-panel__grip chat-panel__grip--${dir}`}
+          onPointerDown={(e) => beginDrag(e, dir)}
+          aria-hidden="true"
+        />
+      ))}
     </section>
   )
 }
