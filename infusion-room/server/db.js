@@ -224,9 +224,11 @@ const BUNDLE_SEED = [
     { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
     { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' }, { code: 'mpc_basic' },
   ] },
+  // 판비콤프(EMR MVC)가 빠져 있었다 — 사진에는 있다. 이미 시드가 돈 DB는 이 배열을
+  // 다시 읽지 않으므로 아래 bundle_add_260806 블록이 따로 채워 넣는다.
   { name: '부신기능저하증 (200)', emr: '200-10', items: [
     { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
-    { code: 'merit', dose: '10g' }, { code: 'meganesium' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
     { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
     { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 },
   ] },
@@ -442,13 +444,15 @@ const BUNDLE_ADD = [
     { code: 'gcbbon' }, { code: 'denogan', qty: 1.5 }, { code: 'ord_basic', qty: 0.5 },
     { code: 'pediamin' }, { code: 'mpc_basic', qty: 2 },
   ] },
-  // 페라미플루의 EMR 용법이 '1+ns50'이지만 n/s 50은 등록코드 줄이 아니라 희석액 표기라
-  // 항목으로 넣지 않았다 — 사진에 없는 것을 만들지 않는다.
+  // 페라미플루의 EMR 용법 '1+ns50'은 희석액이라 등록코드 줄이 없다. 화면에서는 독감 그룹의
+  // n/s 50(페라미플루 바로 윗줄)을 같이 체크한다 — 실제로 한 백을 단다.
+  // 페라미플루가 몇 개든 n/s 50은 하나다(희석액이라 개수를 따라가지 않는다).
   { emr: 'iv20-3', name: '소아수액 (독감)', items: [
     { code: 'ns', dose: '180' }, { code: 'licorice' }, { code: 'nac' },
     { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'b6' }, { code: 'b12' },
     { code: 'panbicomp' }, { code: 'gcbbon' }, { code: 'denogan', qty: 1.5 },
-    { code: 'ord_basic', qty: 0.5 }, { code: 'peramiflu' }, { code: 'mpc_basic', qty: 2 },
+    { code: 'ord_basic', qty: 0.5 }, { code: 'ns50' }, { code: 'peramiflu' },
+    { code: 'mpc_basic', qty: 2 },
   ] },
   { emr: '180', name: 'iv180(B6:3개 데노간2)', items: [
     { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
@@ -469,6 +473,13 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260806'").get())
                   VALUES ('mineral', '미량원소', ?, ?, ?)`)
         .run(beside.group_key, beside.sort_order + 0.5, beside.route)
     }
+
+    // 기존 200-10에 판비콤프(EMR MVC)가 빠져 있었다. 위 BUNDLE_SEED도 고쳤지만 시드가
+    // 이미 돈 DB는 그 배열을 다시 읽지 않으므로 여기서 채운다. OR IGNORE라 새로 만들어진
+    // DB(시드가 이미 넣은 상태)에서는 아무 일도 하지 않는다.
+    // 다른 항목·수량은 손대지 않는다 — 관리자가 고친 값을 되돌리면 안 된다.
+    db.prepare(`INSERT OR IGNORE INTO order_bundle_items (bundle_id, item_code, dose, qty)
+                SELECT id, 'panbicomp', '', 1 FROM order_bundles WHERE emr_code = '200-10'`).run()
 
     const exists = db.prepare('SELECT 1 FROM order_bundles WHERE emr_code = ?')
     const insBundle = db.prepare('INSERT INTO order_bundles (name, emr_code, sort_order) VALUES (?, ?, ?)')
