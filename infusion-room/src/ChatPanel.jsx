@@ -117,6 +117,10 @@ export default function ChatPanel({ account, onClose, onSeen }) {
 
   function beginDrag(e, mode) {
     if (e.button !== undefined && e.button !== 0) return
+    // 버튼 위에서 시작한 누름은 드래그가 아니다(쪽지 카드도 같은 가드를 쓴다).
+    // 여기서 캡처를 잡으면 이어지는 click이 캡처 요소(제목줄)로 재타깃돼 버튼의
+    // onClick이 아예 안 불린다 — 헤더의 ✕가 이것 때문에 안 먹었다.
+    if (e.target.closest('button')) return
     e.preventDefault()
     e.currentTarget.setPointerCapture?.(e.pointerId)
     dragRef.current = { mode, startX: e.clientX, startY: e.clientY, box }
