@@ -97,6 +97,22 @@ router.post('/sessions/assign', (req, res) => {
     patient = { id: info.lastInsertRowid }
   }
 
+  // 같은 환자가 두 베드를 차지하면 안 된다. 최종 방어선은 db.js의 부분 유니크 인덱스지만
+  // 그것만 있으면 근무자에게 SQLITE_CONSTRAINT가 그대로 보인다 — 여기서 읽을 수 있는 말로 돌려준다.
+  // 조건은 그 인덱스와 똑같아야 한다(ended_at IS NULL AND cancelled = 0).
+  // INSERT INTO sessions는 이 라우트 한 곳뿐이라 두 배정 경로가 모두 여기를 지난다.
+  const activeElsewhere = db.prepare(`
+    SELECT b.room, b.number FROM sessions s JOIN beds b ON b.id = s.bed_id
+    WHERE s.patient_id = ? AND s.ended_at IS NULL AND s.cancelled = 0 LIMIT 1
+  `).get(patient.id)
+  if (activeElsewhere) {
+    // 방 라벨은 클라가 붙인다(ROOM_LABELS가 정본) — active_bed를 함께 실어 보낸다.
+    return res.status(409).json({
+      error: `${patient_name} 환자는 이미 다른 베드에 배정돼 있습니다`,
+      active_bed: { room: activeElsewhere.room, bed_number: activeElsewhere.number },
+    })
+  }
+
   let sessionId
   try {
     // 특이사항(기저질환)은 이 방문의 스냅샷으로 세션에 남기고, 정본은 환자에 쓴다.

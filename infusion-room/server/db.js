@@ -507,4 +507,32 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260806'").get())
   })()
 }
 
+// ─── 같은 환자가 두 베드에 동시에 배정되는 것 막기 (2026-08-07) ────────
+// 베드에는 이미 같은 형태의 부분 유니크 인덱스가 있다(idx_sessions_one_active).
+// 두 근무자가 '동시에' 같은 환자를 서로 다른 베드에 넣는 경합은 이것만이 막는다
+// (assign 라우트의 가드는 읽을 수 있는 메시지를 주는 용도라 경합은 못 막는다).
+//
+// 조건은 베드 인덱스와 똑같이 둔다. deleted를 더하면 휴지통에 넣었지만 종료되지 않은
+// 세션이 인덱스에만 잡히고 화면에는 안 보여 '이용 중이 아닌데 배정이 거부되는' 상황이 된다.
+//
+// settings 플래그를 쓰지 않는 이유: IF NOT EXISTS라 멱등이고, 이미 위반이 있는 DB에서는
+// 생성이 실패하므로 매 기동 다시 시도해야 정리된 뒤 저절로 만들어진다.
+// 데이터를 자동으로 고치지는 않는다 — 진행 중인 세션을 코드가 임의로 종료시키면 안 된다.
+try {
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active_patient
+             ON sessions(patient_id) WHERE ended_at IS NULL AND cancelled = 0`)
+} catch (err) {
+  const dup = db.prepare(`
+    SELECT p.chart_no, p.name, COUNT(*) AS c
+    FROM sessions s JOIN patients p ON p.id = s.patient_id
+    WHERE s.ended_at IS NULL AND s.cancelled = 0
+    GROUP BY s.patient_id HAVING c > 1
+  `).all()
+  console.error(
+    '[db] 같은 환자가 여러 베드에 배정돼 있어 중복 방지 인덱스를 만들지 못했습니다:',
+    dup.map((d) => `${d.name}(${d.chart_no}) ${d.c}곳`).join(', ') || err.message,
+  )
+  console.error('[db] 해당 세션을 정리하면 다음 기동에 자동으로 만들어집니다.')
+}
+
 export default db

@@ -5088,3 +5088,114 @@
 }
 
 .chat-msg__del:hover { color: var(--status-completed); }
+
+/* ─── 환자 검색 바 (탭 바 밑, 수액실 탭에서만) ─────────────────────────
+   결과는 떠 있는 목록이다 — 자리를 차지하면 묶음 칩 때처럼 보드가 밀려 내려간다.
+   흰 글자를 얹는 곳은 --solid-*를 쓴다(--status-* 위에 흰 글자를 올리지 않는다). */
+.psearch {
+  position: relative;
+  align-self: flex-start;
+  width: min(420px, 100%);
+}
+
+.psearch__row { display: flex; gap: 6px; }
+
+.psearch__input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+
+.psearch__btn {
+  flex: none;
+  min-height: 44px; /* 아이패드 터치타깃 */
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--solid-green);
+  border: 1px solid var(--solid-green);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.psearch__btn:disabled { opacity: 0.55; cursor: default; }
+
+.psearch__error { margin: 4px 0 0; font-size: 12px; color: var(--status-completed); }
+
+/* 보드 카드 위, 쪽지(300)·채팅(320)·모달보다는 아래. */
+.psearch__results {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.psearch__empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.psearch__hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text-primary);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.psearch__hit:hover { background: var(--hover-tint); }
+
+/* min-width: 0이 없으면 flex 항목이 내용보다 작아지지 않아, 아주 긴 이름이 오른쪽
+   '이용 중' 배지를 상자 밖으로 밀어낸다(배지는 flex: none이다).
+   실측: 7자 이름 + 7자리 번호 + 가장 긴 배지는 116px 여유로 들어간다. */
+.psearch__name {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.psearch__chart { flex: none; font-size: 12px; color: var(--text-secondary); }
+
+/* 이미 다른 베드에 있는 환자. 누르면 배정 대신 그 베드로 데려간다. */
+.psearch__active {
+  margin-left: auto;
+  flex: none;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--solid-amber);
+  border-radius: 999px;
+}

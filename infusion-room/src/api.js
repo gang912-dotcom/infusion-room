@@ -15,7 +15,11 @@ async function apiFetch(path, options = {}) {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data.error ?? `요청 실패 (${res.status})`)
+    const err = new Error(data.error ?? `요청 실패 (${res.status})`)
+    // 응답 본문을 그대로 달아 둔다 — 문구 말고 값이 필요한 곳이 있다.
+    // (배정 409의 active_bed로 '이미 수액센터 3번에 있습니다'를 만든다.)
+    err.data = data
+    throw err
   }
   return data
 }
@@ -173,6 +177,14 @@ export async function getBoard(sinceRevision) {
 
 export async function getStaffList() {
   return apiFetch('/staff')
+}
+
+// 이름·차트번호로 환자를 찾는다(배정 화면 검색칸). lookup과 달리 이름 부분 일치를 지원한다.
+// 응답에 baseline_note와 현재 베드가 함께 와서 배정 모달을 여는 데 추가 왕복이 없다.
+export async function searchPatients(q) {
+  const trimmed = String(q ?? '').trim()
+  if (!trimmed) return []
+  return apiFetch(`/patients/search?q=${encodeURIComponent(trimmed)}`)
 }
 
 export async function lookupPatient(chartNo) {

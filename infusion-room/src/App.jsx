@@ -13,7 +13,7 @@ import {
   loadVitals, createVitals, editVitals,
   getPatientSessionNotes,
   editSessionNote,
-  getStaffList, lookupPatient, logPatientDetailView,
+  getStaffList, lookupPatient, searchPatients, logPatientDetailView,
   assignBed, editSessionSpecialNote, editSessionExamRoom, startSession,
   getOrderItems, getPrescription, savePrescription, getOrderBundles,
   listOrderItemsAdmin, createOrderItem, updateOrderItem, deleteOrderItem,
@@ -4183,6 +4183,107 @@ function ComposeMessageModal({ onClose, closing }) {
   )
 }
 
+// ─── 환자 검색 바 — 베드가 있는 탭에서만 보인다 ──────────────────────
+// 이름·차트번호로 찾아 환자를 고르면 배정 대기 모드로 넘긴다(App의 pendingPatient).
+// 기존 등록 경로(빈 베드 → 모달 → 차트번호 입력)를 대체하지 않고 하나 더하는 것이다.
+//
+// 검색은 버튼이나 Enter로만 한다 — 타이핑마다 서버를 때릴 이유가 없고, 이름 두 글자에
+// 걸리는 환자가 수십 명이라 자동 검색은 오히려 방해가 된다.
+// 결과는 떠 있는 목록이라 보드를 밀어내지 않는다.
+function PatientSearchBar({ onPick, disabled }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState(null) // null = 아직 검색하지 않음(빈 배열과 다르다)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const boxRef = useRef(null)
+
+  // 바깥을 누르면 결과를 닫는다. 결과가 떠 있을 때만 듣는다.
+  useEffect(() => {
+    if (results === null) return undefined
+    function onDown(e) {
+      if (!boxRef.current?.contains(e.target)) setResults(null)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [results])
+
+  async function run() {
+    const q = query.trim()
+    if (!q) return
+    setBusy(true)
+    setError('')
+    try {
+      setResults(await searchPatients(q))
+    } catch (err) {
+      // 참조 데이터와 달리 재시도하지 않는다 — 사용자가 다시 누르면 되는 일회성 요청이다.
+      setError(err.message)
+      setResults(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 한글 조합 중 Enter는 무시한다 — 조합이 끝나기 전에 보내면 마지막 글자가 잘린다(채팅과 같은 함정).
+  function onKeyDown(e) {
+    if (e.key === 'Escape') { setResults(null); return }
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+    e.preventDefault()
+    run()
+  }
+
+  function pick(p) {
+    setResults(null)
+    setQuery('')
+    onPick(p)
+  }
+
+  return (
+    <div className="psearch" ref={boxRef}>
+      <div className="psearch__row">
+        {/* inputMode를 지정하지 않는다 — 이름과 번호를 같은 칸에서 받으므로 문자 키보드가 기본이어야 한다. */}
+        <input
+          type="text"
+          className="psearch__input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="환자 검색 — 이름 또는 차트번호"
+          aria-label="환자 검색"
+          disabled={disabled}
+        />
+        <button type="button" className="psearch__btn" onClick={run} disabled={disabled || busy}>
+          {busy ? '검색 중' : '검색'}
+        </button>
+      </div>
+
+      {error && <p className="psearch__error" role="alert">{error}</p>}
+
+      {results !== null && !error && (
+        <ul className="psearch__results">
+          {results.length === 0 ? (
+            <li className="psearch__empty">
+              검색 결과가 없습니다. 신규 환자는 빈 베드를 눌러 등록하세요.
+            </li>
+          ) : results.map((p) => (
+            <li key={p.chart_no}>
+              {/* 차트번호를 늘 함께 보여 동명이인을 가른다. */}
+              <button type="button" className="psearch__hit" onClick={() => pick(p)}>
+                <span className="psearch__name">{p.name}</span>
+                <span className="psearch__chart">({p.chart_no})</span>
+                {p.active && (
+                  <span className="psearch__active">
+                    이용 중 · {ROOM_LABELS[p.active.room] ?? p.active.room} {p.active.bed_number}번
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ─── App ────────────────────────────────────────────────────────
 function App() {
   const [account, setAccount] = useState(null)
@@ -4276,6 +4377,10 @@ function App() {
   const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
   const [movingBed, setMovingBed] = useState(null)
   const [moveBedAlert, setMoveBedAlert] = useState('')
+  // 환자 검색으로 고른 환자 — 있으면 '배정 대기' 모드다(빈 베드를 누르면 그 환자로 등록 모달이 열린다).
+  // 자리이동(movingBed)과 같은 구조를 쓴다: 같은 안내 바, 같은 빈 베드 강조.
+  // 값은 검색 응답 한 줄 그대로다({ chart_no, name, baseline_note, active }).
+  const [pendingPatient, setPendingPatient] = useState(null)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   // 기록 편집 — null이면 신규 작성, id가 있으면 그 레코드를 수정하는 모드.
   // 폼(특이사항·주의사항·라운딩)은 신규와 편집이 같은 것을 쓰고 저장 시점만 갈린다.
@@ -4338,12 +4443,13 @@ function App() {
       else if (editPatientModal) setEditPatientModal(false)
       else if (cleanupBed) setCleanupBed(null)
       else if (movingBed) setMovingBed(null)
+      else if (pendingPatient) setPendingPatient(null)
       else if (selectedBed) closeModal()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composeOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, selectedBed])
+  }, [composeOpen, noteModalOpen, roundModalOpen, removePatientConfirm, editPatientModal, cleanupBed, movingBed, pendingPatient, selectedBed])
 
   // 쪽지 10분 휘발 — 폴링(≤3초)으로도 빠지지만, 정확히 10:00에 사라지게 하는 보조 타이머.
   useEffect(() => {
@@ -4435,9 +4541,11 @@ function App() {
 
   // 열려 있는 모달(배정/시작 폼, 라운딩, 베드이동, 정리 확인)이 있는 동안은 폴링이
   // beds를 갈아치우지 않게 막는다 — 입력 중인 내용이나 방금 연 폼이 갱신 때문에 바뀌면 안 됨.
+  // 배정 대기(pendingPatient)도 같다. 베드를 고르는 동안 보드가 다시 그려지면
+  // 누르려던 카드가 손가락 밑에서 움직인다 — movingBed를 여기 넣은 이유와 같다.
   useEffect(() => {
-    isModalBusyRef.current = !!(selectedBed || roundModalOpen || movingBed || cleanupBed)
-  }, [selectedBed, roundModalOpen, movingBed, cleanupBed])
+    isModalBusyRef.current = !!(selectedBed || roundModalOpen || movingBed || pendingPatient || cleanupBed)
+  }, [selectedBed, roundModalOpen, movingBed, pendingPatient, cleanupBed])
 
   // 보드 폴링 — 화면 표시 중 3초 / 백그라운드 탭 30초, 연속 실패 시 3→6→12→30초로 늘어남.
   useEffect(() => {
@@ -4861,17 +4969,21 @@ function App() {
     }
   }
 
-  function openModal(bed) {
+  // prefill은 환자 검색으로 들어온 경우에만 온다({ chart_no, name, baseline_note }).
+  // 검색 응답이 lookupPatient와 같은 모양이라 그대로 lookupInfo로 쓴다 — 라인담당을 고른
+  // 순간 특이사항 안내 모달이 기존과 똑같이 뜬다(그 조건이 lookupInfo.baseline_note다).
+  // 채운 값은 읽기 전용이 아니다. 환자를 잘못 골랐으면 그 자리에서 고칠 수 있어야 한다.
+  function openModal(bed, prefill = null) {
     setSelectedBed(bed)
     setActionError('')
     // 열 때도 되돌린다 — 다른 베드를 바로 열면 앞 환자의 편집 초안이 딸려온다.
     resetInlineEdits()
     if (bed.status === 'vacant') {
-      setPatientName('')
-      setChartNumber('')
+      setPatientName(prefill?.name ?? '')
+      setChartNumber(prefill?.chart_no ?? '')
       setLineStaffId('')
-      setLookupInfo(null)
-      setSpecialNote('')
+      setLookupInfo(prefill ? { ...prefill, found: true } : null)
+      setSpecialNote(prefill?.baseline_note ?? '')
       setExamRoom('')
       // 새 등록이니 안내를 다시 띄울 수 있게 되돌린다.
       noteAlertShownRef.current = false
@@ -4912,6 +5024,11 @@ function App() {
     // 이동 모드일 때 우선 처리
     if (movingBed) {
       handleMoveToBed(bed)
+      return
+    }
+    // 환자 검색으로 고른 환자를 배정하는 모드
+    if (pendingPatient) {
+      await handleAssignPendingToBed(bed)
       return
     }
     if (bed.status === 'completed') {
@@ -5037,6 +5154,47 @@ function App() {
 
   function handleCancelMoveBed() {
     setMovingBed(null)
+    setMoveBedAlert('')
+  }
+
+  // 배정 대기 모드에서 베드를 눌렀을 때. 잠금·모달 열기는 기존 빈 베드 클릭과 똑같이 하고,
+  // 다른 점은 환자 정보를 채운 채로 연다는 것뿐이다.
+  async function handleAssignPendingToBed(bed) {
+    if (bed.status !== 'vacant') {
+      setMoveBedAlert('사용 중인 베드입니다.\n빈 베드를 선택해주세요.')
+      return
+    }
+    if (bed.lockedBy) {
+      setMoveBedAlert('다른 사람이 등록 중입니다.')
+      return
+    }
+    try {
+      await acquireBedLock(bed.id)
+    } catch (err) {
+      // 잠금 실패는 이 베드만의 문제다 — 모드를 유지해 다른 베드를 고를 수 있게 둔다.
+      setMoveBedAlert(err.message || '다른 사람이 등록 중입니다.')
+      refreshBoard()
+      return
+    }
+    startLockHeartbeat(bed.id)
+    openModal(bed, pendingPatient)
+    // 모달로 넘어갔으므로 대기 모드는 끝난다. 모달을 취소하면 검색부터 다시 한다.
+    setPendingPatient(null)
+    setMoveBedAlert('')
+  }
+
+  // 검색 결과에서 환자를 골랐을 때. 이용 중이면 배정하지 않고 그 베드를 보여준다.
+  function handlePickSearchedPatient(patient) {
+    if (patient.active) {
+      setActiveTab(patient.active.room)
+      setPendingPatient(null)
+      setMoveBedAlert(
+        `${patient.name} 환자는 이미 ${ROOM_LABELS[patient.active.room] ?? patient.active.room} `
+        + `${patient.active.bed_number}번에 있습니다.`,
+      )
+      return
+    }
+    setPendingPatient(patient)
     setMoveBedAlert('')
   }
 
@@ -5502,7 +5660,7 @@ function App() {
       return (
         <article
           key={bed.id}
-          className={`bed-card bed-card--vacant${movingBed ? ' bed-card--movable' : ''}`}
+          className={`bed-card bed-card--vacant${movingBed || pendingPatient ? ' bed-card--movable' : ''}`}
           onClick={(e) => handleBedClick(bed, e.currentTarget)}
           role="button"
           tabIndex={0}
@@ -5590,7 +5748,7 @@ function App() {
     return (
       <article
         key={bed.id}
-        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${movingBed && bed.id !== movingBed.id ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
+        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${(movingBed && bed.id !== movingBed.id) || pendingPatient ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
         onClick={(e) => handleBedClick(bed, e.currentTarget)}
         role="button"
         tabIndex={0}
@@ -5799,6 +5957,12 @@ function App() {
         ))}
       </nav>
 
+      {/* 환자 검색 — 베드가 있는 탭에서만. 이용기록·환자조회·통계·데이터관리에서는
+          고른 환자를 놓을 자리가 없어 배정이 성립하지 않는다. */}
+      {ROOM_TABS.some((t) => t.id === activeTab) && (
+        <PatientSearchBar onPick={handlePickSearchedPatient} disabled={offline} />
+      )}
+
       {/* ── 오프라인 배너 — 서버 연결이 끊긴 동안 읽기 전용임을 알린다 ── */}
       {offline && (
         <div className="offline-banner" role="status">
@@ -5807,6 +5971,25 @@ function App() {
             {formatStaleness(lastSyncAt, now) ?? '저장된 정보가 없습니다'}
             {' · 읽기 전용 — 기록·저장은 연결이 돌아온 뒤에 가능합니다'}
           </span>
+        </div>
+      )}
+
+      {/* ── 배정 대기 모드 안내 바 — 자리이동 바와 같은 자리·같은 모양이다 ── */}
+      {pendingPatient && (
+        <div className="move-banner">
+          <div className="move-banner__text">
+            <span className="move-banner__label">배정 대기 중</span>
+            <span className="move-banner__desc">
+              <strong>{pendingPatient.name}</strong>({pendingPatient.chart_no}) 환자를 배정할 빈 베드를 선택해주세요.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="move-banner__cancel"
+            onClick={() => { setPendingPatient(null); setMoveBedAlert('') }}
+          >
+            취소
+          </button>
         </div>
       )}
 
