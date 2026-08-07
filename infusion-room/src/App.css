@@ -268,6 +268,44 @@
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ─── 악마 등장 (초상화 클릭 5%) ──────────────────────────────────
+   header-wrap이 overflow:hidden이라 2배로 키우면 헤더 밖으로 나간 부분이 잘린다.
+   튀어나오는 동안만 풀어 준다. z-index는 아래 탭·검색칸 위로 올리기 위한 것이다. */
+.header-wrap--devil {
+  overflow: visible;
+  z-index: 3;
+}
+
+/* 평소 hover 확대는 bottom right 기준이지만, 여기서는 top right로 바꿔 아래로 자란다.
+   bottom right로 2배를 키우면 초상화 위쪽이 화면 밖으로 나가 머리가 잘린다
+   (실측: 헤더 위 여유가 23px뿐인데 78px이 더 필요하다). 아래로 자라면 탭을 잠깐 덮지만
+   1초짜리라 문제되지 않고, 오히려 튀어나오는 느낌이 산다.
+   커진 채 잠깐 머물렀다 돌아온다. 끝나면 onAnimationEnd가 클래스를 떼고 원래 사진으로 돌아간다. */
+.header__dog--devil {
+  transform-origin: top right;
+  animation: devil-pop 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 6px 18px rgba(190, 20, 20, 0.55));
+}
+
+@keyframes devil-pop {
+  0%   { transform: scale(1); }
+  22%  { transform: scale(2); }
+  70%  { transform: scale(2); }
+  100% { transform: scale(1); }
+}
+
+/* 모션을 줄여달라고 한 사용자에게 2배로 튀어나오는 건 과하다.
+   재미 요소를 없애지는 않고(사진은 그대로 바뀐다) 움직임만 작게 줄인다. */
+@media (prefers-reduced-motion: reduce) {
+  .header__dog--devil { animation-duration: 0.8s; }
+  @keyframes devil-pop {
+    0%   { transform: scale(1); }
+    22%  { transform: scale(1.15); }
+    70%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+  }
+}
+
 .header__dog-btn:hover .header__dog {
   transform: scale(1.08);
 }

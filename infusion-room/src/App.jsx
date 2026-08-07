@@ -485,6 +485,8 @@ const BOSS_LINES = [
   '나 보고싶어?',
   '그만 만져.',
   '힘내. 할 수 있어.',
+  '괜찮아 누구나 실수해.',
+  '살 빼.',
   '그만 찔러.',
   '너 누구야.',
   '팍 씨.',
@@ -543,6 +545,15 @@ const BOSS_LINES = [
 ]
 
 const BOSS_LINE_MS = 2800
+
+// 초상화를 누를 때 가끔 악마가 튀어나온다. 20번에 한 번.
+// 확률을 여기 한 곳에 두는 이유: 재미 요소라 값이 자주 바뀐다.
+const DEVIL_CHANCE = 0.05
+
+// import가 아니라 URL이다. 실제 인물 얼굴을 변형한 사진이라 공개 레포에 올리지 않고
+// public/에 손으로 넣는다(.gitignore). import로 두면 파일이 없는 곳에서 빌드가 깨진다.
+// 파일이 없으면 아래 프리로드가 실패해 이스터에그 자체가 안 켜진다 — 깨진 이미지가 뜨지 않는다.
+const DEVIL_SRC = '/header-portrait-devil.png'
 
 // 직전에 나온 줄은 빼고 뽑는다 — 연속으로 같은 말이 나오면 고장 난 것처럼 보인다.
 function pickBossLine(previous) {
@@ -4477,6 +4488,10 @@ function App() {
 
   // 헤더 초상화 한마디 — 누를 때마다 랜덤 한 줄, 잠시 뒤 사라진다.
   const [bossLine, setBossLine] = useState(null)
+  // 악마 등장 — 애니메이션이 끝나면 onAnimationEnd가 스스로 끈다(타이머를 따로 두지 않는다).
+  const [devilPop, setDevilPop] = useState(false)
+  // 이미지가 실제로 있을 때만 켠다. 미리 받아두는 효과도 있어 첫 등장에 빈 칸이 안 보인다.
+  const [devilReady, setDevilReady] = useState(false)
   const bossTimerRef = useRef(null)
   const [patientViewSeed, setPatientViewSeed] = useState(null)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
@@ -4812,10 +4827,18 @@ function App() {
     clearTimeout(bossTimerRef.current)
     setBossLine((prev) => pickBossLine(prev))
     bossTimerRef.current = setTimeout(() => setBossLine(null), BOSS_LINE_MS)
+    // 이미 튀어나와 있으면 다시 뽑지 않는다 — 애니메이션 중간에 다시 걸면 끊긴다.
+    if (devilReady && !devilPop && Math.random() < DEVIL_CHANCE) setDevilPop(true)
   }
 
   // 말풍선이 떠 있는 채로 화면을 벗어나도 타이머가 남지 않게
   useEffect(() => () => clearTimeout(bossTimerRef.current), [])
+
+  useEffect(() => {
+    const img = new Image()
+    img.onload = () => setDevilReady(true)
+    img.src = DEVIL_SRC
+  }, [])
 
   // 언마운트(로그아웃 등) 시 등록 잠금 하트비트 타이머 정리
   useEffect(() => () => clearInterval(lockHeartbeatRef.current), [])
@@ -5890,7 +5913,7 @@ function App() {
     <div className="app">
       {/* header-zone: 말풍선을 헤더 카드 바로 아래에 앉히기 위한 기준점 */}
       <div className="header-zone">
-        <div className="header-wrap">
+        <div className={`header-wrap${devilPop ? ' header-wrap--devil' : ''}`}>
           <header className="header">
             <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
             <div className="header__text">
@@ -5953,7 +5976,13 @@ function App() {
             onClick={handleBossClick}
             aria-label="한마디 듣기"
           >
-            <img src={headerPortrait} alt="" className="header__dog" aria-hidden="true" />
+            <img
+              src={devilPop ? DEVIL_SRC : headerPortrait}
+              alt=""
+              className={`header__dog${devilPop ? ' header__dog--devil' : ''}`}
+              aria-hidden="true"
+              onAnimationEnd={() => setDevilPop(false)}
+            />
           </button>
         </div>
 

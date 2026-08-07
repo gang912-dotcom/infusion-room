@@ -27,3 +27,9 @@ server/.env
 *.njsproj
 *.sln
 *.sw?
+
+# 초상화 이스터에그 이미지 — 실제 인물 얼굴을 변형한 사진이라 공개 레포에 올리지 않는다.
+# public/ 에 두면 있을 때만 빌드가 dist로 복사하고, 없으면 그냥 빠진다(빌드는 안 깨진다).
+# 화면도 이 파일이 실제로 로드될 때만 이스터에그를 켠다.
+# 맥과 서버 PC에 각각 손으로 넣어야 한다. deploy.bat에 git clean이 없어 pull해도 안 지워진다.
+public/header-portrait-devil.png
