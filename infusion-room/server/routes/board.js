@@ -10,7 +10,7 @@ const bedsStmt = db.prepare('SELECT id, code, room, number FROM beds WHERE is_ac
 const activeSessionStmt = db.prepare(`
   SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note, s.exam_room, s.visit_symptom,
          s.day_memo,
-         p.chart_no, p.name AS patient_name,
+         p.chart_no, p.name AS patient_name, p.gender,
          ls.name AS line_staff_name, ms.name AS mix_staff_name
   FROM sessions s
   JOIN patients p ON p.id = s.patient_id
@@ -122,7 +122,8 @@ router.get('/board', (req, res) => {
       session: {
         id: session.id,
         patient_id: session.patient_id,
-        patient: { chart_no: session.chart_no, name: session.patient_name },
+        // 성별은 patients의 현재 값이다(세션 스냅샷이 아니다) — 고치면 카드에 바로 반영된다.
+        patient: { chart_no: session.chart_no, name: session.patient_name, gender: session.gender ?? null },
         assigned_at: session.assigned_at,
         line_staff: session.line_staff_name,
         started_at: session.started_at,

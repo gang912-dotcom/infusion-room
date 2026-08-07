@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
-import { assertInRange, isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
+import { assertInRange, isUniqueConstraintError, normalizeChartNo, normalizeGender } from '../lib/validation.js'
 import { buildSessionRecord, attachSignatures, ROUTE_GROUP } from '../lib/record.js'
 
 const router = Router()
@@ -58,8 +58,10 @@ function checkStartedAt(startedAt, res) {
 router.post('/sessions/assign', (req, res) => {
   const {
     bed_code, chart_no, patient_name, line_staff_id,
-    special_note: specialNote, exam_room: examRoom,
+    special_note: specialNote, exam_room: examRoom, gender: rawGender,
   } = req.body ?? {}
+  // 아는 값이 아니면 null(미지정). 필수가 아니라 400으로 막지 않는다.
+  const gender = normalizeGender(rawGender)
   if (!bed_code || !chart_no || !patient_name || !line_staff_id) {
     return res.status(400).json({ error: 'bed_code, chart_no, patient_name, line_staff_id가 모두 필요합니다' })
   }
@@ -85,15 +87,20 @@ router.post('/sessions/assign', (req, res) => {
   if (!lineStaff) return res.status(400).json({ error: '유효하지 않은 라인 담당자입니다' })
 
   const now = Date.now()
-  let patient = db.prepare('SELECT id, name FROM patients WHERE chart_no = ?').get(normalizedChartNo)
+  let patient = db.prepare('SELECT id, name, gender FROM patients WHERE chart_no = ?').get(normalizedChartNo)
   if (patient) {
     if (patient.name !== patient_name) {
       db.prepare('UPDATE patients SET name = ?, updated_at = ? WHERE id = ?').run(patient_name, now, patient.id)
     }
+    // 성별은 값이 왔을 때만 쓴다. 미지정(null)을 그대로 덮으면 등록 모달이 성별을 못 채운
+    // 경로로 저장될 때마다 기존 값이 조용히 지워진다. 바꾸려면 '남' 또는 '녀'를 고르면 된다.
+    if (gender && gender !== patient.gender) {
+      db.prepare('UPDATE patients SET gender = ?, updated_at = ? WHERE id = ?').run(gender, now, patient.id)
+    }
   } else {
     const info = db.prepare(
-      'INSERT INTO patients (chart_no, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-    ).run(normalizedChartNo, patient_name, now, now)
+      'INSERT INTO patients (chart_no, name, gender, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(normalizedChartNo, patient_name, gender, now, now)
     patient = { id: info.lastInsertRowid }
   }
 

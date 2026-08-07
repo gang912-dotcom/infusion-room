@@ -724,6 +724,18 @@ function getNoteOccurredAt(note) {
 // 한 줄에 같이 두면 '처방 미작성' 글씨가 이름을 눌러 이름이 잘렸다.
 // 두 상태를 다 표시하는 이유: 한쪽만 표시하면 '표식 없음'이 미작성인지 데이터 없음인지
 // 구분이 안 돼 놓치게 된다. 색만으로 전달하지 않으려고 아이콘·글씨를 함께 쓴다.
+// 이름 왼쪽 성별 기호. 미지정이면 아무것도 그리지 않는다 — 12.9만 명 대부분이 당분간
+// 미지정이라 '없음' 표시를 두면 카드가 그걸로 도배된다.
+// 기호만으로도 읽히지만 색맹·스크린리더를 위해 aria-label로 말도 남긴다.
+function GenderMark({ gender }) {
+  if (gender !== 'M' && gender !== 'F') return null
+  return (
+    <span className={`sex sex--${gender}`} aria-label={gender === 'M' ? '남' : '녀'}>
+      {gender === 'M' ? '♂' : '♀'}
+    </span>
+  )
+}
+
 function PrescriptionCheck({ done }) {
   if (!done) return null
   return (
@@ -4375,6 +4387,8 @@ function App() {
   const [editStartOpen, setEditStartOpen] = useState(false)
   const [startDraft, setStartDraft] = useState(0)
   const [removePatientConfirm, setRemovePatientConfirm] = useState(false)
+  // 성별 — '' | 'M' | 'F'. ''(미지정)이면 서버가 기존 값을 덮지 않는다.
+  const [gender, setGender] = useState('')
   const [movingBed, setMovingBed] = useState(null)
   const [moveBedAlert, setMoveBedAlert] = useState('')
   // 환자 검색으로 고른 환자 — 있으면 '배정 대기' 모드다(빈 베드를 누르면 그 환자로 등록 모달이 열린다).
@@ -4961,6 +4975,8 @@ function App() {
       if (result.baseline_note && !specialNote.trim()) {
         setSpecialNote(result.baseline_note)
       }
+      // 성별도 같이 채운다. 근무자가 이미 고른 값이 있으면 덮지 않는다.
+      if (result.gender && !gender) setGender(result.gender)
       // 팝업은 여기서 띄우지 않는다 — 라인담당까지 지정돼 '환자 조회가 성립'한 뒤에
       // 안내 모달이 뜬다(아래 effect). 차트번호를 나중에 입력하는 순서도 있어서
       // select의 onChange에만 걸면 그 경우 안 뜬다.
@@ -4984,6 +5000,7 @@ function App() {
       setLineStaffId('')
       setLookupInfo(prefill ? { ...prefill, found: true } : null)
       setSpecialNote(prefill?.baseline_note ?? '')
+      setGender(prefill?.gender ?? '')
       setExamRoom('')
       // 새 등록이니 안내를 다시 띄울 수 있게 되돌린다.
       noteAlertShownRef.current = false
@@ -5615,6 +5632,7 @@ function App() {
         lineStaffId: Number(lineStaffId),
         specialNote: specialNote.trim(),
         examRoom,
+        gender,
       })
       stopLockAndRelease(selectedBed.id) // 배정 완료 — 등록 잠금 해제
       await refreshBoard()
@@ -5688,6 +5706,7 @@ function App() {
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
           <p className="bed-card__number">{bed.number}</p>
           <p className="bed-card__patient">
+            <GenderMark gender={bed.gender} />
             <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
             <PrescriptionCheck done={bed.hasPrescription} />
           </p>
@@ -5784,7 +5803,8 @@ function App() {
         )}
         <p className="bed-card__number">{bed.number}</p>
         <p className="bed-card__patient">
-          <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
+          <GenderMark gender={bed.gender} />
+            <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
           <PrescriptionCheck done={bed.hasPrescription} />
         </p>
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
@@ -6259,6 +6279,21 @@ function App() {
                     {lookupInfo.found ? `등록된 환자입니다 (${lookupInfo.name})` : '신규 환자입니다'}
                   </p>
                 )}
+
+                {/* 성별 — 라인담당·진료실과 달리 필수가 아니다. 미지정으로 두면 카드에
+                    아무것도 안 그리고, 서버도 기존 값을 덮지 않는다(지우려면 따로 고쳐야 한다). */}
+                <label className="field">
+                  <span className="field__label">성별 (선택)</span>
+                  <select
+                    className="field__input"
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                  >
+                    <option value="">미지정</option>
+                    <option value="M">남</option>
+                    <option value="F">녀</option>
+                  </select>
+                </label>
 
                 <label className="field">
                   <span className="field__label">라인 담당자</span>

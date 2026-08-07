@@ -85,6 +85,7 @@ function mapBoardToBeds(board) {
       status,
       patientName: s.patient.name,
       chartNumber: s.patient.chart_no,
+      gender: s.patient.gender ?? null,
       patientId: s.patient_id,
       startTime: s.started_at,
       durationMinutes: s.duration_minutes,
@@ -198,12 +199,13 @@ export function logPatientDetailView(chartNo) {
     .catch((err) => console.error('환자 조회 로그 기록 실패', err))
 }
 
-export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote, examRoom }) {
+export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote, examRoom, gender }) {
   return apiFetch('/sessions/assign', {
     method: 'POST',
     body: JSON.stringify({
       bed_code: bedCode, chart_no: chartNo, patient_name: patientName, line_staff_id: lineStaffId,
-      special_note: specialNote, exam_room: examRoom,
+      // 미지정('')은 서버가 null로 본다. null이면 기존 성별을 덮지 않는다.
+      special_note: specialNote, exam_room: examRoom, gender,
     }),
   })
 }

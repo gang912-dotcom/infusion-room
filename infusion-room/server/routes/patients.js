@@ -12,7 +12,7 @@ router.get('/patients/lookup', (req, res) => {
   }
 
   const patient = db.prepare(
-    'SELECT id, chart_no, name, baseline_note FROM patients WHERE chart_no = ?',
+    'SELECT id, chart_no, name, baseline_note, gender FROM patients WHERE chart_no = ?',
   ).get(normalized)
   if (!patient) {
     return res.json({ found: false, chart_no: normalized })
@@ -26,6 +26,9 @@ router.get('/patients/lookup', (req, res) => {
     chart_no: patient.chart_no,
     name: patient.name,
     baseline_note: patient.baseline_note ?? null,
+    // 등록 모달의 성별 드롭다운을 채운다. 이걸 안 주면 재방문마다 '미지정'으로 시작해
+    // 저장할 때 기존 성별을 덮어쓸 위험이 생긴다(서버에서도 막지만 화면이 틀리게 보인다).
+    gender: patient.gender ?? null,
   })
 })
 
@@ -54,7 +57,7 @@ router.get('/patients/search', (req, res) => {
   // GROUP BY는 그 인덱스가 아직 없는 DB(위반이 남아 있는 경우)에서 한 환자가
   // 여러 줄로 나오지 않게 하는 보험이다.
   const rows = db.prepare(`
-    SELECT p.chart_no, p.name, p.baseline_note,
+    SELECT p.chart_no, p.name, p.baseline_note, p.gender,
            b.room AS active_room, b.number AS active_bed_number
     FROM patients p
     LEFT JOIN sessions s
@@ -70,6 +73,7 @@ router.get('/patients/search', (req, res) => {
     chart_no: r.chart_no,
     name: r.name,
     baseline_note: r.baseline_note ?? null,
+    gender: r.gender ?? null,
     // 방 라벨('수액센터')은 서버에 두지 않는다 — 클라의 ROOM_LABELS가 정본이다.
     active: r.active_room ? { room: r.active_room, bed_number: r.active_bed_number } : null,
   })))

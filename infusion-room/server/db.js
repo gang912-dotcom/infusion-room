@@ -69,6 +69,9 @@ const patientColumns = db.prepare('PRAGMA table_info(patients)').all().map((c) =
 if (!patientColumns.includes('baseline_note')) {
   db.exec('ALTER TABLE patients ADD COLUMN baseline_note TEXT')
 }
+if (!patientColumns.includes('gender')) {
+  db.exec('ALTER TABLE patients ADD COLUMN gender TEXT')
+}
 
 // 구 환자 메모는 성격상 기저질환 정본에 가깝다(차트별 영구) → 1회 이관한다.
 // patient_memos는 지우지 않는다 — 이관이 잘못됐을 때 돌아갈 원본이다.

@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS patients (
   -- sessions.special_note는 그 방문의 스냅샷으로 남는다(기록지·CSV가 그걸 읽는다).
   -- 비우면 진짜로 지워진다 — 세션에서 최신 non-null을 찾던 옛 방식은 삭제가 불가능했다.
   baseline_note TEXT,
+  -- 성별. 'M' | 'F' | NULL(미지정). 환자에게 계속 따라다니는 값이라 세션 스냅샷을 두지 않는다
+  -- (이름·특이사항과 달리 과거 기록에서 되짚을 일이 없다).
+  gender     TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

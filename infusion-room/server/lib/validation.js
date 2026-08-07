@@ -28,6 +28,18 @@ export function roundQty(n) {
   return Math.round(n * 100) / 100
 }
 
+// ─── 성별 ────────────────────────────────────────────────────────────
+// 'M' | 'F' | null(미지정). 화면 드롭다운은 미지정을 ''로 보내고, EMR CSV는
+// 남/여·M/F·1/2 어느 쪽으로든 올 수 있다. 규칙을 여기 한 곳에 두는 이유는
+// 나중에 지난 환자 성별을 CSV로 일괄 입력할 때 같은 규칙이어야 하기 때문이다.
+// 아는 값이 아니면 null이다 — 모르면 미지정으로 두고 화면에 아무것도 안 그린다.
+export function normalizeGender(raw) {
+  const v = String(raw ?? '').trim().toUpperCase()
+  if (['M', '남', '남자', '1'].includes(v)) return 'M'
+  if (['F', '여', '녀', '여자', '2'].includes(v)) return 'F'
+  return null
+}
+
 export function isUniqueConstraintError(err) {
   return err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY'
 }
