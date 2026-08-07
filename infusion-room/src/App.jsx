@@ -5731,9 +5731,11 @@ function App() {
           onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
         >
           <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
-          <p className="bed-card__number">{bed.number}</p>
-          <p className="bed-card__patient">
+          <p className="bed-card__number">
+            {bed.number}
             <GenderMark gender={bed.gender} />
+          </p>
+          <p className="bed-card__patient">
             <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
             <PrescriptionCheck done={bed.hasPrescription} />
           </p>
@@ -5828,10 +5830,12 @@ function App() {
             )}
           </button>
         )}
-        <p className="bed-card__number">{bed.number}</p>
-        <p className="bed-card__patient">
+        <p className="bed-card__number">
+          {bed.number}
           <GenderMark gender={bed.gender} />
-            <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
+        </p>
+        <p className="bed-card__patient">
+          <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
           <PrescriptionCheck done={bed.hasPrescription} />
         </p>
         <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
