@@ -158,10 +158,17 @@ router.patch('/sessions/:id/patient', (req, res) => {
     return res.status(400).json({ error: '종료되었거나 취소된 세션입니다' })
   }
 
-  const { patient_name, chart_no } = req.body ?? {}
+  const body = req.body ?? {}
+  const { patient_name, chart_no } = body
   if (!patient_name || !chart_no) {
     return res.status(400).json({ error: 'patient_name, chart_no가 필요합니다' })
   }
+  // 성별은 '보냈는지'와 '무엇을 보냈는지'를 나눠서 본다.
+  // 안 보내면 건드리지 않고(옛 호출자 호환), 미지정('')을 보내면 진짜로 지운다.
+  // 배정(assign)에서는 null이 기존 값을 덮지 않게 막았지만 여기는 반대다 —
+  // 잘못 들어간 성별을 지울 방법이 이 화면뿐이다.
+  const hasGender = Object.prototype.hasOwnProperty.call(body, 'gender')
+  const gender = hasGender ? normalizeGender(body.gender) : null
   const normalizedChartNo = normalizeChartNo(chart_no)
   if (normalizedChartNo === null) {
     return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
@@ -172,8 +179,15 @@ router.patch('/sessions/:id/patient', (req, res) => {
     return res.status(409).json({ error: '이미 다른 환자에게 등록된 차트번호입니다' })
   }
 
-  db.prepare('UPDATE patients SET name = ?, chart_no = ?, updated_at = ? WHERE id = ?')
-    .run(patient_name, normalizedChartNo, Date.now(), session.patient_id)
+  const now = Date.now()
+  if (hasGender) {
+    db.prepare('UPDATE patients SET name = ?, chart_no = ?, gender = ?, updated_at = ? WHERE id = ?')
+      .run(patient_name, normalizedChartNo, gender, now, session.patient_id)
+  } else {
+    db.prepare('UPDATE patients SET name = ?, chart_no = ?, updated_at = ? WHERE id = ?')
+      .run(patient_name, normalizedChartNo, now, session.patient_id)
+  }
+  // 카드에 이름·차트번호·성별이 실려 있어 다른 단말도 다시 받아야 한다.
   bumpRevision(db)
   res.json({ ok: true })
 })

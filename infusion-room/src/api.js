@@ -355,10 +355,11 @@ export async function restoreSession(sessionId) {
   return apiFetch(`/sessions/${sessionId}/restore`, { method: 'POST' })
 }
 
-export async function updateSessionPatient(sessionId, { patientName, chartNo }) {
+// gender를 넘기지 않으면 서버가 성별을 건드리지 않는다. ''를 넘기면 미지정으로 지운다.
+export async function updateSessionPatient(sessionId, { patientName, chartNo, gender }) {
   return apiFetch(`/sessions/${sessionId}/patient`, {
     method: 'PATCH',
-    body: JSON.stringify({ patient_name: patientName, chart_no: chartNo }),
+    body: JSON.stringify({ patient_name: patientName, chart_no: chartNo, gender }),
   })
 }
 

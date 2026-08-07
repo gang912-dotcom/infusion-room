@@ -4394,6 +4394,8 @@ function App() {
   const [editPatientModal, setEditPatientModal] = useState(false)
   const [editPatientName, setEditPatientName] = useState('')
   const [editChartNumber, setEditChartNumber] = useState('')
+  // 성별은 환자에 영구다 — 여기서 고치면 그 환자의 다음 방문에도 그대로 간다.
+  const [editGender, setEditGender] = useState('')
   // 시작 시각 인라인 수정 — 열림 여부 + 편집 중인 값(ms)
   const [editStartOpen, setEditStartOpen] = useState(false)
   const [startDraft, setStartDraft] = useState(0)
@@ -5284,6 +5286,7 @@ function App() {
     if (!currentBed) return
     setEditPatientName(currentBed.patientName)
     setEditChartNumber(currentBed.chartNumber)
+    setEditGender(currentBed.gender ?? '')
     setEditPatientModal(true)
   }
 
@@ -5297,6 +5300,7 @@ function App() {
       await updateSessionPatient(selectedBed.sessionId, {
         patientName: editPatientName.trim(),
         chartNo: editChartNumber.trim(),
+        gender: editGender,
       })
       await refreshBoard()
     } catch (err) {
@@ -6862,6 +6866,21 @@ function App() {
                   onChange={(e) => setEditChartNumber(e.target.value)}
                   inputMode="numeric" placeholder="차트번호 입력"
                 />
+              </label>
+              {/* 성별은 이 방문이 아니라 환자에 붙는 값이다 — 여기서 고치면 다음 방문에도 따라간다.
+                  등록 모달과 달리 '미지정'을 고르면 진짜로 지워진다(잘못 들어간 값을 지울 곳이 여기뿐이다).
+                  진료실은 여기에 안 둔다 — 같은 상세 화면에 고르는 즉시 저장되는 선택칸이 이미 있다. */}
+              <label className="field">
+                <span className="field__label">성별</span>
+                <select
+                  className="field__input"
+                  value={editGender}
+                  onChange={(e) => setEditGender(e.target.value)}
+                >
+                  <option value="">미지정</option>
+                  <option value="M">남</option>
+                  <option value="F">녀</option>
+                </select>
               </label>
               <button
                 type="button"
