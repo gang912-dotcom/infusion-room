@@ -1186,6 +1186,13 @@
   gap: 10px;
 }
 
+/* 이 클래스에는 규칙이 아예 없어서 부모 색을 상속만 받고 있었다 — 라이트에서 2.24로 미달.
+   두 테마 모두 4.5를 넘기는 --text-secondary로 명시한다(제목 h2와 같은 줄의 보조 텍스트다). */
+.modal__header-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .modal-chip {
   display: inline-flex;
   align-items: center;
@@ -1513,7 +1520,9 @@
   font-family: inherit;
   font-weight: 600;
   color: #ffffff;
-  background: var(--status-occupied);
+  /* 흰 글자를 --status-occupied 위에 올리면 다크 1.89 / 라이트 4.40으로 무너진다(실측).
+     흰 글자를 쓸 배경이면 --solid-*를 쓴다는 규칙이 이 파일 맨 위에 있는데 여기만 빠져 있었다. */
+  background: var(--solid-green);
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -4380,7 +4389,8 @@
   position:absolute; top:-2px; right:-2px; min-width:18px; height:18px; padding:0 5px;
   display:inline-flex; align-items:center; justify-content:center;
   font-size:11px; font-weight:700; line-height:1;
-  color:#fff; background:var(--status-completed);
+  /* 흰 글자 배경이므로 --status-*가 아니라 --solid-*를 쓴다(실측 3.76 → 5.91). */
+  color:#fff; background:var(--solid-red);
   border-radius:999px;
 }
 .msg-compose__done{ margin:0; font-size:13px; color:var(--status-occupied) }
