@@ -465,6 +465,36 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
   )
 }
 
+// 배정됨 상세는 총 시간을 절대값으로 고른다. 진행중은 이미 시간이 흐른 뒤라
+// 같은 버튼을 쓰면 안 된다 — 시작 1시간 20분 뒤에 '30분'을 누르면 그 자리에서
+// 만료된다. 거긴 DurationControls의 ±조정을 그대로 둔다.
+const DURATION_PRESETS = [
+  { minutes: 30, label: '30분' },
+  { minutes: 60, label: '1시간' },
+  { minutes: 120, label: '2시간' },
+]
+
+function DurationPresets({ minutes, onSelect }) {
+  return (
+    <div className="duration">
+      <span className="duration__label">예상 소요시간</span>
+      <div className="duration-presets">
+        {DURATION_PRESETS.map((preset) => (
+          <button
+            key={preset.minutes}
+            type="button"
+            className={`duration-preset${minutes === preset.minutes ? ' duration-preset--on' : ''}`}
+            aria-pressed={minutes === preset.minutes}
+            onClick={() => onSelect(preset.minutes)}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function formatHour24(timestamp) {
   const d = new Date(timestamp)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -4390,6 +4420,9 @@ function App() {
   const [noteAlert, setNoteAlert] = useState(false)
   const noteAlertShownRef = useRef(false)
   const [durationMinutes, setDurationMinutes] = useState(DEFAULT_DURATION)
+  // 배정됨 상세의 진료실·라인 담당자 정정 칸. 하루 몇 번 쓰는 것이라 접어둔다 —
+  // 상시 노출하면 스치기만 해도 즉시 저장되고, 담당자가 바뀌면 기록지에 남의 서명이 붙는다.
+  const [reservedEditOpen, setReservedEditOpen] = useState(false)
   const [now, setNow] = useState(Date.now())
   const [editPatientModal, setEditPatientModal] = useState(false)
   const [editPatientName, setEditPatientName] = useState('')
@@ -5084,6 +5117,8 @@ function App() {
     if (bed.status === 'reserved') {
       setDurationMinutes(DEFAULT_DURATION)
       setMixStaffId('')
+      // 정정 칸은 늘 접힌 채로 연다 — 앞 베드에서 열어둔 것이 따라오면 안 된다.
+      setReservedEditOpen(false)
     }
   }
 
@@ -5220,10 +5255,6 @@ function App() {
     }
     setCleanupBed(null)
     setCleanupReopenBed(null)
-  }
-
-  function adjustDuration(delta) {
-    setDurationMinutes((prev) => Math.max(MIN_DURATION, prev + delta))
   }
 
   async function adjustBedDuration(delta) {
@@ -6439,8 +6470,10 @@ function App() {
                 </button>
               </div>
             ) : isReserved ? (
-              /* 진행중 상세와 같은 pane을 쓴다 — 두 화면의 왼쪽 칸이 갈라지면 안 된다. */
-              <div className="bed-detail-pane">
+              /* 진행중 상세와 같은 pane을 쓴다 — 두 화면의 왼쪽 칸이 갈라지면 안 된다.
+                 이 화면에서 사람이 해야 할 일은 믹스 담당자 지정 하나뿐이다. 진료실·라인
+                 담당자는 배정 때 이미 정해진 것이라 요약줄로 보여주고 '수정' 뒤로 접었다. */
+              <div className="bed-detail-pane bed-detail-pane--reserved">
                 <div className="bed-detail-summary">
                   <div className="bed-detail-summary__patient">
                     <span className="bed-detail-summary__name">{currentBed.patientName}</span>
@@ -6448,8 +6481,20 @@ function App() {
                   </div>
                   <div className="bed-detail-summary__meta">
                     <span className="bed-detail-summary__meta-text">
+                      {currentBed.examRoom ? `${currentBed.examRoom}진료실 · ` : ''}
                       라인 담당 {currentBed.lineStaff} · 배정 {formatHour24(currentBed.assignedAt)}
                     </span>
+                    <div className="bed-detail-summary__meta-actions">
+                      <button
+                        type="button"
+                        className="btn-move-bed"
+                        onClick={() => setReservedEditOpen((open) => !open)}
+                        disabled={offline}
+                        aria-expanded={reservedEditOpen}
+                      >
+                        {reservedEditOpen ? '접기' : '수정'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -6457,13 +6502,47 @@ function App() {
                   <p role="alert" className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
 
-                <div className="detail-selects">
-                  {examRoomField}
-                  {lineStaffField}
-                  {mixStaffField}
-                </div>
+                {/* 믹스 담당자는 아직 값이 없어 mixStaffField가 안 뜬다 — 아래 지정 칸이 그 자리다. */}
+                {reservedEditOpen && (
+                  <div className="detail-selects">
+                    {examRoomField}
+                    {lineStaffField}
+                  </div>
+                )}
 
-                {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
+                <label className="field">
+                  <span className="field__label">믹스 담당자</span>
+                  <select
+                    className={`field__input${mixStaffId ? '' : ' field__input--needed'}`}
+                    value={mixStaffId}
+                    onChange={(e) => setMixStaffId(e.target.value)}
+                  >
+                    <option value="">{staffList.length ? '선택하세요' : '직원 목록 불러오는 중...'}</option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <DurationPresets
+                  minutes={durationMinutes}
+                  onSelect={setDurationMinutes}
+                />
+
+                {actionError && <p role="alert" className="field__error">{actionError}</p>}
+
+                {/* 잠긴 이유를 버튼이 직접 말한다 — 회색으로만 두면 왜 안 눌리는지 알 길이 없다. */}
+                <button
+                  type="button"
+                  className={`btn-register${mixStaffId ? '' : ' btn-register--hint'}`}
+                  onClick={handleStartSession}
+                  disabled={offline || !mixStaffId}
+                >
+                  {mixStaffId ? '투여 시작' : '믹스 담당자를 지정하세요'}
+                </button>
+
+                {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다.
+                    다만 주 동선이 아니라 아래로 내렸다. */}
                 <div className="rec-block__actions">
                   <button
                     type="button"
@@ -6482,36 +6561,6 @@ function App() {
                     처방 작성
                   </button>
                 </div>
-
-                <label className="field">
-                  <span className="field__label">믹스 담당자</span>
-                  <select
-                    className="field__input"
-                    value={mixStaffId}
-                    onChange={(e) => setMixStaffId(e.target.value)}
-                  >
-                    <option value="">{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
-                    {staffList.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <DurationControls
-                  minutes={durationMinutes}
-                  onAdjust={adjustDuration}
-                />
-
-                {actionError && <p role="alert" className="field__error">{actionError}</p>}
-
-                <button
-                  type="button"
-                  className="btn-register"
-                  onClick={handleStartSession}
-                  disabled={offline || !mixStaffId}
-                >
-                  투여 시작
-                </button>
 
                 <button
                   type="button"
