@@ -6625,9 +6625,15 @@ function App() {
                   </button>
                 </div>
 
-                {isInProgress && examRoomField}
-                {isInProgress && lineStaffField}
-                {isInProgress && mixStaffField}
+                {/* 셋 다 짧은 선택칸이다. 세로로 쌓으면 213px을 먹어 확인 버튼이 화면 밖으로
+                    밀린다(실측). 한 줄에 나란히 두면 71px이다. 좁아지면 알아서 줄바꿈한다. */}
+                {isInProgress && (
+                  <div className="detail-selects">
+                    {examRoomField}
+                    {lineStaffField}
+                    {mixStaffField}
+                  </div>
+                )}
 
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (
@@ -6651,20 +6657,21 @@ function App() {
 
                 {/* 라운딩·증상 기록 버튼은 오른쪽 기록 패널 헤더로 옮겼다. */}
 
-                {isInProgress && (
-                  <button
-                    type="button"
-                    className="btn-register"
-                    onClick={requestCleanupFromDetail}
-                    disabled={offline}
-                  >
-                    종료
+                <div className="detail-footer-actions">
+                  {isInProgress && (
+                    <button
+                      type="button"
+                      className="btn-register"
+                      onClick={requestCleanupFromDetail}
+                      disabled={offline}
+                    >
+                      종료
+                    </button>
+                  )}
+                  <button type="button" className="btn-detail-confirm" onClick={closeModal}>
+                    확인
                   </button>
-                )}
-
-                <button type="button" className="btn-detail-confirm" onClick={closeModal}>
-                  확인
-                </button>
+                </div>
                 </div>
 
                 {/* ── 오른쪽: 이 환자의 기록 (진행중일 때만) ── */}

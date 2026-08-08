@@ -4443,6 +4443,28 @@
   min-height:0; overflow-y:auto;                      /* 기록 많아도 오른쪽만 스크롤 */
 }
 
+/* 베드 상세 왼쪽 칸의 짧은 선택칸들(진료실·라인 담당자·믹스 담당자)을 한 줄로.
+   min-width로 바닥을 두면 칸이 좁아질 때 알아서 아래로 접힌다. */
+/* 상세 왼쪽 칸이 스크롤 없이 들어가게 조인다(실측: 선택칸을 한 줄로 묶고도 45px이 넘쳤다).
+   '남은 시간' 라벨을 큰 숫자 옆으로 붙이고(23px + gap), 칸 사이 여백을 조금 줄인다.
+   +/- 버튼 그룹은 그대로 둔다 — 두 줄인 것이 늘리기/줄이기를 가르는 시각 단서다. */
+.bed-detail-2col__left{ padding:16px; gap:10px }
+.bed-detail-2col__left .duration{
+  display:grid; grid-template-columns:auto minmax(0,1fr);
+  align-items:center; gap:10px;
+}
+.bed-detail-2col__left .duration__display{ text-align:right }
+.bed-detail-2col__left .duration__controls{ grid-column:1 / -1 }
+
+/* 종료와 확인을 한 줄로. 세로로 쌓으면 57px을 더 먹어 확인이 화면 밖으로 밀린다.
+   종료만 있는 것도 아니고 확인만 있는 화면도 있어 flex 하나로 둘 다 받는다
+   (혼자면 자연히 가로 전체를 쓴다 — 지금 모습과 같다). */
+.detail-footer-actions{ display:flex; gap:8px; margin-top:2px }
+.detail-footer-actions > *{ flex:1 1 0; margin-top:0 }
+
+.detail-selects{ display:flex; flex-wrap:wrap; gap:8px }
+.detail-selects > .field{ flex:1 1 110px; min-width:0 }
+
 .rec-block{ display:flex; flex-direction:column; gap:8px }
 .rec-block__head{ display:flex; align-items:center; justify-content:space-between; gap:8px }
 .rec-block__title{ margin:0; font-size:14px; font-weight:700; color:var(--text-primary) }
