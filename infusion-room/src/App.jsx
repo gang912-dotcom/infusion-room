@@ -6561,6 +6561,15 @@ function App() {
                         >
                           베드이동
                         </button>
+                        {/* 되돌릴 수 없는 조작이라 빨강. 누르면 확인 모달이 한 번 더 받는다. */}
+                        <button
+                          type="button"
+                          className="btn-move-bed btn-move-bed--danger"
+                          onClick={() => setRemovePatientConfirm(true)}
+                          disabled={offline}
+                        >
+                          등록 취소
+                        </button>
                       </div>
                     )}
                   </div>
@@ -6650,17 +6659,6 @@ function App() {
                     disabled={offline}
                   >
                     종료
-                  </button>
-                )}
-
-                {isInProgress && (
-                  <button
-                    type="button"
-                    className="btn-remove-patient-link"
-                    onClick={() => setRemovePatientConfirm(true)}
-                    disabled={offline}
-                  >
-                    환자 등록 취소
                   </button>
                 )}
 

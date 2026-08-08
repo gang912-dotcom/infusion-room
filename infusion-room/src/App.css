@@ -3479,6 +3479,21 @@
   border-color: rgba(91, 157, 255, 0.6);
 }
 
+/* 등록 취소 — 되돌릴 수 없는 조작이라 빨강 칩으로 둔다(확인 모달이 한 번 더 받는다).
+   빨강 글자를 자기 틴트 위에 올리면 대비가 모자란다. 카드의 '완료' 칩이 쓰는
+   이미 실측된 색쌍을 그대로 쓴다(다크는 밝게, 라이트는 진하게).
+   기본·hover 모두 .btn-move-bed와 같은 특정성이라 반드시 그 뒤에 와야 이긴다. */
+.btn-move-bed--danger {
+  color: #f87171;
+  background: var(--status-completed-bg);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.btn-move-bed--danger:hover {
+  background: rgba(239, 68, 68, 0.26);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
 /* ─── 자리이동 안내 바 ───────────────────────────────────────── */
 .move-banner {
   display: flex;
@@ -4105,7 +4120,12 @@
 .app .bed-card__chip--completed,
 .app .bed-card__round--due{ color:#f87171; }
 :root[data-theme='light'] .app .bed-card__chip--completed,
-:root[data-theme='light'] .app .bed-card__round--due{ color:#c41f16; }
+:root[data-theme='light'] .app .bed-card__round--due,
+:root[data-theme='light'] .app .btn-move-bed--danger{ color:#c41f16; }
+/* 초록 칩(시작시간 수정·베드이동)은 라이트에서 자기 틴트 위 3.5로 미달이었다(실측).
+   글자로 쓸 때만 한 단계 진한 초록으로 내린다 — 채팅 '내 이름'과 같은 처리다.
+   :not()으로 빨강 변형을 빼지 않으면 특정성이 같아 순서에 따라 등록 취소까지 초록이 된다. */
+:root[data-theme='light'] .app .btn-move-bed:not(.btn-move-bed--danger){ color:var(--solid-green); }
 /* 의미 있는 작은 글씨 상향(카드 시작시각 10→12, 진행률/경과 11→12, 차트번호 12→13) */
 .app .bed-card__meta{ font-size:12px; }
 .app .bed-card__progress-text,
