@@ -6670,7 +6670,7 @@ function App() {
                       onClick={requestCleanupFromDetail}
                       disabled={offline}
                     >
-                      종료
+                      수액 종료
                     </button>
                   )}
                   <button type="button" className="btn-detail-confirm" onClick={closeModal}>
@@ -6872,7 +6872,10 @@ function App() {
               <p className="confirm__message">
                 등록 취소는 수액이 취소된 경우에만 눌러주세요.
                 <br />
-                <span className="confirm__sub">수액이 조기 종료된 경우, 이용시간을 차감하여 완료 처리해주세요.</span>
+                {/* 버튼 이름을 그대로 부르고 그 이름만 굵게 — 어디를 눌러야 하는지가 문장에서 바로 보인다. */}
+                <span className="confirm__sub">
+                  수액이 조기 종료된 경우, <strong className="confirm__sub-strong">수액 종료</strong> 버튼을 눌러 완료 처리해주세요.
+                </span>
               </p>
               <p className="confirm__patient-info">
                 {currentBed.patientName} ({currentBed.chartNumber})

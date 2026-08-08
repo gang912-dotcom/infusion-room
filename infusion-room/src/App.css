@@ -2820,6 +2820,13 @@
   color: var(--text-muted);
 }
 
+/* 문장 안에서 버튼 이름만 굵게. --text-muted 위에서 굵기만 올리면 잘 안 보이므로
+   본문색으로 한 단계 올린다(대비는 아래에서 실측한다). */
+.confirm__sub-strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 @media (max-width: 640px) {
   .dm-summary {
     grid-template-columns: repeat(2, 1fr);
