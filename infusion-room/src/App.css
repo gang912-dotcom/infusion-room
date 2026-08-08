@@ -1305,7 +1305,7 @@
 }
 
 .field__label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -1555,7 +1555,7 @@
 }
 
 .bed-detail-summary__chart {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 
@@ -1610,7 +1610,7 @@
 }
 
 .bed-detail-summary__meta-text {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 
@@ -2834,7 +2834,7 @@
 .btn-edit-patient {
   flex-shrink: 0;
   padding: 4px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 600;
   color: var(--status-occupied);
@@ -3461,7 +3461,7 @@
 
 .btn-move-bed {
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 600;
   color: var(--status-occupied);
@@ -3688,7 +3688,7 @@
 
 .dm-note-btn {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 600;
   color: var(--text-secondary);
@@ -4450,10 +4450,12 @@
    +/- 버튼 그룹은 그대로 둔다 — 두 줄인 것이 늘리기/줄이기를 가르는 시각 단서다. */
 .bed-detail-2col__left{ padding:16px; gap:10px }
 .bed-detail-2col__left .duration{
-  display:grid; grid-template-columns:auto minmax(0,1fr);
+  /* 1fr auto 1fr — 가운데 칸에 시계를 두면 라벨 폭과 무관하게 블록 정중앙에 온다.
+     auto minmax(0,1fr)로 두고 셀 안에서 가운데 정렬하면 라벨만큼 오른쪽으로 밀린다(실측 30px). */
+  display:grid; grid-template-columns:1fr auto 1fr;
   align-items:center; gap:10px;
 }
-.bed-detail-2col__left .duration__display{ text-align:right }
+.bed-detail-2col__left .duration__display{ grid-column:2; text-align:center }
 .bed-detail-2col__left .duration__controls{ grid-column:1 / -1 }
 
 /* 종료와 확인을 한 줄로. 세로로 쌓으면 57px을 더 먹어 확인이 화면 밖으로 밀린다.

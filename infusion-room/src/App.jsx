@@ -741,7 +741,7 @@ function getNoteOccurredAt(note) {
 function GenderMark({ gender }) {
   if (gender !== 'M' && gender !== 'F') return null
   return (
-    <span className={`sex sex--${gender}`} aria-label={gender === 'M' ? '남' : '녀'}>
+    <span className={`sex sex--${gender}`} aria-label={gender === 'M' ? '남자' : '여자'}>
       {gender === 'M' ? '♂' : '♀'}
     </span>
   )
@@ -6377,8 +6377,8 @@ function App() {
                     onChange={(e) => setGender(e.target.value)}
                   >
                     <option value="">미지정</option>
-                    <option value="M">남</option>
-                    <option value="F">녀</option>
+                    <option value="M">남자</option>
+                    <option value="F">여자</option>
                   </select>
                 </label>
 
@@ -6941,8 +6941,8 @@ function App() {
                   onChange={(e) => setEditGender(e.target.value)}
                 >
                   <option value="">미지정</option>
-                  <option value="M">남</option>
-                  <option value="F">녀</option>
+                  <option value="M">남자</option>
+                  <option value="F">여자</option>
                 </select>
               </label>
               <button
