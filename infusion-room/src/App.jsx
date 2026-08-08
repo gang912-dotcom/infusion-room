@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
 import logoIcon from './assets/logo-icon-white.png'
@@ -74,6 +74,12 @@ const ROOM_TABS = TABS.filter(
     t.id !== 'stats' &&
     t.id !== 'datamanage',
 )
+
+// 실제 방만. ROOM_TABS에는 '전체'가 끼어 있는데, 그건 보드에서 '모든 방 보기'라는
+// 뜻이지 방 이름이 아니다. 통계의 '수액실별' 집계는 이용기록의 방 라벨을 키로 쓰므로
+// '전체' 칸은 어떤 기록과도 안 맞아 늘 0으로 남았다(바로 위 '전체 이용건수' 카드와
+// 라벨까지 겹쳐 더 헷갈렸다). 방별 집계에는 이 목록을 쓴다.
+const ROOM_ONLY_TABS = ROOM_TABS.filter((t) => t.id !== 'all')
 
 // 전체보기에서 방별로 묶을 때 쓰는 순서 (전체 탭 자체는 제외)
 const ROOM_ORDER = ROOM_TABS.filter((t) => t.id !== 'all')
@@ -251,6 +257,17 @@ function Icon({ name, className }) {
         <path d="M15.8 3.5v3" />
       </>
     ),
+    // 바이탈(체온·혈압·맥박) 표시용 맥박 파형. 온도계는 체온 하나만 가리켜서
+    // 혈압·맥박까지 담는 이 버튼에는 좁다.
+    pulse: <path d="M3 12.5h4l2.2-6.4 3.6 12.8 2.2-6.4H21" />,
+    // 온도계 + 파형 합본. 둘을 따로 놓으면 가로로 38px을 먹어 이름 줄을 그만큼
+    // 잡아먹는다 — 한 글리프로 합치면 다른 아이콘과 같은 한 칸(20px)에 들어간다.
+    vitals: (
+      <>
+        <path d="M8 13.2V5.4a1.3 1.3 0 1 0-2.6 0v7.8a3 3 0 1 0 2.6 0Z" />
+        <path d="M11.6 12.4h1.6l1.5-4.4 2.1 8.8 1.4-4.4H21" />
+      </>
+    ),
     thermometer: (
       <>
         <path d="M13.8 13.6V5.2a1.8 1.8 0 1 0-3.6 0v8.4a4 4 0 1 0 3.6 0Z" />
@@ -388,6 +405,22 @@ function formatDuration(minutes) {
   if (h > 0 && m > 0) return `${h}시간 ${m}분`
   if (h > 0) return `${h}시간`
   return `${m}분`
+}
+
+// 카드의 '남은 시간' 전용 짧은 표기. 1시간 미만은 '20분', 넘으면 '1:20'.
+//
+// formatDuration('1시간 20분')을 그대로 쓰면 카드 폭이 안 나온다 — IBM Plex는 숫자가
+// 넓어서, 실제 쓰이는 duration(60·90·120·150·180·240분) 전 조합을 재보니 361개가
+// 폭을 넘겼다(최악 '100/180분' + '1시간 20분 남음' = 167px / 가용 156px).
+// 이 표기로 130px이 되어 26px 여유가 남는다.
+//
+// 1시간 미만을 '0:20'이 아니라 '20분'으로 두는 이유: 곧 완료(30분 이하)가 훑을 때
+// 제일 중요한 구간인데, 거기서는 '20분 남음'이 즉시 읽힌다.
+// (모달의 큰 타이머는 formatDurationClock의 '00:20' 형식을 그대로 쓴다 — 거긴 계기다.)
+function formatRemainingShort(minutes) {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : `${m}분`
 }
 
 function formatDurationClock(minutes) {
@@ -760,11 +793,10 @@ function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
 
-// 처방 작성 여부 — 카드에서 한눈에 구분한다.
-// 작성됨은 이름 바로 옆 체크, 미작성은 이름 아래 빨간 줄(PrescriptionTodo)로 갈랐다.
-// 한 줄에 같이 두면 '처방 미작성' 글씨가 이름을 눌러 이름이 잘렸다.
-// 두 상태를 다 표시하는 이유: 한쪽만 표시하면 '표식 없음'이 미작성인지 데이터 없음인지
-// 구분이 안 돼 놓치게 된다. 색만으로 전달하지 않으려고 아이콘·글씨를 함께 쓴다.
+// 처방 작성 여부 — 작성됐을 때만 이름 옆 체크를 띄운다.
+// 미작성은 표식이 없다: 하나의 이진 상태에 표식을 둘 두면 자리도 형태도 갈라지고,
+// 시간이 지나면 대부분의 카드가 체크를 달아 체크가 벽지가 된다.
+// 대가는 카드에서 미작성을 적극적으로 못 잡는다는 것 — 처방은 모달에서 확인한다.
 // 이름 왼쪽 성별 기호. 미지정이면 아무것도 그리지 않는다 — 12.9만 명 대부분이 당분간
 // 미지정이라 '없음' 표시를 두면 카드가 그걸로 도배된다.
 // 기호만으로도 읽히지만 색맹·스크린리더를 위해 aria-label로 말도 남긴다.
@@ -786,37 +818,27 @@ function PrescriptionCheck({ done }) {
   )
 }
 
-function PrescriptionTodo({ done }) {
-  if (done) return null
-  return <p className="bed-card__rx-todo">처방 미작성</p>
-}
-
 // 베드 카드용 요약 다줄: 이 방문의 특이사항 → 당일 메모 → 금일 증상(session_note) 순,
 // 최대 4줄까지, 초과분은 마지막 줄을 "+N건 더"로
 //
 // 특이사항(danger)과 당일 메모(caution)를 색으로 갈라 놓는다 — 전자는 이번 방문의
 // 주의점이고 후자는 그 환자에게 계속 따라다니는 메모라 성격이 다르다.
-function getCardNoteLines(sessionNotes, bed) {
-  const todayNotes = getSessionNotesBySessionId(sessionNotes, bed.sessionId).sort(
-    (a, b) => new Date(getNoteOccurredAt(b)) - new Date(getNoteOccurredAt(a)),
-  )
-
-  const allLines = [
+// 카드에는 특이사항(빨강)과 당일 메모(주황) 두 줄만 둔다. 금일 증상은 빼고
+// 상세의 '금일 기록'에서 본다.
+//
+// 증상은 개수를 못 박을 수 없다(한 세션에 몇 건이든 쌓인다). 그게 있는 한 카드 높이의
+// 상한이 안 정해지고, 격자는 그 행에서 제일 긴 카드에 맞춰 늘어나기 때문에 증상이 많은
+// 카드 하나가 행 전체를 밀어 올려서 옆 카드들이 가운데가 텅 빈 채로 늘어났다.
+// 두 줄로 못 박으면 카드가 가질 수 있는 최대 줄이 정해지고, 그만큼 자리를 비워 두는
+// 방식으로 높이를 고정할 수 있다 — 그래야 진행바가 화면을 가로질러 같은 높이에 온다.
+//
+// 특이사항과 당일 메모를 색으로 가르는 이유는 성격이 달라서다 — 전자는 이번 방문의
+// 주의점이고 후자는 그 환자에게 계속 따라다니는 메모다.
+function getCardNoteLines(bed) {
+  return [
     ...(bed.specialNote ? [{ tone: 'danger', icon: 'alert', text: bed.specialNote }] : []),
     ...(bed.dayMemo ? [{ tone: 'caution', icon: 'bell', text: bed.dayMemo }] : []),
-    ...todayNotes.map((n) => ({
-      tone: 'neutral',
-      icon: 'clock',
-      text: `${formatHour24(getNoteOccurredAt(n))} ${summarizeSessionNotesForTable([n])}`,
-    })),
   ]
-
-  const MAX_LINES = 4
-  if (allLines.length <= MAX_LINES) {
-    return { lines: allLines, moreCount: 0 }
-  }
-  const shown = allLines.slice(0, MAX_LINES - 1)
-  return { lines: shown, moreCount: allLines.length - shown.length }
 }
 
 // 한 줄 마퀴. 부모 폭을 넘기면 좌우로 왕복(앞뒤로 잠깐 멈춰 읽을 틈), 안 넘치면 가만히.
@@ -957,6 +979,21 @@ function xVitalsText(v) {
   }
   return parts.join(' · ') || '기록'
 }
+// 바이탈 모달의 '직전 값' 한 줄 — 같은 세션(= 당일 방문 한 건)의 마지막 기록.
+//
+// 값을 입력칸에 미리 채우지 않는다. 이 모달은 저장하면 '지금 시각'으로 새 기록을 만들기
+// 때문에, 채워둔 채로 한 항목만 다시 재고 저장하면 안 잰 값이 방금 잰 것처럼 남는다.
+// 그 기록은 수액간호기록지에 인쇄되고 종료 시 record_snapshot으로 얼어붙어 못 고친다.
+// 그래서 읽기만 하는 한 줄로 보여준다(증상 기록의 '지난 방문' 줄과 같은 처리).
+function getPrevSessionVitals(vitals, sessionId) {
+  if (!sessionId) return null
+  return (
+    vitals
+      .filter((v) => v.sessionId === sessionId && !v.deleted)
+      .sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))[0] ?? null
+  )
+}
+
 // 라운딩 → 메모만. 체온은 바이탈로 분리, 상태 칩은 제거됐다.
 function xRoundText(r) {
   return r.memo || '확인'
@@ -1360,7 +1397,7 @@ function StatsView({ history }) {
 
   // 수액실별 전체 이용건수
   const roomCountsAll = {}
-  ROOM_TABS.forEach((t) => { roomCountsAll[t.label] = 0 })
+  ROOM_ONLY_TABS.forEach((t) => { roomCountsAll[t.label] = 0 })
   history.forEach((e) => {
     if (roomCountsAll[e.room] !== undefined) roomCountsAll[e.room]++
     else roomCountsAll[e.room] = 1
@@ -1371,7 +1408,7 @@ function StatsView({ history }) {
 
   // 수액실별 이용건수 (기간)
   const roomCountsRanged = {}
-  ROOM_TABS.forEach((t) => { roomCountsRanged[t.label] = 0 })
+  ROOM_ONLY_TABS.forEach((t) => { roomCountsRanged[t.label] = 0 })
   ranged.forEach((e) => {
     if (roomCountsRanged[e.room] !== undefined) roomCountsRanged[e.room]++
     else roomCountsRanged[e.room] = (roomCountsRanged[e.room] ?? 0) + 1
@@ -1422,7 +1459,7 @@ function StatsView({ history }) {
           <span className="stats-card__label">이번 달 이용건수</span>
           <span className="stats-card__value">{totalThisMonth.toLocaleString()}<span className="stats-card__unit">건</span></span>
         </div>
-        {ROOM_TABS.map((t) => (
+        {ROOM_ONLY_TABS.map((t) => (
           <div className="stats-card" key={t.id}>
             <span className="stats-card__label">{t.label}</span>
             <span className="stats-card__value">
@@ -1480,7 +1517,7 @@ function StatsView({ history }) {
             <div className="stats-block">
               <h3 className="stats-block__title">수액실별 이용건수</h3>
               <ul className="stats-room-list">
-                {ROOM_TABS.map((t) => {
+                {ROOM_ONLY_TABS.map((t) => {
                   const cnt = roomCountsRanged[t.label] ?? 0
                   const pct = Math.round((cnt / maxRangedRoom) * 100)
                   return (
@@ -2982,12 +3019,12 @@ function MessageLogSection() {
 
       <div className="msg-log__filters">
         <label className="dm-search__field">
-          <span>시작일</span>
+          <span className="dm-search__label">시작일</span>
           <input type="date" className="dm-search__input" value={from}
             onChange={(e) => { setFrom(e.target.value); setOffset(0) }} />
         </label>
         <label className="dm-search__field">
-          <span>종료일</span>
+          <span className="dm-search__label">종료일</span>
           <input type="date" className="dm-search__input" value={to}
             onChange={(e) => { setTo(e.target.value); setOffset(0) }} />
         </label>
@@ -3310,8 +3347,8 @@ function DataManageView({
   offline,
 }) {
   // 검색 조건
-  const [searchName, setSearchName] = useState('')
-  const [searchChart, setSearchChart] = useState('')
+  // 이용기록 탭과 같은 규칙 — 이름·차트번호를 한 칸에서 받는다.
+  const [searchText, setSearchText] = useState('')
   const [searchDate, setSearchDate] = useState('')
 
   // 선택된 항목 id Set
@@ -3344,10 +3381,13 @@ function DataManageView({
 
   // ── 검색 필터 ──
   const filtered = sourceList.filter((entry) => {
-    if (searchName.trim() && !entry.patientName.includes(searchName.trim()))
-      return false
-    if (searchChart.trim() && !entry.chartNumber.includes(searchChart.trim()))
-      return false
+    const q = searchText.trim()
+    if (q) {
+      const hit =
+        entry.patientName.includes(q) ||
+        (entry.chartNumber ?? '').toLowerCase().includes(q.toLowerCase())
+      if (!hit) return false
+    }
     if (searchDate) {
       const entryDate = parseDateStr(entry.date)
       const target = new Date(searchDate)
@@ -3449,12 +3489,11 @@ function DataManageView({
   }
 
   function handleSearchReset() {
-    setSearchName('')
-    setSearchChart('')
+    setSearchText('')
     setSearchDate('')
   }
 
-  const hasFilter = searchName.trim() || searchChart.trim() || searchDate
+  const hasFilter = searchText.trim() || searchDate
   // filter()는 배열을 반환하므로 .length. (.size는 Set 전용이라 undefined가 돼서
   // "N건 선택됨" 라벨이 안 뜨고 선택삭제 버튼이 항상 활성으로 보이던 버그를 고침)
   const checkedCount = filtered.filter((e) => checkedIds.has(e.id)).length
@@ -3524,23 +3563,13 @@ function DataManageView({
       <div className="dm-search">
         <div className="dm-search__row">
           <label className="dm-search__field">
-            <span className="dm-search__label">환자명</span>
+            <span className="dm-search__label">환자명 · 차트번호</span>
             <input
-              type="text"
+              type="search"
               className="dm-search__input"
-              value={searchName}
-              onChange={(e) => { setSearchName(e.target.value); setCheckedIds(new Set()) }}
-              placeholder="환자명 검색"
-            />
-          </label>
-          <label className="dm-search__field">
-            <span className="dm-search__label">차트번호</span>
-            <input
-              type="text"
-              className="dm-search__input"
-              value={searchChart}
-              onChange={(e) => { setSearchChart(e.target.value); setCheckedIds(new Set()) }}
-              inputMode="numeric" placeholder="차트번호 검색"
+              value={searchText}
+              onChange={(e) => { setSearchText(e.target.value); setCheckedIds(new Set()) }}
+              placeholder="이름 또는 차트번호"
             />
           </label>
           <label className="dm-search__field">
@@ -3780,18 +3809,23 @@ function DataManageView({
 
 // ─── 이용기록 화면 ──────────────────────────────────────────────
 function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore }) {
-  const [searchName, setSearchName] = useState('')
-  const [searchChart, setSearchChart] = useState('')
+  // 환자명·차트번호를 한 칸에서 받는다. 둘을 나눠 두면 어느 칸에 넣을지부터 고르게 되는데,
+  // 이름은 한글이고 차트번호는 K+숫자라 섞일 일이 없어 나눌 이유가 없었다.
+  const [searchText, setSearchText] = useState('')
+  const [searchExamRoom, setSearchExamRoom] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
   const [searchDateTo, setSearchDateTo] = useState('')
 
   const filtered = history.filter((entry) => {
-    if (searchName.trim()) {
-      if (!entry.patientName.includes(searchName.trim())) return false
+    const q = searchText.trim()
+    if (q) {
+      // 차트번호는 대소문자를 가리지 않는다('k10231'로도 찾히게)
+      const hit =
+        entry.patientName.includes(q) ||
+        (entry.chartNumber ?? '').toLowerCase().includes(q.toLowerCase())
+      if (!hit) return false
     }
-    if (searchChart.trim()) {
-      if (!entry.chartNumber.includes(searchChart.trim())) return false
-    }
+    if (searchExamRoom && String(entry.examRoom ?? '') !== searchExamRoom) return false
     if (searchDateFrom) {
       const entryDate = parseDateStr(entry.date)
       const fromDate = new Date(searchDateFrom)
@@ -3808,11 +3842,11 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   })
 
   const hasFilter =
-    searchName.trim() || searchChart.trim() || searchDateFrom || searchDateTo
+    searchText.trim() || searchExamRoom || searchDateFrom || searchDateTo
 
   function handleReset() {
-    setSearchName('')
-    setSearchChart('')
+    setSearchText('')
+    setSearchExamRoom('')
     setSearchDateFrom('')
     setSearchDateTo('')
   }
@@ -3829,24 +3863,27 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
       <div className="history-search">
         <div className="history-search__row">
           <label className="history-search__field">
-            <span className="history-search__label">환자명</span>
+            <span className="history-search__label">환자명 · 차트번호</span>
             <input
-              type="text"
+              type="search"
               className="history-search__input"
-              value={searchName}
-              onChange={(e) => setSearchName(e.target.value)}
-              placeholder="환자명 검색"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="이름 또는 차트번호"
             />
           </label>
-          <label className="history-search__field">
-            <span className="history-search__label">차트번호</span>
-            <input
-              type="text"
+          <label className="history-search__field history-search__field--exam">
+            <span className="history-search__label">진료실</span>
+            <select
               className="history-search__input"
-              value={searchChart}
-              onChange={(e) => setSearchChart(e.target.value)}
-              inputMode="numeric" placeholder="차트번호 검색"
-            />
+              value={searchExamRoom}
+              onChange={(e) => setSearchExamRoom(e.target.value)}
+            >
+              <option value="">전체</option>
+              {EXAM_ROOMS.map((room) => (
+                <option key={room} value={room}>{room}진료실</option>
+              ))}
+            </select>
           </label>
         </div>
         <div className="history-search__row">
@@ -3911,6 +3948,9 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
             <thead>
               <tr>
                 <th>날짜</th>
+                {/* 진료실로 거를 수 있게 됐으니 결과에도 보여 준다 — 안 보이는 조건으로
+                    걸러진 표는 왜 줄었는지 알 수가 없다. */}
+                <th>진료실</th>
                 <th>수액실</th>
                 <th>베드</th>
                 <th>환자명</th>
@@ -3925,6 +3965,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
               {filtered.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.date}</td>
+                  <td>{entry.examRoom ? `${entry.examRoom}진료실` : '—'}</td>
                   <td>{entry.room}</td>
                   <td>{entry.bedNumber}</td>
                   <td>{entry.patientName}</td>
@@ -4042,10 +4083,34 @@ function sendOnEnter(e, canSend, send) {
   if (canSend) send()
 }
 
+// 상태 요약의 다섯 칸 — 순서가 곧 '왼쪽부터 급한 것'이다.
+const BED_SUMMARY_ITEMS = [
+  ['reserved', '배정됨'],
+  ['occupied', '진행중'],
+  ['warning', '곧 완료'],
+  ['completed', '완료 · 정리'],
+  ['vacant', '빈 베드'],
+]
+
 const MSG_CASCADE_STEP = 28
 const MSG_CASCADE_MAX = 7 // 이보다 많이 쌓이면 더 밀지 않고 겹쳐 쌓는다
 
+// 쪽지 카드(300px)가 우상단에서 탭 줄을 덮기 시작하는 폭.
+// 탭 줄은 왼쪽 정렬이라 오른쪽 끝이 화면 폭과 무관하게 733px 근처에 선다(834·1280 둘 다
+// 실측 733). 카드는 오른쪽에서 324px(300+여백)을 먹으므로 vw − 324 < 733, 즉 1057px보다
+// 좁으면 겹친다. 여유를 조금 두고 1060으로 잡는다.
+const MSG_NARROW = '(max-width: 1060px)'
+
+// 폭이 바뀌면 다시 그려야 해서 구독한다. useEffect + setState로 하면 eslint의
+// set-state-in-effect에 걸린다 — 이건 외부 상태 구독이니 전용 훅이 맞다.
+const msgNarrowQuery = window.matchMedia?.(MSG_NARROW)
+const subscribeNarrow = (cb) => {
+  msgNarrowQuery?.addEventListener('change', cb)
+  return () => msgNarrowQuery?.removeEventListener('change', cb)
+}
+
 function MessageCard({ message, index, onClose, onMove }) {
+  const narrow = useSyncExternalStore(subscribeNarrow, () => msgNarrowQuery?.matches ?? false, () => false)
   const [replying, setReplying] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [sending, setSending] = useState(false)
@@ -4054,9 +4119,17 @@ function MessageCard({ message, index, onClose, onMove }) {
 
   const pos = message.pos
   const step = Math.min(index, MSG_CASCADE_MAX) * MSG_CASCADE_STEP
+  // 기본 자리는 오른쪽 위. 오른쪽 아래는 전체 채팅창 자리라 비워 둔다.
+  //
+  // 좁은 화면(아이패드)에서는 우상단이 탭 줄 위다 — '환자 조회·통계·데이터관리'가 덮인다.
+  // 그렇다고 왼쪽 '위'로 보내면 더 나쁘다: 834px 실측으로 탭이 x 24~732에 깔려 있어
+  // 전체(28~89)·2수액실·수액센터가 통째로 덮인다. 그래서 왼쪽 '아래'다 —
+  // 탭 줄 아래이고, 우하단 채팅 자리와도 안 겹친다. 덮이는 건 스크롤되는 카드뿐이다.
   const style = pos
-    ? { left: `${pos.x}px`, top: `${pos.y}px`, right: 'auto' }
-    : { top: `${80 + step}px`, right: `${24 + step}px` }
+    ? { left: `${pos.x}px`, top: `${pos.y}px`, right: 'auto', bottom: 'auto' }
+    : narrow
+      ? { left: `${24 + step}px`, bottom: `${24 + step}px`, top: 'auto', right: 'auto' }
+      : { top: `${80 + step}px`, right: `${24 + step}px`, bottom: 'auto' }
 
   function handlePointerDown(e) {
     // 버튼 위에서 시작한 드래그는 무시 — 확인/답장 클릭을 잡아먹지 않게.
@@ -4716,6 +4789,17 @@ function App() {
     { occupied: 0, warning: 0, completed: 0, vacant: 0, reserved: 0 },
   )
 
+  const summaryStrip = (
+    <div className="bed-summary">
+      {BED_SUMMARY_ITEMS.map(([key, label]) => (
+        <div key={key} className={`bed-summary__item bed-summary__item--${key}`}>
+          <span className="bed-summary__label">{label}</span>
+          <span className="bed-summary__value"><CountUp value={bedSummaryCounts[key]} /></span>
+        </div>
+      ))}
+    </div>
+  )
+
   const roomGroups =
     activeTab === 'all'
       ? ROOM_ORDER.map((room) => ({
@@ -4792,6 +4876,10 @@ function App() {
   const currentBedEvents = isInProgress && currentBed?.sessionId
     ? xEditableEvents(currentBed.sessionId, sessionNotes, rounds, vitals)
     : []
+  // 새로 기록할 때만. 수정 중에는 '직전'이 편집 중인 것보다 앞선 건지 뒤인지 모호해진다.
+  const prevVitals = vitalsModalBed && !editingVitalsId
+    ? getPrevSessionVitals(vitals, vitalsModalBed.sessionId)
+    : null
   const currentBedChipCategory = currentBedIsWarning ? 'warning' : 'occupied'
   const currentBedChipLabel = currentBedIsWarning ? '곧 완료' : '진행중'
 
@@ -5811,25 +5899,20 @@ function App() {
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
         >
-          <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
-          <p className="bed-card__number">
-            {bed.number}
-            <GenderMark gender={bed.gender} />
-          </p>
+          {/* 번호와 상태칩을 같은 줄에 흘려 넣는다 — 칩을 절대배치로 띄우면
+              번호가 길어질 때 겹친다. */}
+          <div className="bed-card__top">
+            <p className="bed-card__number">
+              {bed.number}
+              <GenderMark gender={bed.gender} />
+            </p>
+            <span className="bed-card__chip bed-card__chip--reserved">배정됨 · 미도착</span>
+          </div>
           <p className="bed-card__patient">
             <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
             <PrescriptionCheck done={bed.hasPrescription} />
           </p>
           <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
-          {/* 진료실 칩 + 처방 미작성을 한 줄에 둔다 — 미작성을 별도 줄로 두면
-              이 카드만 한 줄 더 길어져 옆 카드들과 줄이 어긋난다.
-              진료실은 미선택이면 안 뜨므로(기존 세션) 줄 자체도 조건부다. */}
-          {(bed.examRoom || !bed.hasPrescription) && (
-            <div className="bed-card__exam-row">
-              {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
-              <PrescriptionTodo done={bed.hasPrescription} />
-            </div>
-          )}
           {/* 특이사항은 배정 단계부터 보여야 한다(투여 전에 알아야 하는 정보라). */}
           {bed.specialNote && (
             <p className="bed-card__caution bed-card__caution--danger">
@@ -5842,6 +5925,10 @@ function App() {
             <p className="bed-card__overdue-label"><Icon name="alert" /> 환자 미도착</p>
           )}
           <p className="bed-card__reserved-label"><Marquee contentKey={bed.lineStaff}>라인 {bed.lineStaff}</Marquee></p>
+          {/* 레일이 없다. 빈 레일을 깔아 봤는데(트랙만 보이는 상태) 5%쯤 진행된 카드와
+              구분이 애매했다 — 트랙을 보이게 만든 뒤로는 특히 그랬다.
+              '있다/없다'가 '비었다/조금 찼다'보다 멀리서 확실하다.
+              빈 베드와 헷갈릴 일은 없다 — 배정됨은 위에 보라 띠와 환자명이 있다. */}
         </article>
       )
     }
@@ -5850,8 +5937,13 @@ function App() {
     const completed = bed.status === 'completed' || isCompleted
     const displayProgress = completed ? 100 : progress
     const category = completed ? 'completed' : isWarning ? 'warning' : 'occupied'
-    const chipLabel = completed ? '완료' : isWarning ? '곧 완료' : '진행중'
-    const noteLines = getCardNoteLines(sessionNotes, bed)
+    // 진행률은 상태 칩에 붙인다. 카드에서 세로로 자리가 남는 곳은 없고, 칩이 있는
+    // 첫 줄은 번호 옆이 비어 있어 가로로만 늘어나면 된다(높이가 안 는다).
+    // 완료 카드는 항상 100%라 숫자가 정보를 안 준다 — '완료'만 둔다.
+    const chipLabel = completed
+      ? '완료'
+      : `${isWarning ? '곧 완료' : '진행중'} ${displayProgress}%`
+    const noteLines = getCardNoteLines(bed)
 
     // 라운딩 줄 (완료/정리 상태 카드에는 표시 안 함)
     const latestRound = completed ? null : getLatestSessionRound(rounds, bed.sessionId)
@@ -5863,6 +5955,9 @@ function App() {
         ? { ...rawRoundStatus, status: 'ok' }
         : rawRoundStatus
     const vitalsView = getCardVitals(bed)
+    // 버튼이 뜰 때만 이름·차트 줄에 자리를 비운다(절대배치라 스스로 자리를 안 만든다).
+    // 늘 비워두면 값이 없는 카드에서 이름만 이유 없이 좁아진다.
+    const showVitals = !completed && !!(vitalsView.temp || vitalsView.bp)
     const roundText =
       roundStatus?.status === 'ok'
         ? `라운딩 ${roundStatus.minutes}분 후`
@@ -5877,58 +5972,56 @@ function App() {
     return (
       <article
         key={bed.id}
-        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${(movingBed && bed.id !== movingBed.id) || pendingPatient ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
+        className={`${getCardClassName(bed, { isCompleted: completed, isWarning })}${showVitals ? ' bed-card--has-vitals' : ''}${!completed && !showVitals ? ' bed-card--vitals-empty' : ''}${(movingBed && bed.id !== movingBed.id) || pendingPatient ? ' bed-card--dimmed' : ''}${movingBed && bed.id === movingBed.id ? ' bed-card--moving' : ''}`}
         onClick={(e) => handleBedClick(bed, e.currentTarget)}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && handleBedClick(bed, e.currentTarget)}
       >
-        <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
-        {/* 우상단 바이탈 — 잰 항목만 표시. 아무것도 없으면 값 없이 기록 버튼만 남긴다. */}
-        {!completed && (
-          <button
-            type="button"
-            className={`bed-card__vitals${vitalsView.temp || vitalsView.bp ? '' : ' bed-card__vitals--empty'}`}
-            onClick={(e) => { e.stopPropagation(); openVitalsModal(bed) }}
-            aria-label="바이탈 기록"
-            title="바이탈 기록"
-          >
-            {vitalsView.temp || vitalsView.bp ? (
-              <>
-                {vitalsView.temp && (
-                  <span className={`bed-card__vitals-temp${vitalsView.tone ? ` bed-card__vitals-temp--${vitalsView.tone}` : ''}`}>
-                    {vitalsView.temp}
-                  </span>
-                )}
-                {vitalsView.bp && <span className="bed-card__vitals-bp">{vitalsView.bp}</span>}
-              </>
-            ) : (
-              /* 값이 없을 때는 아이콘만으로는 눌러야 하는 줄 모른다 — 라벨을 붙여 알약 버튼으로 */
-              <>
-                <Icon name="thermometer" />
-                <span className="bed-card__vitals-cta">바이탈</span>
-              </>
-            )}
-          </button>
-        )}
-        <p className="bed-card__number">
-          {bed.number}
-          <GenderMark gender={bed.gender} />
-        </p>
-        <p className="bed-card__patient">
-          <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
-          <PrescriptionCheck done={bed.hasPrescription} />
-        </p>
-        <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
-        {/* 진료실 칩 + 처방 미작성을 한 줄에 둔다 — 미작성을 별도 줄로 두면
-            이 카드만 한 줄 더 길어져 옆 카드들과 줄이 어긋난다.
-            진료실은 미선택이면 안 뜨므로(기존 세션) 줄 자체도 조건부다. */}
-        {(bed.examRoom || !bed.hasPrescription) && (
-          <div className="bed-card__exam-row">
-            {bed.examRoom && <p className="bed-card__exam-room">{bed.examRoom}진료실</p>}
-            <PrescriptionTodo done={bed.hasPrescription} />
-          </div>
-        )}
+        {/* 번호와 상태칩을 같은 줄에 흘려 넣는다 — 칩을 절대배치로 띄우면
+            번호가 길어질 때 겹친다. */}
+        <div className="bed-card__top">
+          <p className="bed-card__number">
+            {bed.number}
+            <GenderMark gender={bed.gender} />
+          </p>
+          <span className={`bed-card__chip bed-card__chip--${category}`}>{chipLabel}</span>
+        </div>
+        {/* 이름·차트와 바이탈을 한 칸에 묶는다. 바이탈을 카드 기준으로 띄우면 위쪽 줄 높이가
+            바뀔 때마다 top 값을 다시 맞춰야 했다 — 여기 기준으로 top:0이면 저절로 맞는다. */}
+        <div className="bed-card__idrow">
+          <p className="bed-card__patient">
+            <Marquee contentKey={bed.patientName}>{bed.patientName}</Marquee>
+            <PrescriptionCheck done={bed.hasPrescription} />
+          </p>
+          <p className="bed-card__chart"><Marquee contentKey={bed.chartNumber}>{bed.chartNumber}</Marquee></p>
+          {/* 진행 중이면 항상 둔다. 값이 없을 때도 버튼이 있어야 카드에서 바로 첫 기록을
+              할 수 있다(예전엔 잰 값이 있을 때만 떠서, 첫 기록은 상세를 열어야 했다).
+              대신 빈 상태는 온도계 아이콘 하나로만 둔다 — 값일 때처럼 76px을 늘 비워두면
+              값이 없는 카드에서 이름이 이유 없이 좁아진다. */}
+          {!completed && (
+            <button
+              type="button"
+              className={`bed-card__vitals${showVitals ? '' : ' bed-card__vitals--empty'}`}
+              onClick={(e) => { e.stopPropagation(); openVitalsModal(bed) }}
+              aria-label={showVitals ? '바이탈 기록' : '바이탈 기록 — 아직 잰 값 없음'}
+              title="바이탈 기록"
+            >
+              {showVitals ? (
+                <>
+                  {vitalsView.temp && (
+                    <span className={`bed-card__vitals-temp${vitalsView.tone ? ` bed-card__vitals-temp--${vitalsView.tone}` : ''}`}>
+                      {vitalsView.temp}
+                    </span>
+                  )}
+                  {vitalsView.bp && <span className="bed-card__vitals-bp">{vitalsView.bp}</span>}
+                </>
+              ) : (
+                <Icon name="vitals" className="bed-card__vitals-icon" />
+              )}
+            </button>
+          )}
+        </div>
         {roundStatus && (
           <button
             type="button"
@@ -5944,48 +6037,44 @@ function App() {
             </Marquee>
           </button>
         )}
-        {noteLines.lines.length > 0 && (
+        {/* 두 줄뿐이라 '+N건 더'가 필요 없다 — 넘칠 일이 없다. */}
+        {noteLines.length > 0 && (
           <div className="bed-card__notes">
-            {noteLines.lines.map((line, i) => (
+            {noteLines.map((line, i) => (
               <CardNoteLine key={i} line={line} />
             ))}
-            {noteLines.moreCount > 0 && (
-              <p className="bed-card__caution bed-card__caution--more">
-                +{noteLines.moreCount}건 더
-              </p>
-            )}
           </div>
         )}
         <div className="bed-card__spacer" />
-        <div className="bed-card__progress">
-          <p className="bed-card__progress-text">
-            <span>
-              진행률 {displayProgress}%
-              {!completed && <Icon name="droplet" className="bed-card__droplet" />}
-            </span>
-            {!completed && (
-              <span className="bed-card__progress-elapsed">
-                {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
-              </span>
-            )}
-          </p>
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${displayProgress}%` }}
-            />
-          </div>
-        </div>
         {completed ? (
           <p className="bed-card__completed-label">정리 필요</p>
         ) : (
           <div className="bed-card__footer">
-            <span className="bed-card__meta">시작 - {formatHour24(bed.startTime)}</span>
+            {/* 두 줄이다. 셋을 한 줄에 넣으면 안 들어간다 — 실측으로 '시작 17:37'(56px)
+                + '88/150분'(53px) + '1시간 2분 남음'(81px, 길면 95px)에 간격까지 206px인데
+                footer 가용 폭은 208px 카드에서 174px, 태블릿(184px 카드)에서 150px이다.
+                시작시각이 윗줄을 혼자 쓰고, 아랫줄에 경과/총(왼쪽)과 남은 시간(오른쪽)이
+                나란히 선다 — 둘 다 '지금 어디쯤'을 말하는 값이라 같은 줄에 있어야 읽힌다. */}
+            <span className="bed-card__meta bed-card__meta--start">
+              시작 {formatHour24(bed.startTime)}
+            </span>
+            <span className="bed-card__meta">
+              {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
+            </span>
+            {/* 남은 시간은 짧은 표기(formatRemainingShort) — 자리를 만드느라 '분'을 떼는
+                대신 표현을 바꿨다. 왜 그 표기인지는 그 함수 주석에 적어 뒀다. */}
             <span className="bed-card__remaining">
-              {formatDuration(Math.ceil(remainingMs / 60000))} 남음
+              {formatRemainingShort(Math.ceil(remainingMs / 60000))} 남음
             </span>
           </div>
         )}
+        {/* 진행 레일 — 카드 맨 아래 가장자리에 얹힌다(절대배치라 카드 높이를 안 먹는다).
+            카드 높이가 전부 같으니 30칸의 레일이 화면을 가로질러 한 줄로 서고,
+            방 하나가 '어디까지 찼나'로 읽힌다. 배정됨 카드엔 레일이 없다 —
+            아직 시작 안 했다는 뜻이 형태로 드러난다. */}
+        <div className="progress-bar">
+          <div className="progress-fill" style={{ width: `${displayProgress}%` }} />
+        </div>
       </article>
     )
   }
@@ -6010,6 +6099,7 @@ function App() {
               <h1 className="header__title">수액실 관리</h1>
             </div>
           </header>
+
           <div className="header-account">
             <button
               type="button"
@@ -6197,38 +6287,9 @@ function App() {
         />
       ) : (
         <>
-          <div className="bed-summary">
-            <div className="bed-summary__card">
-              <span className="bed-summary__label">배정됨</span>
-              <span className="bed-summary__value bed-summary__value--reserved">
-                <CountUp value={bedSummaryCounts.reserved} />
-              </span>
-            </div>
-            <div className="bed-summary__card">
-              <span className="bed-summary__label">진행중</span>
-              <span className="bed-summary__value bed-summary__value--occupied">
-                <CountUp value={bedSummaryCounts.occupied} />
-              </span>
-            </div>
-            <div className="bed-summary__card">
-              <span className="bed-summary__label">곧 완료</span>
-              <span className="bed-summary__value bed-summary__value--warning">
-                <CountUp value={bedSummaryCounts.warning} />
-              </span>
-            </div>
-            <div className="bed-summary__card">
-              <span className="bed-summary__label">완료 · 정리</span>
-              <span className="bed-summary__value bed-summary__value--completed">
-                <CountUp value={bedSummaryCounts.completed} />
-              </span>
-            </div>
-            <div className="bed-summary__card">
-              <span className="bed-summary__label">빈 베드</span>
-              <span className="bed-summary__value bed-summary__value--vacant">
-                <CountUp value={bedSummaryCounts.vacant} />
-              </span>
-            </div>
-          </div>
+          {/* 상태 요약 — 검색창 아래 자기 줄. 헤더 가운데와 검색창 옆에도 세워 봤는데,
+              자리가 손에 익은 쪽이 세로 68px보다 컸다(검색창과 같은 판단). */}
+          {summaryStrip}
 
           {roomGroups ? (
             roomGroups.map(({ room, roomBeds }) => {
@@ -6531,14 +6592,17 @@ function App() {
 
                 {actionError && <p role="alert" className="field__error">{actionError}</p>}
 
-                {/* 잠긴 이유를 버튼이 직접 말한다 — 회색으로만 두면 왜 안 눌리는지 알 길이 없다. */}
+                {/* 잠긴 이유를 버튼 문구로 알린 적이 있는데('믹스 담당자를 지정하세요'),
+                    흰 배경+테두리라 바로 위 선택 칸과 똑같이 생긴 데다 명령형이라
+                    "여기를 눌러 입력하라"로 읽혔다. 신호는 초록으로 강조된
+                    믹스 담당자 칸(.field__input--needed) 하나로 충분하다. */}
                 <button
                   type="button"
-                  className={`btn-register${mixStaffId ? '' : ' btn-register--hint'}`}
+                  className="btn-register"
                   onClick={handleStartSession}
                   disabled={offline || !mixStaffId}
                 >
-                  {mixStaffId ? '투여 시작' : '믹스 담당자를 지정하세요'}
+                  투여 시작
                 </button>
 
                 {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다.
@@ -6861,6 +6925,17 @@ function App() {
                             disabled={offline}
                           >
                             증상
+                          </button>
+                          {/* 첫 기록 진입로는 둘이다 — 카드 우상단의 아이콘 버튼(잰 값이 없을 때)과 여기.
+                              카드 쪽은 글자 없는 아이콘이라 조용하고, 여기는 라운딩·증상과 나란히 놓여
+                              '오늘 뭘 기록할까'를 한자리에서 고르게 한다. */}
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            onClick={() => openVitalsModal()}
+                            disabled={offline}
+                          >
+                            바이탈
                           </button>
                         </div>
                       </div>
@@ -7230,6 +7305,16 @@ function App() {
 
             <div className="modal__body">
               <OccurredAtPicker valueMs={vitalsOccurredAt} onChange={setVitalsOccurredAt} nowMs={now} />
+
+              {/* 같은 방문에서 직전에 잰 값. 참고용이라 읽기만 한다 — 위 함수 주석 참고. */}
+              {prevVitals && (
+                <p className="prev-visit">
+                  <span className="prev-visit__label">
+                    직전 {formatHour24(new Date(prevVitals.occurredAt).getTime())}
+                  </span>
+                  <span className="prev-visit__text">{xVitalsText(prevVitals)}</span>
+                </p>
+              )}
 
               <label className="field">
                 <span className="field__label">체온 (선택)</span>

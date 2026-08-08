@@ -11,11 +11,19 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --sans: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
-  --heading: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
+  /* IBM Plex Sans KR — 자체 호스팅(오프라인 LAN에서도 동작), SIL OFL-1.1.
+     숫자·영문이 인터페이스용으로 설계돼 1·4·6·9가 또렷하고, 계측기 같은 인상을 준다.
+     굵기는 700까지만 있다(100~700). 800을 요청하면 브라우저가 700을 쓴다. */
+  --sans: 'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
+  --heading: 'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
+  /* 줄간격은 단위 없는 값이어야 한다. 145%(=26.1px)로 두면 '계산된 길이'가 상속돼서
+     11px 라벨도 13px 라벨도 전부 26.1px 상자를 쓴다 — 줄마다 헛여백이 8~10px씩 붙는다.
+     카드·요약 스트립의 line-height:1.3 덮어쓰기는 이 증상을 국소로 막던 것이다.
+     단위를 떼면 '배수'가 상속돼 각 줄이 제 글자 크기에 맞는 높이를 갖는다.
+     18px 본문은 26.1px 그대로 — 문단 가독성은 안 바뀐다. */
+  font: 18px/1.45 var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
@@ -75,23 +83,17 @@ body {
 }
 
 #root {
-  /* 벽걸이 상황판 — 화면을 넓게 쓰되, 초대형 모니터에서 카드가 늘어지지 않게 상한을 둔다 */
+  /* 벽걸이 상황판 — 화면 폭을 그대로 쓴다. 예전엔 max-width 1600(≥1920에선 1800)으로
+     상한을 뒀는데, '카드가 늘어질까 봐'는 기우였다. 격자가 auto-fill minmax(180px,1fr)라
+     폭이 남으면 카드가 늘어지는 게 아니라 칸이 하나 더 생긴다. 상한이 실제로 한 일은
+     1920 화면에서 좌우 60px씩(.app 여백까지 84px) 죽은 띠를 만든 것뿐이었다 —
+     카드 한 칸(180+16)에 가까운 폭이다. 여백은 .app의 24px만 남긴다. */
   width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
   text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-}
-
-/* 아주 넓은 모니터에선 조금 더 활용 */
-@media (min-width: 1920px) {
-  #root {
-    max-width: 1800px;
-  }
 }
 
 h1,

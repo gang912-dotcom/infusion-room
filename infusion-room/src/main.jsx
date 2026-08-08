@@ -1,6 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import 'pretendard/dist/web/static/pretendard-dynamic-subset.css' // 브랜드 폰트(자체 호스팅 · 오프라인 LAN에서도 동작)
+// 본문 폰트 — 자체 호스팅이라 오프라인 LAN에서도 동작한다. 앱이 쓰는 굵기만 불러온다
+// (400·500·600·700). 800을 쓰는 규칙 7곳은 브라우저가 700으로 맞춘다.
+import '@fontsource/ibm-plex-sans-kr/400.css'
+import '@fontsource/ibm-plex-sans-kr/500.css'
+import '@fontsource/ibm-plex-sans-kr/600.css'
+import '@fontsource/ibm-plex-sans-kr/700.css'
 import './index.css'
 import App from './App.jsx'
 
