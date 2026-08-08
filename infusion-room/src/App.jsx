@@ -6439,7 +6439,8 @@ function App() {
                 </button>
               </div>
             ) : isReserved ? (
-              <div className="modal__body">
+              /* 진행중 상세와 같은 pane을 쓴다 — 두 화면의 왼쪽 칸이 갈라지면 안 된다. */
+              <div className="bed-detail-pane">
                 <div className="bed-detail-summary">
                   <div className="bed-detail-summary__patient">
                     <span className="bed-detail-summary__name">{currentBed.patientName}</span>
@@ -6456,9 +6457,11 @@ function App() {
                   <p role="alert" className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
 
-                {examRoomField}
-                {lineStaffField}
-                {mixStaffField}
+                <div className="detail-selects">
+                  {examRoomField}
+                  {lineStaffField}
+                  {mixStaffField}
+                </div>
 
                 {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
                 <div className="rec-block__actions">
@@ -6520,8 +6523,10 @@ function App() {
                 </button>
               </div>
             ) : (
-              <div className={isInProgress ? 'bed-detail-2col' : 'modal__body'}>
-                <div className={isInProgress ? 'bed-detail-2col__left' : undefined}>
+              /* 배정 상세는 한 칸, 진행중 상세는 2단이지만 왼쪽 칸의 모습은 같아야 한다.
+                 padding·gap·'남은 시간' 배치는 .bed-detail-pane 한 곳에서 나온다. */
+              <div className={isInProgress ? 'bed-detail-2col' : undefined}>
+                <div className={`bed-detail-pane${isInProgress ? ' bed-detail-2col__left' : ''}`}>
                 <div className="bed-detail-summary">
                   <div className="bed-detail-summary__patient">
                     <span className="bed-detail-summary__name">{currentBed.patientName}</span>
