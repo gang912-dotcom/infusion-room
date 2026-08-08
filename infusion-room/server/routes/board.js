@@ -11,6 +11,7 @@ const activeSessionStmt = db.prepare(`
   SELECT s.id, s.patient_id, s.assigned_at, s.started_at, s.duration_minutes, s.special_note, s.exam_room, s.visit_symptom,
          s.day_memo,
          p.chart_no, p.name AS patient_name, p.gender,
+         s.line_staff_id, s.mix_staff_id,
          ls.name AS line_staff_name, ms.name AS mix_staff_name
   FROM sessions s
   JOIN patients p ON p.id = s.patient_id
@@ -125,9 +126,12 @@ router.get('/board', (req, res) => {
         // 성별은 patients의 현재 값이다(세션 스냅샷이 아니다) — 고치면 카드에 바로 반영된다.
         patient: { chart_no: session.chart_no, name: session.patient_name, gender: session.gender ?? null },
         assigned_at: session.assigned_at,
+        // 이름만으로는 상세의 담당자 셀렉트를 채울 수 없다(동명이인) — id도 같이 보낸다.
         line_staff: session.line_staff_name,
+        line_staff_id: session.line_staff_id,
         started_at: session.started_at,
         mix_staff: session.mix_staff_name,
+        mix_staff_id: session.mix_staff_id ?? null,
         duration_minutes: session.duration_minutes,
         last_round_at: lastRound?.occurred_at ?? null,
         latest_temp: lastTemp ? { value: lastTemp.temperature, occurred_at: lastTemp.occurred_at } : null,

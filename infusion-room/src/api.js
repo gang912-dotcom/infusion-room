@@ -102,7 +102,9 @@ function mapBoardToBeds(board) {
       latestBp: s.latest_bp ?? null,
       latestPulse: s.latest_pulse ?? null,
       lineStaff: s.line_staff,
+      lineStaffId: s.line_staff_id ?? null,
       mixStaff: s.mix_staff,
+      mixStaffId: s.mix_staff_id ?? null,
       overdue: status === 'reserved' && serverNow - s.assigned_at > assignTimeoutMs,
     }
   })
@@ -207,6 +209,15 @@ export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, sp
       // 미지정('')은 서버가 null로 본다. null이면 기존 성별을 덮지 않는다.
       special_note: specialNote, exam_room: examRoom, gender,
     }),
+  })
+}
+
+// 담당자 변경(교대·오등록 정정) — 상세에서 고르는 즉시 호출한다.
+// 라인·믹스 중 바꾸는 쪽만 보낸다. 안 보낸 필드는 서버가 건드리지 않는다.
+export async function editSessionStaff(sessionId, patch) {
+  return apiFetch(`/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
   })
 }
 

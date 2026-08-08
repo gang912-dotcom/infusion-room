@@ -436,11 +436,30 @@ router.patch('/sessions/:id', (req, res) => {
 
   const {
     deleted, special_note: specialNote, exam_room: examRoom, visit_symptom: visitSymptom,
-    day_memo: dayMemo,
+    day_memo: dayMemo, line_staff_id: lineStaffId, mix_staff_id: mixStaffId,
   } = req.body ?? {}
   if (deleted === undefined && specialNote === undefined
-      && examRoom === undefined && visitSymptom === undefined && dayMemo === undefined) {
+      && examRoom === undefined && visitSymptom === undefined && dayMemo === undefined
+      && lineStaffId === undefined && mixStaffId === undefined) {
     return res.status(400).json({ error: '변경할 값이 없습니다' })
+  }
+
+  // 담당자는 진행 중인 세션에서만 바꾼다. 종료 세션의 기록지는 record_snapshot으로 얼어 있어
+  // DB만 바뀌고 인쇄물은 그대로다. 기록지의 서명 이미지도 담당자 id로 붙으므로
+  // 여기서 바꾸면 이름과 서명이 함께 바뀐다 — 그래서 더더욱 진행 중에만 허용한다.
+  if ((lineStaffId !== undefined || mixStaffId !== undefined)
+      && (session.ended_at !== null || session.cancelled)) {
+    return res.status(400).json({ error: '종료되었거나 취소된 세션입니다' })
+  }
+  // 라인 담당자는 NOT NULL이라 다른 사람으로 바꿀 수만 있고 비울 수 없다.
+  // 믹스 담당자도 비우기를 막는다 — 투여 시작 때 정해진 값이라 비우면 기록지에서 사라진다.
+  // 비활성 직원으로는 바꿀 수 없다(이미 그 직원이 붙어 있는 과거 세션은 그대로 둔다).
+  const activeStaffStmt = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1')
+  for (const [value, label] of [[lineStaffId, '라인'], [mixStaffId, '믹스']]) {
+    if (value === undefined) continue
+    if (!Number.isInteger(value) || !activeStaffStmt.get(value)) {
+      return res.status(400).json({ error: `유효하지 않은 ${label} 담당자입니다` })
+    }
   }
 
   const normalizedExamRoom = normalizeExamRoom(examRoom)
@@ -472,6 +491,8 @@ router.patch('/sessions/:id', (req, res) => {
     fields.push('day_memo = ?')
     params.push(trimmed || null)
   }
+  if (lineStaffId !== undefined) { fields.push('line_staff_id = ?'); params.push(lineStaffId) }
+  if (mixStaffId !== undefined) { fields.push('mix_staff_id = ?'); params.push(mixStaffId) }
   params.push(session.id)
 
   db.transaction(() => {
@@ -488,7 +509,8 @@ router.patch('/sessions/:id', (req, res) => {
   // 특이사항·진료실·내원당시증상·당일 메모는 상세·카드에 바로 보여야 하므로
   // 다른 단말도 폴링으로 받게 revision을 올린다.
   if (specialNote !== undefined || examRoom !== undefined
-      || visitSymptom !== undefined || dayMemo !== undefined) bumpRevision(db)
+      || visitSymptom !== undefined || dayMemo !== undefined
+      || lineStaffId !== undefined || mixStaffId !== undefined) bumpRevision(db)
   res.json({ ok: true })
 })
 

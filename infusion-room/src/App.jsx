@@ -14,7 +14,7 @@ import {
   getPatientSessionNotes,
   editSessionNote,
   getStaffList, lookupPatient, searchPatients, logPatientDetailView,
-  assignBed, editSessionSpecialNote, editSessionExamRoom, startSession,
+  assignBed, editSessionSpecialNote, editSessionExamRoom, editSessionStaff, startSession,
   getOrderItems, getPrescription, savePrescription, getOrderBundles,
   listOrderItemsAdmin, createOrderItem, updateOrderItem, deleteOrderItem,
   listOrderBundlesAdmin, createOrderBundle, updateOrderBundle, deleteOrderBundle, cancelSession, moveBedSession, adjustSessionDuration, endSession,
@@ -4774,6 +4774,56 @@ function App() {
     }
   }
 
+  // 담당자 정정(교대·오등록) — 진료실과 같은 방식이다: 고르는 즉시 저장.
+  // 기록지가 담당자 이름뿐 아니라 서명 이미지까지 담당자 id로 붙이므로,
+  // 잘못 들어가면 남의 서명이 찍힌 기록지가 나간다.
+  async function handleChangeStaff(patch) {
+    if (!currentBed?.sessionId) return
+    setActionError('')
+    try {
+      await editSessionStaff(currentBed.sessionId, patch)
+      await refreshBoard()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
+  // 라인 담당자는 배정 때 정해지므로 예약·진행중 모두에서 고칠 수 있다.
+  // 비우기는 없다 — 서버도 NOT NULL이고 400으로 막는다.
+  const lineStaffField = currentBed && (
+    <label className="field">
+      <span className="field__label">라인 담당자</span>
+      <select
+        className="field__input"
+        value={String(currentBed.lineStaffId ?? '')}
+        onChange={(e) => handleChangeStaff({ line_staff_id: Number(e.target.value) })}
+        disabled={offline}
+      >
+        <option value="" disabled>{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
+        {staffList.map((st) => (
+          <option key={st.id} value={st.id}>{st.name}</option>
+        ))}
+      </select>
+    </label>
+  )
+
+  // 믹스 담당자는 투여 시작 때 정해진다 — 시작 전에는 값 자체가 없어 칸을 띄우지 않는다.
+  const mixStaffField = currentBed?.mixStaffId != null && (
+    <label className="field">
+      <span className="field__label">믹스 담당자</span>
+      <select
+        className="field__input"
+        value={String(currentBed.mixStaffId)}
+        onChange={(e) => handleChangeStaff({ mix_staff_id: Number(e.target.value) })}
+        disabled={offline}
+      >
+        {staffList.map((st) => (
+          <option key={st.id} value={st.id}>{st.name}</option>
+        ))}
+      </select>
+    </label>
+  )
+
   const examRoomField = currentBed && (
     <label className="field">
       <span className="field__label">진료실</span>
@@ -6407,6 +6457,8 @@ function App() {
                 )}
 
                 {examRoomField}
+                {lineStaffField}
+                {mixStaffField}
 
                 {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다. */}
                 <div className="rec-block__actions">
@@ -6565,6 +6617,8 @@ function App() {
                 </div>
 
                 {isInProgress && examRoomField}
+                {isInProgress && lineStaffField}
+                {isInProgress && mixStaffField}
 
                 {/* 진행중이면 특이사항은 오른쪽 기록 패널에서 편집한다. 여기(완료 등)는 읽기 전용. */}
                 {!isInProgress && currentBed.specialNote && (
