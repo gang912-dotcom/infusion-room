@@ -81,7 +81,15 @@ export default function ChatPanel({ account, onClose, onSeen }) {
         sinceRef.current = data.messages.at(-1)?.id ?? 0
       } else if (data.messages.length) {
         sinceRef.current = data.messages[data.messages.length - 1].id
-        setMessages((prev) => [...prev, ...data.messages].filter((m) => !gone.has(m.id)))
+        // id로 한 번 걸러서 붙인다. since는 await 뒤에야 올라가기 때문에, 그 사이에 나간
+        // 폴링이 같은 since로 같은 줄을 또 받아 온다 — 전송 직후 pull과 2초 폴링이 겹치는
+        // 자리라 랜덤하게 같은 말이 두 줄로 보였다. 붙이기를 멱등하게 만들어 막는다.
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id))
+          const fresh = data.messages.filter((m) => !seen.has(m.id))
+          if (!fresh.length && !gone.size) return prev
+          return [...prev, ...fresh].filter((m) => !gone.has(m.id))
+        })
       } else if (gone.size) {
         setMessages((prev) => (prev.some((m) => gone.has(m.id)) ? prev.filter((m) => !gone.has(m.id)) : prev))
       }
