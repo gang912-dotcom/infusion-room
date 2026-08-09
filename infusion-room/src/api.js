@@ -383,6 +383,12 @@ function mapHistoryRow(row) {
       year: 'numeric', month: '2-digit', day: '2-digit',
     }),
     room: ROOM_LABELS[row.room] ?? row.room,
+    // 위 date/startTime/endTime은 표에 그대로 찍는 로캘 문자열이라 되돌려 계산할 수가 없다
+    // ('2026. 08. 10.' · '오전 09:00'). 통계는 시간대·요일로 묶어야 해서 원본 ms가 필요하고,
+    // 수액실도 라벨이 아니라 키로 세야 한다(room은 이미 라벨로 바뀐 값이다).
+    roomKey: row.room,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
     bedNumber: row.bed_number,
     patientName: row.patient_name,
     chartNumber: row.chart_no,

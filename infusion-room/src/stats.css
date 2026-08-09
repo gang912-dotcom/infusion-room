@@ -1,0 +1,233 @@
+/* 통계 화면 — 시각화 색은 눈으로 고르지 않고 검증기를 돌려서 정했다.
+ *
+ * 검증 결과(이 앱의 실제 카드 면 기준, 라이트 #ffffff / 다크 #1c1c1c):
+ *   - 계열색 슬롯1 파랑: 두 테마 모두 면 대비 3:1 이상 통과.
+ *   - 히트맵 순차 램프 5단계: 밝기 단조 증가 · 인접 ΔL ≥ 0.06 · 단일 색상 · 옅은 끝이
+ *     면 대비 2:1 이상(라이트 2.11 / 다크 2.10) — 두 테마 모두 통과.
+ *   - 다크 램프는 라이트를 뒤집은 게 아니라 어두운 면에 맞춰 따로 고른 단계다.
+ *   - 상태색(초록·앰버·빨강·보라)은 쓰지 않는다. 저 넷은 베드 상태에 예약된 뜻이라
+ *     '계열 4번'으로 빌려 쓰면 같은 색이 화면마다 다른 말을 하게 된다.
+ *
+ * 색이 유일한 단서가 되지 않게 두 채널을 더 둔다: 히트맵 칸에는 숫자가 찍히고,
+ * 추이와 히트맵에는 '표 보기'가 있다.
+ */
+
+.sv-stats {
+  --viz-1: #3987e5;
+  --viz-1-wash: rgba(57, 135, 229, 0.16);
+  --viz-ink-bg: #3987e5;
+  --heat-1: #184f95;
+  --heat-2: #256abf;
+  --heat-3: #3987e5;
+  --heat-4: #6da7ec;
+  --heat-5: #9ec5f4;
+  --heat-0: var(--number-bg);
+
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  /* 색을 명시한다 — index.css의 `:root{color:var(--text)}`가 #9ca3af로 흘러들어
+     상속에 기댄 숫자·제목이 회색으로 죽었다(실측). 원본 컴포넌트들은 전부 색을
+     직접 지정해서 이 사실이 드러난 적이 없다. */
+  color: var(--text-primary);
+}
+
+:root[data-theme='light'] .sv-stats {
+  --viz-1: #2a78d6;
+  --viz-1-wash: rgba(42, 120, 214, 0.12);
+  /* 흰 글자를 얹는 자리용 한 단계 진한 파랑 — #2a78d6 위 흰 12px 글자는 4.42로 미달이었다(실측). */
+  --viz-ink-bg: #1c5cab;
+  --heat-1: #86b6ef;
+  --heat-2: #5598e7;
+  --heat-3: #2a78d6;
+  --heat-4: #1c5cab;
+  --heat-5: #104281;
+}
+
+/* ─── 이 화면이 쓰는 기본 조각 ────────────────────────────────────────
+   App.css의 .field__input·.duration-preset에 얹지 않고 여기서 따로 정의한다 —
+   저건 모달·카드용이라 그쪽을 고치면 통계가 같이 흔들린다. */
+.sv-input {
+  min-height: 44px; padding: 8px 10px;
+  font: inherit; font-size: 14px; color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--card-border); border-radius: 8px;
+}
+.sv-input:focus-visible { outline: 2px solid var(--status-occupied); outline-offset: 1px; }
+
+.sv-seg {
+  min-height: 44px; padding: 0 14px;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+  background: var(--input-bg);
+  border: 1px solid var(--card-border); border-radius: 8px; cursor: pointer;
+}
+.sv-seg:hover { color: var(--text-primary); }
+/* 고른 값은 '상태'가 아니라 선택이다 — 초록을 쓰면 같은 화면의 상태색과 뜻이 겹친다.
+   밝기와 굵기로만 구분한다(카드의 시간 칩과 같은 화법). */
+.sv-seg--on {
+  color: var(--text-primary); background: var(--number-bg);
+  border-color: var(--btn-outline); font-weight: 700;
+}
+
+.sv-secondary {
+  min-height: 44px; padding: 0 14px;
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border); border-radius: 8px; cursor: pointer;
+}
+.sv-secondary:hover { background: var(--number-bg); }
+
+.sv-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ─── 기간 막대 ────────────────────────────────────────────────────── */
+.sv-stats__bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-card, 14px);
+}
+.sv-seg-group { display: flex; gap: 4px; }
+.sv-stats .sv-seg-group .sv-seg { flex: 0 0 auto; padding: 0 14px; }
+.sv-seg-group--sm .sv-seg { min-height: 44px; padding: 0 12px; font-size: 13px; }
+.sv-stats__custom { display: flex; align-items: center; gap: 6px; }
+.sv-input--date { min-height: 44px; width: auto; padding: 6px 10px; font-size: 13px; }
+.sv-stats__sep { color: var(--text-muted); }
+.sv-stats__period { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sv-stats__empty { margin: 0; padding: 40px; text-align: center; color: var(--text-muted); }
+
+/* ─── 요약 타일 ────────────────────────────────────────────────────── */
+.sv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.sv-kpi {
+  display: grid; gap: 3px; align-content: start;
+  padding: 14px 16px;
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-card, 14px);
+}
+.sv-kpi__label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+/* 큰 숫자는 비례 숫자로 둔다 — tabular은 모든 자리를 '0' 폭으로 잡아서 큰 크기에서 헐거워진다. */
+.sv-kpi__value { font-size: 26px; font-weight: 700; line-height: 1.15; }
+.sv-kpi__unit { font-size: 15px; font-weight: 600; color: var(--text-muted); margin-left: 2px; }
+.sv-kpi__sub { font-size: 12px; color: var(--text-muted); }
+/* 이 화면이 이끄는 하나의 수. 한 뷰에 하나만 둔다. */
+.sv-kpi--hero { grid-column: span 1; }
+.sv-kpi--hero .sv-kpi__value { font-size: 48px; }
+.sv-kpi--hero .sv-kpi__unit { font-size: 20px; }
+
+/* ─── 카드 공통 ────────────────────────────────────────────────────── */
+.sv-vcard {
+  padding: 14px 16px 16px;
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-card, 14px);
+}
+.sv-vcard__head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.sv-vcard__title { margin: 0; font-size: 14px; font-weight: 700; }
+.sv-vcard__hint { font-size: 12px; color: var(--text-muted); }
+.sv-vcard__empty { margin: 0; padding: 20px 0; font-size: 13px; color: var(--text-muted); }
+.sv-vcard__toggle {
+  margin-left: auto; min-height: 44px; padding: 0 12px;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text-secondary);
+  background: transparent; border: 1px solid var(--card-border); border-radius: 8px; cursor: pointer;
+}
+.sv-vcard__toggle:hover { color: var(--text-primary); background: var(--number-bg); }
+.sv-stats__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+
+/* ─── 추이 ─────────────────────────────────────────────────────────── */
+.sv-plot { position: relative; }
+.sv-svg { display: block; }
+/* 격자와 축은 물러나 있어야 한다 — 데이터만 큰 소리를 낸다. 실선 1px, 점선 금지. */
+.sv-grid { stroke: var(--track-bg); stroke-width: 1; }
+.sv-baseline { stroke: var(--card-border); stroke-width: 1; }
+.sv-axis { fill: var(--text-muted); font-size: 12px; font-family: inherit; }
+.sv-axis--y { text-anchor: end; dominant-baseline: middle; }
+.sv-axis--x { text-anchor: middle; }
+.sv-area { fill: var(--viz-1-wash); }
+.sv-line { fill: none; stroke: var(--viz-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* 점은 면 색 고리를 두른다 — 선과 겹치는 자리에서도 점이 점으로 보이게. */
+.sv-dot { fill: var(--viz-1); stroke: var(--card-bg); stroke-width: 2; }
+.sv-dot--hover { fill: var(--text-primary); }
+.sv-crosshair { stroke: var(--text-muted); stroke-width: 1; }
+.sv-peak { fill: var(--text-secondary); font-size: 12px; font-weight: 700; font-family: inherit; }
+
+.sv-tip {
+  position: absolute; top: 4px; transform: translateX(-50%);
+  display: flex; gap: 8px; align-items: baseline;
+  padding: 5px 9px; pointer-events: none; white-space: nowrap;
+  font-size: 12px; color: var(--text-primary);
+  background: var(--number-bg); border: 1px solid var(--card-border); border-radius: 7px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
+}
+:root[data-theme='light'] .sv-tip { box-shadow: 0 6px 18px rgba(28, 28, 45, .14); }
+
+/* ─── 표 ───────────────────────────────────────────────────────────── */
+.sv-vtable-wrap { max-height: 260px; overflow-y: auto; }
+.sv-vtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sv-vtable th, .sv-vtable td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--track-bg); }
+.sv-vtable thead th { font-size: 12px; font-weight: 700; color: var(--text-muted); position: sticky; top: 0; background: var(--card-bg); }
+.sv-vtable tbody th { font-weight: 600; }
+.sv-vtable td { font-variant-numeric: tabular-nums; }
+.sv-num { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.sv-vtable--rank td:first-child { width: 44px; }
+.sv-rank {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 24px; padding: 0 6px;
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  background: var(--number-bg); border-radius: 6px;
+}
+.sv-rank--top { color: #fff; background: var(--viz-ink-bg); }
+:root[data-theme='dark'] .sv-rank--top { color: #05101c; }
+
+/* ─── 히트맵 ───────────────────────────────────────────────────────── */
+.sv-heat-wrap { overflow-x: auto; }
+.sv-heat { border-collapse: separate; border-spacing: 2px; width: 100%; }
+.sv-heat__corner { width: 28px; }
+.sv-heat__hour, .sv-heat__dow {
+  font-size: 12px; font-weight: 700; color: var(--text-muted); padding: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.sv-heat__hour { text-align: center; }
+.sv-heat__dow { text-align: right; padding-right: 6px; }
+.sv-heat__cell {
+  height: 30px; min-width: 30px; text-align: center; border-radius: 5px;
+  background: var(--heat-0);
+  transition: outline-color .12s;
+  outline: 2px solid transparent; outline-offset: -2px;
+}
+.sv-heat__cell:hover { outline-color: var(--text-primary); }
+.sv-heat__cell--1 { background: var(--heat-1); }
+.sv-heat__cell--2 { background: var(--heat-2); }
+.sv-heat__cell--3 { background: var(--heat-3); }
+.sv-heat__cell--4 { background: var(--heat-4); }
+.sv-heat__cell--5 { background: var(--heat-5); }
+
+/* 격자 모드에서는 숫자를 감춘다 — 91칸에 숫자가 전부 찍히면 색이 안 보인다.
+   대신 커서를 올리면 아래 줄에 값이 나오고, '표 보기'가 전부를 숫자로 보여준다. */
+.sv-heat__v { font-size: 12px; font-weight: 700; color: transparent; font-variant-numeric: tabular-nums; }
+.sv-heat--table .sv-heat__cell { background: var(--card-bg); }
+.sv-heat--table .sv-heat__v { color: var(--text-primary); }
+
+.sv-heat__legend { display: flex; align-items: center; gap: 3px; }
+.sv-heat__legend-label { font-size: 12px; color: var(--text-muted); margin: 0 3px; }
+.sv-heat__swatch { width: 16px; height: 12px; border-radius: 3px; }
+.sv-heat__swatch--1 { background: var(--heat-1); }
+.sv-heat__swatch--2 { background: var(--heat-2); }
+.sv-heat__swatch--3 { background: var(--heat-3); }
+.sv-heat__swatch--4 { background: var(--heat-4); }
+.sv-heat__swatch--5 { background: var(--heat-5); }
+.sv-heat__note { margin: 8px 0 0; font-size: 13px; color: var(--text-muted); }
+.sv-heat__note b { color: var(--text-primary); }
+
+/* ─── 가로 막대 ────────────────────────────────────────────────────── */
+.sv-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sv-bar-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 52px; align-items: center; gap: 10px; }
+.sv-bar-row__name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-bar-row__track { height: 20px; background: var(--number-bg); border-radius: 4px; }
+/* 막대는 굵기를 제한하고 값 쪽 끝만 둥글린다 — 시작점은 축에 붙어 있어야 길이가 정직해진다. */
+.sv-bar-row__fill { display: block; height: 100%; background: var(--viz-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+.sv-bar-row__value { font-size: 13px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .sv-kpi--hero .sv-kpi__value { font-size: 36px; }
+}

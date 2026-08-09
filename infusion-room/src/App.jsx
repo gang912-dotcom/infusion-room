@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
+import Stats from './Stats.jsx'
 import logoIcon from './assets/logo-icon-white.png'
 import logoIconColor from './assets/logo-icon.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
@@ -74,12 +75,6 @@ const ROOM_TABS = TABS.filter(
     t.id !== 'stats' &&
     t.id !== 'datamanage',
 )
-
-// 실제 방만. ROOM_TABS에는 '전체'가 끼어 있는데, 그건 보드에서 '모든 방 보기'라는
-// 뜻이지 방 이름이 아니다. 통계의 '수액실별' 집계는 이용기록의 방 라벨을 키로 쓰므로
-// '전체' 칸은 어떤 기록과도 안 맞아 늘 0으로 남았다(바로 위 '전체 이용건수' 카드와
-// 라벨까지 겹쳐 더 헷갈렸다). 방별 집계에는 이 목록을 쓴다.
-const ROOM_ONLY_TABS = ROOM_TABS.filter((t) => t.id !== 'all')
 
 // 전체보기에서 방별로 묶을 때 쓰는 순서 (전체 탭 자체는 제외)
 const ROOM_ORDER = ROOM_TABS.filter((t) => t.id !== 'all')
@@ -761,34 +756,6 @@ function parseDateStr(dateStr) {
   return new Date(cleaned)
 }
 
-// 오늘 날짜를 "YYYY-MM-DD" 문자열로 반환
-function todayStr() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// 이번 달 첫째 날을 "YYYY-MM-DD" 문자열로 반환
-function thisMonthStartStr() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
-
-// history 항목이 주어진 날짜 범위 내에 있는지 확인
-function inRange(entry, from, to) {
-  const d = parseDateStr(entry.date)
-  if (from) {
-    const f = new Date(from)
-    if (d < f) return false
-  }
-  if (to) {
-    const t = new Date(to)
-    t.setHours(23, 59, 59, 999)
-    if (d > t) return false
-  }
-  return true
-}
-
-// occurredAt이 없는 기존(레거시) session_note는 createdAt으로 대체
 function getNoteOccurredAt(note) {
   return note.occurredAt ?? note.createdAt
 }
@@ -1377,190 +1344,6 @@ function openPatientReport(patientName, chartNumber, history, sessionNotes, roun
   }
   w.document.write(html)
   w.document.close()
-}
-
-// ─── 통계 화면 ──────────────────────────────────────────────────
-function StatsView({ history }) {
-  const [dateFrom, setDateFrom] = useState(thisMonthStartStr)
-  const [dateTo, setDateTo] = useState(todayStr)
-  // 조회 버튼을 눌렀을 때만 반영되는 확정 범위
-  const [appliedFrom, setAppliedFrom] = useState(thisMonthStartStr)
-  const [appliedTo, setAppliedTo] = useState(todayStr)
-
-  // ── 상단 요약: 전체 / 이번 달 (기간 선택 무관) ──────────────
-  const totalAll = history.length
-
-  const thisMonthStart = thisMonthStartStr()
-  const totalThisMonth = history.filter((e) =>
-    inRange(e, thisMonthStart, todayStr()),
-  ).length
-
-  // 수액실별 전체 이용건수
-  const roomCountsAll = {}
-  ROOM_ONLY_TABS.forEach((t) => { roomCountsAll[t.label] = 0 })
-  history.forEach((e) => {
-    if (roomCountsAll[e.room] !== undefined) roomCountsAll[e.room]++
-    else roomCountsAll[e.room] = 1
-  })
-
-  // ── 기간 조회 결과 ───────────────────────────────────────────
-  const ranged = history.filter((e) => inRange(e, appliedFrom, appliedTo))
-
-  // 수액실별 이용건수 (기간)
-  const roomCountsRanged = {}
-  ROOM_ONLY_TABS.forEach((t) => { roomCountsRanged[t.label] = 0 })
-  ranged.forEach((e) => {
-    if (roomCountsRanged[e.room] !== undefined) roomCountsRanged[e.room]++
-    else roomCountsRanged[e.room] = (roomCountsRanged[e.room] ?? 0) + 1
-  })
-
-  // 재방문 환자 TOP 10 (차트번호 기준, 2회 이상 방문)
-  const visitMap = {}
-  ranged.forEach((e) => {
-    const k = e.chartNumber
-    if (!visitMap[k]) {
-      visitMap[k] = { chartNumber: k, patientName: e.patientName, count: 0 }
-    }
-    visitMap[k].count++
-  })
-  const top10 = Object.values(visitMap)
-    .filter((p) => p.count >= 2)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-
-  // 기간 표시용
-  const rangeLabel =
-    appliedFrom && appliedTo
-      ? `${appliedFrom} ~ ${appliedTo}`
-      : appliedFrom
-        ? `${appliedFrom} 이후`
-        : appliedTo
-          ? `${appliedTo} 이전`
-          : '전체 기간'
-
-  function handleQuery() {
-    setAppliedFrom(dateFrom)
-    setAppliedTo(dateTo)
-  }
-
-  // 수액실별 최대값 (프로그레스 바 비율 계산용)
-  const maxRangedRoom = Math.max(...Object.values(roomCountsRanged), 1)
-
-  return (
-    <div className="stats-section">
-
-      {/* ── 상단 요약 카드 ── */}
-      <div className="stats-summary">
-        <div className="stats-card stats-card--accent">
-          <span className="stats-card__label">전체 이용건수</span>
-          <span className="stats-card__value">{totalAll.toLocaleString()}<span className="stats-card__unit">건</span></span>
-        </div>
-        <div className="stats-card">
-          <span className="stats-card__label">이번 달 이용건수</span>
-          <span className="stats-card__value">{totalThisMonth.toLocaleString()}<span className="stats-card__unit">건</span></span>
-        </div>
-        {ROOM_ONLY_TABS.map((t) => (
-          <div className="stats-card" key={t.id}>
-            <span className="stats-card__label">{t.label}</span>
-            <span className="stats-card__value">
-              {(roomCountsAll[t.label] ?? 0).toLocaleString()}
-              <span className="stats-card__unit">건</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── 기간 선택 ── */}
-      <div className="stats-range">
-        <span className="stats-range__label">조회 기간</span>
-        <div className="stats-range__inputs">
-          <input
-            type="date"
-            className="stats-range__input"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-          <span className="stats-range__sep">~</span>
-          <input
-            type="date"
-            className="stats-range__input"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-        </div>
-        <button
-          type="button"
-          className="stats-range__btn"
-          onClick={handleQuery}
-        >
-          조회
-        </button>
-      </div>
-
-      {/* ── 기간 조회 결과 ── */}
-      <div className="stats-result">
-        <p className="stats-result__period"><Icon name="calendar" /> {rangeLabel}</p>
-
-        {ranged.length === 0 ? (
-          <div className="stats-empty">해당 기간의 이용 기록이 없습니다.</div>
-        ) : (
-          <>
-            {/* 전체 이용건수 */}
-            <div className="stats-block">
-              <h3 className="stats-block__title">전체 이용건수</h3>
-              <p className="stats-block__count">
-                <strong>{ranged.length.toLocaleString()}</strong>건
-              </p>
-            </div>
-
-            {/* 수액실별 이용건수 */}
-            <div className="stats-block">
-              <h3 className="stats-block__title">수액실별 이용건수</h3>
-              <ul className="stats-room-list">
-                {ROOM_ONLY_TABS.map((t) => {
-                  const cnt = roomCountsRanged[t.label] ?? 0
-                  const pct = Math.round((cnt / maxRangedRoom) * 100)
-                  return (
-                    <li key={t.id} className="stats-room-item">
-                      <span className="stats-room-item__name">{t.label}</span>
-                      <div className="stats-room-item__bar-wrap">
-                        <div
-                          className="stats-room-item__bar"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="stats-room-item__cnt">{cnt.toLocaleString()}건</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-
-            {/* 재방문 TOP 10 */}
-            <div className="stats-block">
-              <h3 className="stats-block__title">재방문 환자 TOP 10</h3>
-              {top10.length === 0 ? (
-                <p className="stats-block__empty">해당 기간에 재방문 환자가 없습니다.</p>
-              ) : (
-                <ol className="stats-top-list">
-                  {top10.map((p, idx) => (
-                    <li key={p.chartNumber} className="stats-top-item">
-                      <span className={`stats-top-item__rank stats-top-item__rank--${idx < 3 ? idx + 1 : 'rest'}`}>
-                        {idx + 1}
-                      </span>
-                      <span className="stats-top-item__name">{p.patientName}</span>
-                      <span className="stats-top-item__chart">({p.chartNumber})</span>
-                      <span className="stats-top-item__count">{p.count}회</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ─── 환자 조회 화면 ─────────────────────────────────────────────
@@ -6275,7 +6058,7 @@ function App() {
           onInitialChartConsumed={() => setPatientViewSeed(null)}
         />
       ) : activeTab === 'stats' ? (
-        <StatsView history={activeHistory} />
+        <Stats rows={activeHistory} now={now} />
       ) : activeTab === 'datamanage' ? (
         <DataManageView
           allHistory={history}
