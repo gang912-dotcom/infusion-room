@@ -55,7 +55,10 @@ export function byDay(rows, fromMs, toMs) {
 
 // ─── 요일 × 시간대 ───────────────────────────────────────────────────
 // 시작 시각 기준이다 — "몇 시에 사람이 몰리나"를 묻는 것이라 끝난 시각은 답이 아니다.
-export function byDowHour(rows, hourFrom = 8, hourTo = 20) {
+// 병원 운영시간은 오전 9시~오후 7시다. 그 밖의 칸은 늘 비어 있어 격자만 넓혔다.
+// 창 밖에서 시작된 기록은 이 표에 안 잡힌다(아래 col < 0). 그런 기록은 대개 종료를
+// 늦게 누른 것이라 '가장 붐빈 시간' 지표에서는 창을 걸지 않고 그대로 드러나게 둔다.
+export function byDowHour(rows, hourFrom = 9, hourTo = 19) {
   const hours = []
   for (let h = hourFrom; h <= hourTo; h++) hours.push(h)
   const grid = DOW_LABEL.map(() => hours.map(() => 0))
@@ -141,14 +144,6 @@ export function presetRange(preset, nowMs) {
   const days = { d7: 6, d30: 29, d90: 89 }[preset]
   if (preset === 'today') return { from: today, to: today }
   return { from: today - days * DAY, to: today }
-}
-
-export function fmtRange(fromMs, toMs) {
-  const f = (t) => {
-    const d = new Date(t)
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
-  }
-  return `${f(fromMs)} ~ ${f(toMs)}`
 }
 
 export function fmtMinutes(min) {

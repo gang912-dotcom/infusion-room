@@ -48,10 +48,12 @@ const row = (over) => ({
   const { hours, grid, max } = byDowHour([row({}), row({}), overnight])
   const monday = new Date(T0).getDay()
   assert.equal(grid[monday][hours.indexOf(10)], 2)
-  assert.equal(hours.includes(22), false)               // 22시는 창(8~20시) 밖이라 칸 자체가 없다
+  assert.equal(hours.includes(22), false)               // 22시는 창(9~19시) 밖이라 칸 자체가 없다
   assert.equal(grid[monday].reduce((a, b) => a + b, 0), 2) // 그래서 그 기록은 어디에도 안 잡힌다
   assert.equal(max, 2)
-  assert.equal(hours.length, 13)
+  assert.equal(hours[0], 9)                             // 병원 운영시간 = 오전 9시~오후 7시
+  assert.equal(hours[hours.length - 1], 19)
+  assert.equal(hours.length, 11)
 }
 
 // ── 단순 집계 ────────────────────────────────────────────────────────

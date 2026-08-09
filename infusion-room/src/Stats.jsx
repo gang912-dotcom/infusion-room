@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   inRange, byDay, byDowHour, byRoom, byStaff, topRevisits, summary,
-  presetRange, fmtRange, fmtMinutes, startOfDay, DOW_LABEL,
+  presetRange, fmtMinutes, startOfDay, DOW_LABEL,
 } from './stats.js'
 import './stats.css'
 
@@ -103,16 +103,15 @@ export default function Stats({ rows, now }) {
           <input type="date" className="sv-input sv-input--date" value={asDateInput(range.to)}
             onChange={(e) => setCustomDate('to', e.target.value)} aria-label="조회 종료일" />
         </div>
-        <span className="sv-stats__period">{fmtRange(range.from, range.to)}</span>
       </header>
 
       {sum.total === 0 ? (
-        <p className="sv-stats__empty">이 기간에는 이용 기록이 없다.</p>
+        <p className="sv-stats__empty">이 기간에는 이용 기록이 없습니다.</p>
       ) : (
         <>
           <section className="sv-kpis" aria-label="요약">
             {/* 이 화면이 이끄는 하나의 수 — 나머지는 이걸 설명한다. */}
-            <div className="sv-kpi sv-kpi--hero">
+            <div className="sv-kpi">
               <span className="sv-kpi__label">이용건수</span>
               <span className="sv-kpi__value">{sum.total.toLocaleString()}<span className="sv-kpi__unit">건</span></span>
               <span className="sv-kpi__sub">진료일 {sum.openDays}일</span>
@@ -350,7 +349,7 @@ function HeatCard({ heat }) {
       <p className="sv-heat__note" role="status">
         {hover
           ? <><b>{hover.dow}요일 {hover.h}시</b> · {hover.v}건 시작</>
-          : '칸에 커서를 올리면 값이 나온다. 색은 시작 건수를 뜻한다.'}
+          : '칸에 커서를 올리면 값이 나옵니다. 색은 시작 건수를 뜻합니다.'}
       </p>
     </section>
   )
@@ -367,7 +366,7 @@ function BarCard({ title, items, control }) {
         {control}
       </div>
       {items.length === 0 ? (
-        <p className="sv-vcard__empty">기록이 없다.</p>
+        <p className="sv-vcard__empty">기록이 없습니다.</p>
       ) : (
         <ul className="sv-bars">
           {items.map((it) => (
@@ -394,7 +393,7 @@ function RevisitCard({ rows }) {
         <span className="sv-vcard__hint">기간 내 2회 이상</span>
       </div>
       {rows.length === 0 ? (
-        <p className="sv-vcard__empty">이 기간에 재방문 환자가 없다.</p>
+        <p className="sv-vcard__empty">이 기간에 재방문 환자가 없습니다.</p>
       ) : (
         <table className="sv-vtable sv-vtable--rank">
           <thead>

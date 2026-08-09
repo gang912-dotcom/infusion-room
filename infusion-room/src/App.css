@@ -350,7 +350,7 @@
 }
 
 .header__dog-btn:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 12px;
 }
@@ -439,7 +439,7 @@
 }
 
 .tab:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -644,7 +644,7 @@
 }
 
 .bed-card:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -1470,7 +1470,7 @@
 }
 
 .btn-confirm:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -1687,7 +1687,7 @@
 }
 
 .duration__btn:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -1717,7 +1717,7 @@
 }
 
 .btn-register:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -4082,6 +4082,11 @@
      있어서 같은 화면 안에서 모서리가 제각각이었다. 20은 180px 카드에 얹으면
      물렁해 보인다(계기판보다 앱 아이콘 쪽). 14가 격자를 또렷하게 남긴다. */
   --r-card:14px;
+  /* 브랜드 파랑. 상태색(초록·앰버·빨강·보라)은 베드 상태에 뜻이 예약돼 있어서,
+     '상태가 아닌 강조'가 필요한 자리는 이 색이 맡는다 — 포커스 링과 통계 계열색.
+     예전엔 포커스 링이 초록 7곳 / 하드코딩 파랑 6곳으로 갈려 있었다(실측).
+     초록을 포커스에 쓰면 '진행중'이라는 뜻이 흐려진다. */
+  --brand:#3987e5;
   --ease-spring:cubic-bezier(.34,1.56,.64,1);
   --ease-out:cubic-bezier(.22,.61,.36,1);
   --hair:rgba(255,255,255,.06);  /* 카드 상단 하이라이트(재질감) */
@@ -4090,6 +4095,8 @@
   --card-shadow-hover:0 2px 4px rgba(0,0,0,.45), 0 18px 44px rgba(0,0,0,.40);
 }
 :root[data-theme='light'] .app{
+  /* 라이트에서는 한 단계 진한 파랑 — 흰 면 위 대비를 맞춘 값이다. */
+  --brand:#2a78d6;
   --hair:rgba(255,255,255,.9);
   --card-shadow:0 1px 2px rgba(20,20,40,.05), 0 8px 22px rgba(20,20,50,.07);
   --card-shadow-hover:0 2px 6px rgba(20,20,40,.09), 0 20px 46px rgba(20,20,50,.14);
@@ -4386,7 +4393,7 @@
    여기 특정성(0,2,0)이 그것들(0,1,0)을 이겨서 채운 버튼에 회색 테두리가 생긴다.
    §'면 위의 선'의 등록 취소 사고와 같은 함정이다. */
 .app .history-search__input,
-.app .stats-range__input,
+.app .sv-input,
 .app .dm-search__input,
 .app .patient-search__input,
 .app .dm-chat-log__date {
@@ -4433,7 +4440,7 @@
 .app .stats-range__btn:focus-visible,
 .app .btn-register:focus-visible,
 .app .btn-confirm:focus-visible{
-  outline:2.5px solid #4c8bf5;
+  outline:2px solid var(--brand);
   outline-offset:2px;
 }
 /* 입력창 포커스 표시 복구(테두리 색만 바뀌던 걸 또렷한 링으로) */
@@ -4442,7 +4449,7 @@
 .app .dm-search__input:focus-visible,
 .app .history-search__input:focus-visible,
 .app .occurred-at__input:focus-visible{
-  outline:2.5px solid #4c8bf5;
+  outline:2px solid var(--brand);
   outline-offset:1px;
 }
 /* 모션 최소화: 물방울 낙하 애니메이션도 정지 */
@@ -4644,7 +4651,7 @@
 .msg-card__btn--primary:hover{ background:var(--solid-green); border-color:transparent }
 .msg-card__btn:disabled{ opacity:.5; cursor:default }
 .msg-card__btn:focus-visible, .msg-card__head:focus-visible{
-  outline:2.5px solid #4c8bf5; outline-offset:2px;
+  outline:2px solid var(--brand); outline-offset:2px;
 }
 
 /* 헤더 쪽지 버튼 */
@@ -4656,7 +4663,7 @@
   color:var(--text-secondary); font-size:15px;
 }
 .header-msg-btn:hover{ color:var(--text-primary) }
-.header-msg-btn:focus-visible{ outline:2.5px solid #4c8bf5; outline-offset:2px }
+.header-msg-btn:focus-visible{ outline:2px solid var(--brand); outline-offset:2px }
 .header-msg-btn__badge{
   position:absolute; top:-2px; right:-2px; min-width:18px; height:18px; padding:0 5px;
   display:inline-flex; align-items:center; justify-content:center;
@@ -4793,7 +4800,7 @@
 .rec-btn:hover{ color:var(--text-primary) }
 .rec-btn--danger{ color:var(--status-completed) }
 .rec-btn:disabled{ opacity:.5; cursor:default }
-.rec-btn:focus-visible{ outline:2.5px solid #4c8bf5; outline-offset:2px }
+.rec-btn:focus-visible{ outline:2px solid var(--brand); outline-offset:2px }
 
 /* 좁은 화면(아이패드 세로 등) — 2단을 1단으로 접고 구분선은 위쪽 보더로 */
 @media (max-width:720px){
@@ -4851,7 +4858,7 @@
   font-size:13px;
 }
 .bed-card__vitals:hover{ background:var(--hover-tint) }
-.bed-card__vitals:focus-visible{ outline:2.5px solid #4c8bf5; outline-offset:2px }
+.bed-card__vitals:focus-visible{ outline:2px solid var(--brand); outline-offset:2px }
 /* 왼쪽 두 줄과 같은 줄 상자를 써야 체온이 이름과, 혈압이 차트와 가로로 나란히 선다.
    그래서 자기 글자 크기가 아니라 '맞춰야 할 줄'의 크기로 계산한다 —
    체온(14px)은 이름 줄(16px), 혈압(13px)은 차트 줄(13px) 기준. 1.3은 카드 줄간격. */
@@ -5725,7 +5732,7 @@
 }
 
 .duration-preset:focus-visible {
-  outline: 2px solid var(--status-occupied);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 

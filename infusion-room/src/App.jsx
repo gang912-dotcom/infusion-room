@@ -3668,8 +3668,8 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
               ))}
             </select>
           </label>
-        </div>
-        <div className="history-search__row">
+          {/* 날짜 범위를 아랫줄로 내리지 않는다 — 기준폭 합이 320+180+380이라 한 줄에 들어가고,
+              좁아지면 flex-wrap이 알아서 접는다. */}
           <div className="history-search__field history-search__field--date">
             <span className="history-search__label">날짜 범위</span>
             <div className="history-search__date-range">
