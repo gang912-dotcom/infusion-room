@@ -111,6 +111,9 @@ export function buildSessionRecord(sessionId) {
     // 안 그러면 기록지에 'IV ×1'이 찍힌다.
     orders: ordersStmt.all(s.id).map((o) => ({
       label: o.label ?? o.item_code,
+      // 기록지가 처방 작성 화면과 같은 모양으로 묶어 보이려면 그룹이 필요하다.
+      // 배포 전 스냅샷에는 이 값이 없다(undefined) → 읽는 쪽이 폴백을 갖고 있다.
+      group: o.group_key ?? null,
       dose: o.dose,
       qty: o.group_key === ROUTE_GROUP ? null : (o.qty ?? 1),
       // 용법 IV|IM|SC. ORD처럼 가변인 항목과 투여경로 체크박스 자체는 NULL이다

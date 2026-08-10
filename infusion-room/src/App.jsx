@@ -1129,22 +1129,53 @@ function openRecordSheet(record) {
   // 이름 글자 크기로 넣는다(하단 서명블록을 대체).
   // 서명이 없으면 이름 텍스트로 폴백하고, 담당자 자체가 없으면(기존 종료분의 라인 제거 담당자,
   // 아직 시작 전인 믹스담당 등) '—'로 둔다 — 행을 숨기면 빈 자리인지 미지정인지 알 수 없다.
-  const staffRow = (label, name, signature) => {
+  // 담당자 서명은 문서 맨 아래 '확인' 줄로 내린다 — 종이 기록지의 확인자 자리와 같은 위치이고,
+  // 위쪽 표가 네 줄로 짧아져 처방이 첫 장 위쪽으로 올라온다.
+  const signCell = (label, name, signature) => {
     const value = !name
-      ? '—'
+      ? '<span class="sg-none">—</span>'
       : signature
-        ? `<img class="sign-inline" src="${esc(signature)}" alt="${esc(name)} 서명">`
-        : esc(name)
-    return `<tr><th>${esc(label)}</th><td>${value}</td></tr>`
+        ? `<img class="sg-img" src="${esc(signature)}" alt="${esc(name)} 서명">`
+        : `<span class="sg-name">${esc(name)}</span>`
+    return `<div class="sg"><div class="sg__label">${esc(label)}</div><div class="sg__v">${value}</div></div>`
   }
 
-  const ordersHtml = record.orders.length
-    ? `<ul class="orders">${record.orders.map((o) =>
-      `<li>${esc(o.label)}`
-      + (o.dose ? ` <span class="dose">${esc(o.dose)}</span>` : '')
-      + (o.qty ? ` <span class="qty">×${esc(o.qty)}</span>` : '')
-      + (routeLabel(o.route) ? ` <span class="route">${esc(routeLabel(o.route))}</span>` : '')
-      + '</li>').join('')}</ul>`
+  // 처방 작성의 '고른 처방' 칸과 같은 규칙으로 낸다 — 근무자가 화면에서 보던 모양 그대로여야
+  // 종이와 대조가 된다. 그룹 머리말 + `라벨(용량) ×수량 용법`, ×1도 찍는다.
+  //
+  // 투여경로(IV/IM/SC)는 목록에서 빼 머리에 한 줄로 올린다. 목록에 섞으면 그룹 이름이
+  // 가나다순이라 '투여경로'가 맨 뒤로 밀려서, '어디로 놓았나'가 약 이름들 끝에 붙는다.
+  // 배포 전 스냅샷에는 group이 없다 — 그때 경로 줄은 수량이 null이었다(server/lib/record.js).
+  const isRoute = (o) => (o.group != null ? o.group === '투여경로' : o.qty == null)
+  const routeItems = record.orders.filter(isRoute)
+  const drugItems = record.orders.filter((o) => !isRoute(o))
+
+  // 그룹 머리말은 항목이 있을 때만. 순서는 서버가 준 그대로다(그룹·정렬순 = 화면과 같다).
+  const orderGroups = []
+  for (const o of drugItems) {
+    const key = o.group ?? ''
+    const last = orderGroups[orderGroups.length - 1]
+    if (last && last.key === key) last.items.push(o)
+    else orderGroups.push({ key, items: [o] })
+  }
+
+  const orderLine = (o) =>
+    `<li><span class="nm">${esc(o.label)}`
+    + (o.dose ? `<span class="dose">(${esc(o.dose)})</span>` : '')
+    + '</span>'
+    + `<span class="qty">×${esc(o.qty ?? 1)}</span>`
+    + (routeLabel(o.route) ? `<span class="route">${esc(routeLabel(o.route))}</span>` : '')
+    + '</li>'
+
+  const routeHtml = routeItems.length
+    ? `<p class="routes"><span class="routes__label">투여경로</span>${
+      routeItems.map((o) => `<span class="routes__v">${esc(o.label)}</span>`).join('')}</p>`
+    : ''
+
+  const ordersHtml = drugItems.length
+    ? routeHtml + `<div class="orders">${orderGroups.map((g) =>
+      `<section class="ord-grp">${g.key ? `<h3>${esc(g.key)}</h3>` : ''}`
+      + `<ul>${g.items.map(orderLine).join('')}</ul></section>`).join('')}</div>`
     : '<p class="none">체크된 처방 없음</p>'
 
   const vitalsHtml = record.vitals.length
@@ -1191,13 +1222,32 @@ function openRecordSheet(record) {
     table.grid{width:100%;border-collapse:collapse;font-size:13px}
     table.grid th,table.grid td{border:1px solid #ddd;padding:4px 8px;text-align:left}
     table.grid th{background:#f5f5f5;font-weight:700}
-    ul.orders{margin:0;padding-left:18px;font-size:14px;columns:2}
-    ul.orders li{margin:2px 0;break-inside:avoid}
+    /* 투여경로 — 목록 위 한 줄. 어디로 놓았는지가 약 이름들 끝이 아니라 머리에 온다. */
+    .routes{margin:0 0 8px;font-size:13px}
+    .routes__label{font-weight:700;color:#444;margin-right:8px}
+    .routes__v{display:inline-block;border:1px solid #bbb;border-radius:8px;
+      padding:1px 8px;margin-right:4px;font-weight:700}
+    /* 처방 — 화면의 '고른 처방' 칸과 같은 모양. 그룹 머리말 + 라벨(용량) ×수량 용법.
+       2단으로 흘리되 그룹은 쪼개지지 않게 한다(머리말만 앞 단에 남으면 못 읽는다). */
+    .orders{columns:2;column-gap:26px;font-size:14px}
+    .ord-grp{break-inside:avoid;margin:0 0 10px}
+    .ord-grp h3{margin:0 0 2px;font-size:11px;font-weight:700;color:#666;letter-spacing:0.02em}
+    .ord-grp ul{list-style:none;margin:0;padding:0}
+    .ord-grp li{display:flex;align-items:baseline;gap:6px;padding:1px 0;break-inside:avoid}
+    .nm{flex:1;min-width:0}
     .dose{font-weight:700}
-    /* 수량 — 용량과 헷갈리지 않게 굵게. */
-    .qty{font-weight:700}
+    /* 수량 — 용량과 헷갈리지 않게 굵게. ×1도 찍어 EMR과 한 줄씩 맞춘다. */
+    .qty{font-weight:700;font-variant-numeric:tabular-nums;flex:none}
     /* 용법 — 약품명·용량보다 약하게. 인쇄지는 항상 흰 배경이라 #555면 대비 7:1이다. */
-    .route{color:#555;font-size:12px}
+    .route{color:#555;font-size:12px;flex:none}
+    /* 확인 서명 — 문서 맨 아래 가로 한 줄. 종이 기록지의 확인자 자리와 같다. */
+    .signs{display:flex;gap:10px;break-inside:avoid}
+    .sg{flex:1;border:1px solid #ddd;border-radius:6px;padding:6px 10px;min-height:44px;
+      display:flex;flex-direction:column;justify-content:space-between}
+    .sg__label{font-size:11px;font-weight:700;color:#666}
+    .sg__v{font-size:14px;min-height:22px;display:flex;align-items:center}
+    .sg-none{color:#aaa}
+    .sg-name{font-weight:600}
     p.free{margin:0;font-size:14px;white-space:pre-wrap}
     ul.tl{list-style:none;margin:0;padding:0}
     ul.tl li{display:flex;gap:10px;align-items:baseline;padding:4px 0;font-size:13px;
@@ -1205,9 +1255,8 @@ function openRecordSheet(record) {
     .tt{font-variant-numeric:tabular-nums;font-weight:700;min-width:46px}
     .kk{font-size:11px;padding:1px 6px;border:1px solid #bbb;border-radius:8px;flex:none;color:#444}
     .none{color:#999;font-size:13px;margin:0}
-    /* 담당자 서명 — 이름 글자가 차지하던 만큼(본문 14px 기준 약 20px)만 쓴다.
-       폭이 긴 서명은 max-width로 줄여 표 열이 밀리지 않게 한다. */
-    img.sign-inline{height:20px;width:auto;max-width:120px;vertical-align:middle;object-fit:contain}
+    /* 담당자 서명 — 아래 확인 줄에서 쓴다. 칸이 넓어져 예전(20px)보다 크게 둬도 된다. */
+    img.sg-img{height:28px;width:auto;max-width:100%;object-fit:contain}
     .toolbar{position:sticky;top:0;text-align:right;margin-bottom:12px}
     .toolbar button{font:inherit;font-weight:700;padding:8px 16px;border:0;border-radius:8px;
       background:#4c8bf5;color:#fff;cursor:pointer}
@@ -1228,9 +1277,6 @@ function openRecordSheet(record) {
       ${row('차트번호', record.chart_no)}
       ${row('진료실', record.exam_room ? `${record.exam_room}진료실` : '')}
       ${row('수액실', `${roomLabel} ${record.bed_number}번`)}
-      ${staffRow('라인담당', record.line_staff_name, record.line_signature)}
-      ${staffRow('믹스담당', record.mix_staff_name, record.mix_signature)}
-      ${staffRow('라인 제거', record.end_staff_name, record.end_signature)}
     </table>
 
     <h2>시간</h2>
@@ -1252,6 +1298,13 @@ function openRecordSheet(record) {
 
     <h2>라운딩 · 증상 기록</h2>
     ${timelineHtml}
+
+    <h2>확인</h2>
+    <div class="signs">
+      ${signCell('라인 담당', record.line_staff_name, record.line_signature)}
+      ${signCell('믹스 담당', record.mix_staff_name, record.mix_signature)}
+      ${signCell('라인 제거', record.end_staff_name, record.end_signature)}
+    </div>
   </body></html>`
 
   const w = window.open('', '_blank')
