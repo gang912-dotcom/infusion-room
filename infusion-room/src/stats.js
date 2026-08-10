@@ -11,7 +11,7 @@
 // 방 목록은 api.js 한 벌에서만 온다. 예전엔 여기 라벨을 한 벌 더 두고 있었는데,
 // 그러면 방을 늘리거나 이름을 바꿀 때 한쪽만 고쳐지고 통계에서 그 방이 조용히 빠진다
 // (api.js의 ROOM_LABELS 주석이 경고하던 바로 그 상황이다). 순서도 거기 키 순서를 따른다.
-import { ROOM_LABELS } from './api.js'
+import { ROOM_LABELS, EXAM_ROOMS } from './api.js'
 
 export const ROOM_KEYS = Object.keys(ROOM_LABELS)
 export const DOW_LABEL = ['일', '월', '화', '수', '목', '금', '토']
@@ -85,6 +85,21 @@ export function byRoom(rows) {
   const counts = Object.fromEntries(ROOM_KEYS.map((k) => [k, 0]))
   for (const r of rows) if (counts[r.roomKey] !== undefined) counts[r.roomKey]++
   return ROOM_KEYS.map((k) => ({ key: k, label: ROOM_LABELS[k], count: counts[k] }))
+}
+
+// 진료실별. 수액실과 달리 '미지정'이 실제로 있다 — 진료실을 필수로 만들기 전에 배정된
+// 세션은 값이 비어 있다. 그 칸을 버리면 막대의 합이 전체 건수와 안 맞아서, 보는 사람이
+// 어디서 새는지 알 수 없다. 0건이면 줄 자체를 빼되 있으면 반드시 보여준다.
+export function byExamRoom(rows) {
+  const counts = Object.fromEntries(EXAM_ROOMS.map((k) => [k, 0]))
+  let unset = 0
+  for (const r of rows) {
+    if (counts[r.examRoom] !== undefined) counts[r.examRoom]++
+    else unset++   // 목록에 없는 값(옛 데이터·오타)도 여기로 모은다 — 조용히 사라지면 안 된다
+  }
+  const out = EXAM_ROOMS.map((k) => ({ key: k, label: `${k}진료실`, count: counts[k] }))
+  if (unset > 0) out.push({ key: '', label: '미지정', count: unset })
+  return out
 }
 
 export function byStaff(rows, field) {

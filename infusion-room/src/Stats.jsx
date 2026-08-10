@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  inRange, byDay, byDowHour, byRoom, byStaff, topRevisits, summary,
+  inRange, byDay, byDowHour, byRoom, byExamRoom, byStaff, topRevisits, summary,
   presetRange, fmtMinutes, startOfDay, DOW_LABEL,
 } from './stats.js'
 import './stats.css'
@@ -58,6 +58,7 @@ export default function Stats({ rows, now }) {
   const days = useMemo(() => byDay(ranged, range.from, range.to), [ranged, range])
   const heat = useMemo(() => byDowHour(ranged), [ranged])
   const rooms = useMemo(() => byRoom(ranged), [ranged])
+  const examRooms = useMemo(() => byExamRoom(ranged), [ranged])
   const revisits = useMemo(() => topRevisits(ranged), [ranged])
 
   const [staffField, setStaffField] = useState('lineStaff')
@@ -142,6 +143,12 @@ export default function Stats({ rows, now }) {
             <BarCard
               title="수액실별 이용건수"
               items={rooms.map((r) => ({ name: r.label, count: r.count }))}
+            />
+            {/* 진료실은 '어느 진료실에서 내려온 처방인가'라 수액실과 다른 축이다.
+                미지정 줄은 진료실을 필수로 만들기 전 세션이라 0이면 저절로 빠진다. */}
+            <BarCard
+              title="진료실별 이용건수"
+              items={examRooms.map((r) => ({ name: r.label, count: r.count }))}
             />
             <BarCard
               title="담당자별 이용건수"

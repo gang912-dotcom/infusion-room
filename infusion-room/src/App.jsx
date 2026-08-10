@@ -32,7 +32,7 @@ import {
   listSettings, updateSetting, unlockStats, setStatsPassword,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
-  ROOM_LABELS,
+  ROOM_LABELS, NON_BED_ROOMS, EXAM_ROOMS,
 } from './api'
 
 // 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
@@ -138,9 +138,8 @@ const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타�
 const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
 const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
 
-// 진료실 — 연속이 아니다(4·5진료실은 없음). 서버(sessions.js EXAM_ROOMS)와 같은 목록.
+// 진료실 목록은 api.js 한 벌에서 온다 — 등록 폼과 통계가 같은 목록을 봐야 한다.
 // 관리자 편집은 아직 필요 없어 상수로 둔다.
-const EXAM_ROOMS = ['1', '2', '3', '6', '7']
 
 // 처방 작성 체크리스트의 그룹 표시 순서. 항목 자체는 DB(order_items)가 원본이고
 // 여기 있는 건 '그룹을 어떤 순서로 보여줄지'뿐이다(그룹 편집은 범위 밖).
@@ -4696,7 +4695,11 @@ function App() {
 
   const bedSummaryCounts = filteredBeds.reduce(
     (acc, bed) => {
-      acc[getBedStatusCategory(bed, now)] += 1
+      const category = getBedStatusCategory(bed, now)
+      // '기타'의 빈 자리는 정원이 아니다 — 진료실·로비에서 맞는 경우를 배정하려고 둔 칸이라
+      // 여기 세면 없는 베드가 열 개 비어 있는 것처럼 보인다. 사람이 앉아 있으면 그건 센다.
+      if (category === 'vacant' && NON_BED_ROOMS.has(bed.room)) return acc
+      acc[category] += 1
       return acc
     },
     { occupied: 0, warning: 0, completed: 0, vacant: 0, reserved: 0 },
@@ -4715,10 +4718,16 @@ function App() {
 
   const roomGroups =
     activeTab === 'all'
-      ? ROOM_ORDER.map((room) => ({
-          room,
-          roomBeds: sortBedsByNumber(beds.filter((bed) => bed.room === room.id)),
-        }))
+      ? ROOM_ORDER
+          .map((room) => {
+            const roomBeds = sortBedsByNumber(beds.filter((bed) => bed.room === room.id))
+            // 베드가 아닌 방('기타')은 쓰이는 자리만 전체보기에 낸다. 안 그러면 빈 칸 열 장이
+            // 늘 깔려 진짜 수액실을 아래로 밀어낸다. 배정은 그 방 탭에서 한다.
+            if (!NON_BED_ROOMS.has(room.id)) return { room, roomBeds }
+            return { room, roomBeds: roomBeds.filter((bed) => bed.status !== 'vacant') }
+          })
+          // 아무도 없는 '기타'는 섹션 자체를 안 그린다(진짜 수액실은 비어도 자리를 지킨다).
+          .filter(({ room, roomBeds }) => !NON_BED_ROOMS.has(room.id) || roomBeds.length > 0)
       : null
 
   // 몰아보기 힌트(A-4): 방 id → 그 방에 due(밀림)가 있는지. 탭과 무관하게 항상 beds 전체 기준.
@@ -6255,7 +6264,10 @@ function App() {
                     </span>
                     <span className="room-section__name">{room.label}</span>
                     <span className="room-section__meta">
-                      {firstNumber}–{lastNumber}번 · {occupiedCount} 사용중
+                      {/* '기타'는 번호 범위가 뜻이 없다 — 1~10번이라는 자리가 실재하지 않는다. */}
+                      {NON_BED_ROOMS.has(room.id)
+                        ? `${occupiedCount}곳 사용중`
+                        : `${firstNumber}–${lastNumber}번 · ${occupiedCount} 사용중`}
                     </span>
                   </button>
                   {!isCollapsed && (

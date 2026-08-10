@@ -10,6 +10,16 @@ export const ROOM_LABELS = {
   room2: '2수액실', room3: '수액센터', floor2: '2층수액실', etc: '기타',
 }
 
+// 물리적으로 베드가 있는 방이 아닌 것. '기타'는 진료실·로비처럼 수액실 밖에서 맞는 경우를
+// 배정하려고 둔 자리라, 빈 자리를 정원으로 세면 없는 베드가 있는 것처럼 보인다.
+// 사람이 실제로 앉아 있으면 그건 센다 — 환자는 실재한다.
+export const NON_BED_ROOMS = new Set(['etc'])
+
+// 진료실 번호 — 연속이 아니다(4·5진료실은 없음). 서버(sessions.js EXAM_ROOMS)와 같은 목록.
+// 등록 폼과 통계가 같은 목록을 봐야 한다. 두 벌로 두면 번호가 하나 늘 때 한쪽만 바뀌고
+// 통계에서 그 진료실이 조용히 빠진다(방 라벨에서 이미 겪은 일이다).
+export const EXAM_ROOMS = ['1', '2', '3', '6', '7']
+
 async function apiFetch(path, options = {}) {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -401,7 +411,7 @@ function mapHistoryRow(row) {
     endTime: new Date(row.ended_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     usedMinutes: Math.round((row.ended_at - row.started_at) / 60000),
     specialNote: row.special_note ?? null,
-    // 4c — 기록지 필드. CSV 추출이 쓴다(표 화면은 안 씀).
+    // 4c — 기록지 필드. CSV 추출과 통계(진료실별 이용건수)가 쓴다. 표 화면은 안 쓴다.
     examRoom: row.exam_room ?? null,
     visitSymptom: row.visit_symptom ?? null,
     lineStaff: row.line_staff_name ?? null,

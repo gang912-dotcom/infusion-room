@@ -2,8 +2,9 @@
 import assert from 'node:assert/strict'
 import {
   inRange, byDay, byDowHour, byRoom, byStaff, topRevisits, summary,
-  presetRange, fmtMinutes, dayKey, startOfDay, ROOM_KEYS,
+  presetRange, fmtMinutes, dayKey, startOfDay, ROOM_KEYS, byExamRoom,
 } from './stats.js'
+import { EXAM_ROOMS } from './api.js'
 
 const DAY = 86_400_000
 // 2026-08-10(월) 00:00 기준. 로컬 시간대로 만든다 — 집계도 로컬 기준이라 UTC로 잡으면 하루가 밀린다.
@@ -68,6 +69,23 @@ const row = (over) => ({
   // 방이 하나라도 빠지거나 라벨이 비면 통계에서 그 방이 조용히 사라진다 — 여기서 잡는다.
   assert.deepEqual(got.map((r) => r.key), ROOM_KEYS, '순서는 ROOM_KEYS를 따라야 한다')
   assert.ok(got.every((r) => r.label), `라벨 없는 방: ${got.filter((r) => !r.label).map((r) => r.key)}`)
+  // 진료실별 — 수액실과 달리 '미지정'이 실제로 있다(진료실 필수화 이전 세션)
+  const ex = byExamRoom([
+    row({ examRoom: '1' }), row({ examRoom: '1' }), row({ examRoom: '7' }),
+    row({ examRoom: null }),   // 옛 세션
+    row({ examRoom: '9' }),    // 목록에 없는 값 — 조용히 사라지면 안 된다
+  ])
+  const exBy = Object.fromEntries(ex.map((r) => [r.key, r.count]))
+  assert.equal(exBy['1'], 2)
+  assert.equal(exBy['7'], 1)
+  assert.equal(exBy['2'], 0) // 0건인 진료실도 막대가 서야 비교가 된다
+  assert.equal(exBy[''], 2, '미지정·모르는 값이 미지정으로 안 모인다')
+  // 합이 전체와 안 맞으면 어디서 새는지 보는 사람이 알 수 없다
+  assert.equal(ex.reduce((a, r) => a + r.count, 0), 5, '막대 합이 전체 건수와 다르다')
+  assert.deepEqual(ex.slice(0, EXAM_ROOMS.length).map((r) => r.key), EXAM_ROOMS, '진료실 순서·목록이 다르다')
+  // 미지정이 0이면 줄 자체가 없어야 한다
+  assert.ok(!byExamRoom([row({ examRoom: '3' })]).some((r) => r.key === ''), '미지정 0인데 줄이 남는다')
+
   const staff = byStaff([...rows, row({ lineStaff: null })], 'lineStaff')
   assert.deepEqual(staff, [{ name: '박민순', count: 3 }]) // null은 세지 않는다
 }
