@@ -139,3 +139,59 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ─── 앱처럼 굴게 하기 ──────────────────────────────────────────────
+   홈 화면/설치로 띄우면 껍데기는 사라지지만, 안쪽은 여전히 웹페이지처럼 군다 —
+   길게 누르면 복사 메뉴가 뜨고, 스크롤 끝에서 화면이 늘어나고, 두 번 두드리면 확대된다.
+   근무자가 장갑 낀 손으로 쓰는 화면이라 전부 실수로 걸린다. */
+
+html {
+  /* 스크롤 끝에서 당겨 새로고침·고무줄 튕김을 막는다. 상황판이 통째로 흔들리면
+     '앱이 아니라 웹페이지'라는 게 가장 먼저 티 난다. */
+  overscroll-behavior: none;
+}
+
+body {
+  overscroll-behavior: none;
+  /* 길게 눌렀을 때 뜨는 iOS 복사/공유 콜아웃을 끈다. 입력칸은 아래에서 되살린다. */
+  -webkit-touch-callout: none;
+  /* 두드릴 때 번쩍이는 회색 네모. 헤더 버튼 한 곳에만 걸려 있던 것을 전역으로. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 글자 끌어 선택은 기본으로 끈다 — 카드를 드래그하려다 이름이 파랗게 잡히는 일이 잦다.
+   다만 '읽고 옮겨 적는' 값은 살려 둔다. 차트번호를 복사 못 하면 그게 더 불편하다. */
+.app {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.app input,
+.app textarea,
+.app [contenteditable],
+.app .bed-card__chart,
+.app .bed-detail-summary__chart,
+.app .dm-table,
+.app .rec-sheet {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 두 번 두드려 확대되는 것만 막는다. 두 손가락 확대는 남긴다 —
+   눈이 나쁜 사람이 볼 수 없게 되는 쪽이 오확대보다 나쁘다. */
+.app button,
+.app .tab,
+.app .bed-card,
+.app label,
+.app a {
+  touch-action: manipulation;
+}
+
+/* viewport-fit=cover로 화면 끝까지 쓰게 했으니, 노치·홈 인디케이터 밑으로
+   내용이 깔리지 않게 안전 영역만큼 띄운다. 안 하면 아이패드에서 맨 아랫줄 버튼이
+   홈 바에 가린다(껍데기를 벗기면서 같이 생긴 문제다). */
+#root {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
