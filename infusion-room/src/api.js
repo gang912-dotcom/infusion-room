@@ -5,7 +5,10 @@
 // 방 라벨은 여기 한 벌만 둔다 — App.jsx의 탭도 이걸로 만든다.
 // 두 벌로 두면 이름을 바꿀 때 한쪽만 바뀌고, 통계는 라벨을 집계 키로 쓰기 때문에
 // 그 방 막대가 조용히 0이 된다. id(room3)는 DB·베드코드라 바꾸지 않는다.
-export const ROOM_LABELS = { room2: '2수액실', room3: '수액센터', floor2: '2층수액실' }
+// 순서가 곧 탭 순서이자 통계 막대 순서다(stats.js가 이 객체의 키 순서를 쓴다).
+export const ROOM_LABELS = {
+  room2: '2수액실', room3: '수액센터', floor2: '2층수액실', etc: '기타',
+}
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -641,6 +644,18 @@ export async function listSettings() {
 
 export async function updateSetting(key, value) {
   return apiFetch(`/admin/settings/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) })
+}
+
+// ─── 통계 화면 잠금 ──────────────────────────────────────────────────
+// 암호는 서버에만 해시로 있다. 화면은 맞다/아니다만 받는다 — 내려받아 비교하면 잠근 의미가 없다.
+export async function unlockStats(password) {
+  return apiFetch('/stats/unlock', { method: 'POST', body: JSON.stringify({ password }) })
+}
+
+// 재설정은 관리자만. 현재 암호는 어디서도 읽을 수 없다(해시라 되돌릴 수 없다) —
+// 잊어버리면 여기서 새로 정하는 것이 유일한 길이다.
+export async function setStatsPassword(password) {
+  return apiFetch('/admin/stats-password', { method: 'PUT', body: JSON.stringify({ password }) })
 }
 
 // ─── 쪽지 메신저 ────────────────────────────────────────────────────

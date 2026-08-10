@@ -2,6 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
+import bcrypt from 'bcryptjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.join(__dirname, 'data')
@@ -364,7 +365,9 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'furiamin_split'").get()) {
 //   Mgi→meganesium  MVC→panbicomp  bibon→gcbbon  TO→furiamin  to→pediamin
 //   La(태반)→lainec  dipep→dipeptiven  s4→vitd  ima3→immune  De→denogan
 //   ord→ord_basic  perami1→peramiflu  ivset→mpc_basic  ns10+gluta 두 줄→ns10_tathion 한 항목
-//   Mineral→mineral(미량원소) — 카탈로그에 없어 이 마이그레이션에서 함께 만든다
+//   Mineral→multi5(멀티 5주) — 지씨멀티다. 처음엔 카탈로그에 없다고 보고 '미량원소'를
+//     새로 만들었는데 틀렸다(2026-08-10 정정). '1번' 묶음이 같은 줄을 이미 multi5로 옮겨
+//     놓았던 것이 증거다 — 그 묶음은 이름 그대로 110-3+데노간2인데 그 자리만 달랐다.
 // 사진의 '용량' 칸이 수량이다. EMR은 소수점을 쉼표로 쓴다(0,5 = 0.5) — 반 앰플이라
 // qty 소수 지원이 여기서 쓰인다. '연결=병명'인 줄은 진단코드라 처방이 아니다.
 // Mgi-1·B5-1 같은 -1 접미사는 청구코드가 같은 동일 제품의 반 앰플이라 같은 항목에 qty로 넣는다.
@@ -376,14 +379,14 @@ const BUNDLE_ADD = [
     { code: 'ns', dose: '110', qty: 2 }, { code: 'nac' }, { code: 'licorice' },
     { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
     { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
-    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'mineral' },
+    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'multi5' },
     { code: 'mpc_basic', qty: 2 },
   ] },
   { emr: '110-31', name: '실버 수액', items: [
     { code: 'ns', dose: '110', qty: 2 }, { code: 'nac' }, { code: 'licorice' },
     { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
     { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
-    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'mineral' },
+    { code: 'lainec', qty: 4 }, { code: 'dipeptiven' }, { code: 'multi5' },
     { code: 'immune' }, { code: 'mpc_basic', qty: 2 },
   ] },
   { emr: '110-101', name: '부신기능저하증+비타민D', items: [
@@ -476,15 +479,10 @@ const BUNDLE_ADD = [
 
 if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260806'").get()) {
   db.transaction(() => {
-    // 미량원소(EMR Mineral, 청구코드 681100281)는 카탈로그에 없던 항목이다.
-    // 실버 수액 두 종에만 쓰인다. 영양 첨가제라 디펩티벤 옆(치료제)에 두고,
-    // sort_order를 x.5로 잡아 뒤 항목을 재번호하지 않는다(페디아민과 같은 방식).
-    const beside = db.prepare("SELECT group_key, sort_order, route FROM order_items WHERE code = 'dipeptiven'").get()
-    if (beside) {
-      db.prepare(`INSERT OR IGNORE INTO order_items (code, label, group_key, sort_order, route)
-                  VALUES ('mineral', '미량원소', ?, ?, ?)`)
-        .run(beside.group_key, beside.sort_order + 0.5, beside.route)
-    }
+    // EMR Mineral(청구코드 681100281)을 여기서 'mineral / 미량원소'로 새로 만들었었다.
+    // 틀렸다 — 카탈로그에 없는 게 아니라 이미 '멀티 5주(multi5)'로 있었다(같은 약: 지씨멀티).
+    // 위 실버 수액 두 종도 multi5로 고쳤고, 이미 mineral이 들어간 DB는 아래쪽
+    // mineral_merge_multi5 마이그레이션이 합친다. 여기서는 더 만들지 않는다.
 
     // 기존 200-10에 판비콤프(EMR MVC)가 빠져 있었다. 위 BUNDLE_SEED도 고쳤지만 시드가
     // 이미 돈 DB는 그 배열을 다시 읽지 않으므로 여기서 채운다. OR IGNORE라 새로 만들어진
@@ -545,6 +543,166 @@ try {
     dup.map((d) => `${d.name}(${d.chart_no}) ${d.c}곳`).join(', ') || err.message,
   )
   console.error('[db] 해당 세션을 정리하면 다음 기동에 자동으로 만들어집니다.')
+}
+
+// ─── '미량원소'를 '멀티 5주'로 합친다 (2026-08-10) ──────────────────────
+// 같은 약이 두 이름으로 카탈로그에 앉아 있었다. 2026-08-06 묶음 15종 판독(dfbbe67) 때
+// EMR의 Mineral을 "카탈로그에 없다"고 단정해 'mineral / 미량원소'를 새로 만들었는데,
+// 이미 종이 기록지에 있는 '멀티 5주(multi5)'가 바로 그 약이다.
+//
+// 근거 둘:
+//  - 앱의 '1번' 묶음 이름이 "1번 (110-3+De2)"인데, 110-3과 실제로 대조하면 차이가
+//    데노간2 말고는 mineral(110-3) ↔ multi5(1번) 한 자리뿐이다. 같은 줄을 두 번 다르게 옮겼다.
+//  - 원장님 비급여 분류표의 Mineral 설명이 "미량원소 보충을 위한 지씨멀티"다. 지씨멀티 = 멀티 5주.
+//
+// 라벨을 바꾸는 게 아니라 항목 자체를 없애고 참조를 넘긴다 — 이름만 고치면 중복이 남는다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'mineral_merge_multi5'").get()) {
+  db.transaction(() => {
+    // 같은 자리(같은 묶음·같은 dose)에 multi5가 이미 있으면 수량을 합치고 mineral 행을 지운다.
+    // 지금 운영에는 겹치는 자리가 없지만(110-3·110-31에 multi5가 없다) 관리자가 손댔을 수 있다.
+    // 안 겹치는 나머지는 item_code만 바꾼다 — PK가 (묶음, 항목, dose)라 그냥 UPDATE하면 충돌한다.
+    for (const t of ['order_bundle_items', 'session_orders']) {
+      const owner = t === 'order_bundle_items' ? 'bundle_id' : 'session_id'
+      db.exec(`
+        UPDATE ${t} SET qty = qty + (
+          SELECT m.qty FROM ${t} m
+          WHERE m.${owner} = ${t}.${owner} AND m.item_code = 'mineral' AND m.dose = ${t}.dose)
+        WHERE item_code = 'multi5' AND EXISTS (
+          SELECT 1 FROM ${t} m
+          WHERE m.${owner} = ${t}.${owner} AND m.item_code = 'mineral' AND m.dose = ${t}.dose);
+        DELETE FROM ${t} WHERE item_code = 'mineral' AND EXISTS (
+          SELECT 1 FROM ${t} m
+          WHERE m.${owner} = ${t}.${owner} AND m.item_code = 'multi5' AND m.dose = ${t}.dose);
+        UPDATE ${t} SET item_code = 'multi5' WHERE item_code = 'mineral';
+      `)
+    }
+
+    // 종료된 세션의 얼린 기록지에는 코드가 아니라 라벨 문자열이 굳어 있다(lib/record.js).
+    // 문자열 통째 치환은 하지 않는다 — 특이사항·메모 같은 자유 텍스트에 같은 낱말이 있으면
+    // 거기까지 바뀐다. orders 배열의 label 자리만 정확히 짚는다.
+    const snaps = db.prepare(
+      "SELECT id, record_snapshot FROM sessions WHERE record_snapshot LIKE '%미량원소%'",
+    ).all()
+    const setSnap = db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?')
+    let fixedSnaps = 0
+    for (const s of snaps) {
+      let doc
+      try { doc = JSON.parse(s.record_snapshot) } catch { continue } // 못 읽는 건 손대지 않는다
+      if (!Array.isArray(doc?.orders)) continue
+      let touched = false
+      for (const o of doc.orders) {
+        if (o?.label === '미량원소') { o.label = '멀티 5주'; touched = true }
+      }
+      if (touched) { setSnap.run(JSON.stringify(doc), s.id); fixedSnaps++ }
+    }
+
+    const gone = db.prepare("DELETE FROM order_items WHERE code = 'mineral'").run().changes
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('mineral_merge_multi5', `snapshots:${fixedSnaps}`, Date.now())
+    console.log(`[db] 미량원소 → 멀티 5주 통합: 항목 ${gone}개 삭제, 기록지 스냅샷 ${fixedSnaps}건 정정`)
+  })()
+}
+
+// ─── 묶음 200-2 추가 (2026-08-10) ───────────────────────────────────────
+// 원장님 EMR '묶음코드 등록 및 수정' 화면(사용자코드 200-2, 묶음명칭 '부신기능저하증').
+// 파생인 200-23("200-2+데노간 or ord")은 이미 있는데 정작 원본이 빠져 있었다.
+//
+// 매핑을 두 갈래로 뽑아 13행이 전부 일치하는 것을 확인했다:
+//  - EMR 명칭에서 직접: Gly5=감초 · Vc=메리트씨(200번대는 10g) · MVC=판비콤프 ·
+//    TO=후리아민 · bibon=지씨비본 · La=라이넥 · ivset=MPC FILTER SET
+//  - 이미 있는 200-23에서 데노간2·ORD0.5를 빼서 역산
+// '연결=병명'인 줄(j209·e860·I238·m79198)은 진단코드라 처방이 아니다.
+//
+// 이름은 EMR 그대로면 기존 '부신기능저하증'들과 구별이 안 돼 앱 관례대로 코드를 붙인다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_200_2_260810'").get()) {
+  db.transaction(() => {
+    // 관리자가 이미 손으로 넣었을 수 있다 — 그 경우 건드리지 않는다.
+    if (!db.prepare("SELECT 1 FROM order_bundles WHERE emr_code = '200-2'").get()) {
+      const { lastInsertRowid: id } = db.prepare(
+        "INSERT INTO order_bundles (name, emr_code) VALUES ('부신기능저하증 (200-2)', '200-2')",
+      ).run()
+      const ins = db.prepare(
+        'INSERT INTO order_bundle_items (bundle_id, item_code, dose, qty) VALUES (?, ?, ?, ?)',
+      )
+      for (const it of [
+        { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice', qty: 2 },
+        { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+        { code: 'b5' }, { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+        { code: 'furiamin' }, { code: 'lainec', qty: 4 }, { code: 'mpc_basic', qty: 2 },
+      ]) ins.run(id, it.code, it.dose ?? '', it.qty ?? 1)
+      console.log('[db] 묶음 200-2(부신기능저하증) 추가: 항목 13개')
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('bundle_200_2_260810', '1', Date.now())
+  })()
+}
+
+// ─── 묶음 2번·3번을 EMR과 맞춘다 (2026-08-10) ───────────────────────────
+// 원장님 EMR 화면 22종을 전부 대조한 결과 이 둘만 어긋나 있었다.
+//   2번 '200+De2+글루타치온' : B6 1→3 · B5 제거(EMR에 없다) · 데노간 1→2
+//   3번 '200+치옥트산(4개)'  : 데노간 1→2
+// 2번은 앱 이름이 '(200+De2+…)'인데 정작 데노간이 1개라 자기 이름과도 안 맞았다.
+// 고치기 전 값을 로그에 남긴다 — 관리자가 일부러 바꿔 둔 것이었다면 되돌릴 근거가 된다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_2_3_fix_260810'").get()) {
+  db.transaction(() => {
+    const idOf = db.prepare('SELECT id FROM order_bundles WHERE emr_code = ?')
+    const setQty = db.prepare(
+      "UPDATE order_bundle_items SET qty = ? WHERE bundle_id = ? AND item_code = ? AND dose = ''",
+    )
+    const del = db.prepare(
+      "DELETE FROM order_bundle_items WHERE bundle_id = ? AND item_code = ? AND dose = ''",
+    )
+    const before = db.prepare(
+      "SELECT qty FROM order_bundle_items WHERE bundle_id = ? AND item_code = ? AND dose = ''",
+    )
+    const log = []
+    const two = idOf.get('2')?.id
+    if (two) {
+      log.push(`2번 B6 ${before.get(two, 'b6')?.qty ?? '없음'}→3`)
+      log.push(`2번 B5 ${before.get(two, 'b5')?.qty ?? '없음'}→제거`)
+      log.push(`2번 데노간 ${before.get(two, 'denogan')?.qty ?? '없음'}→2`)
+      setQty.run(3, two, 'b6')
+      del.run(two, 'b5')
+      setQty.run(2, two, 'denogan')
+    }
+    const three = idOf.get('3')?.id
+    if (three) {
+      log.push(`3번 데노간 ${before.get(three, 'denogan')?.qty ?? '없음'}→2`)
+      setQty.run(2, three, 'denogan')
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('bundle_2_3_fix_260810', log.join(' · '), Date.now())
+    console.log('[db] 묶음 2번·3번 EMR 정정:', log.join(' · ') || '대상 없음')
+  })()
+}
+
+// ─── 수액실 '기타' 베드 10개 추가 (2026-08-10) ──────────────────────────
+// seed.js는 빈 DB에만 도므로 이미 돌아가는 DB에는 여기서 넣는다.
+// room 키 'etc'는 DB·베드코드 값이고, 화면 라벨('기타')은 src/api.js의 ROOM_LABELS 한 곳에 있다.
+// sort_order는 기존 최대값 뒤로 붙인다 — 앞에 끼우면 기존 방들의 탭·카드 순서가 밀린다.
+// INSERT OR IGNORE라 관리자가 나중에 비활성으로 돌린 베드를 되살리지 않는다(code가 UNIQUE).
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'beds_etc_260810'").get()) {
+  db.transaction(() => {
+    const base = (db.prepare('SELECT MAX(sort_order) m FROM beds').get()?.m ?? -1) + 1
+    const ins = db.prepare(
+      'INSERT OR IGNORE INTO beds (code, room, number, sort_order, is_active) VALUES (?, ?, ?, ?, 1)',
+    )
+    let made = 0
+    for (let i = 0; i < 10; i++) made += ins.run(`etc-${i + 1}`, 'etc', String(i + 1), base + i).changes
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('beds_etc_260810', String(made), Date.now())
+    console.log(`[db] 수액실 '기타' 베드 ${made}개 추가`)
+  })()
+}
+
+// ─── 통계 화면 암호 (2026-08-10) ────────────────────────────────────────
+// 통계는 원장님이 보는 화면이라 잠가 둔다. 초기 암호 8058.
+// 평문으로 두지 않는다 — settings는 관리자 화면에서 통째로 조회되는 표이고, 계정 비밀번호와
+// 같은 방식(bcrypt)이면 화면에도 로그에도 원문이 안 남는다. 검증은 서버가 한다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'stats_password_hash'").get()) {
+  db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+    .run('stats_password_hash', bcrypt.hashSync('8058', 10), Date.now())
+  console.log('[db] 통계 화면 암호 초기값(8058) 설정')
 }
 
 export default db

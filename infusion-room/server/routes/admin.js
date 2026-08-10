@@ -203,10 +203,19 @@ router.delete('/messages/:id', (req, res) => {
 })
 
 router.get('/settings', (req, res) => {
-  res.json(db.prepare('SELECT key, value, updated_at FROM settings ORDER BY key').all())
+  // 통계 암호 해시는 빼고 준다. 화면이 안 쓰기도 하고, 4자리 암호의 bcrypt 해시는
+  // 후보가 만 개뿐이라 받아 두면 오프라인으로 맞춰볼 수 있다. 필요하면 재설정하면 된다.
+  res.json(db.prepare(
+    "SELECT key, value, updated_at FROM settings WHERE key <> 'stats_password_hash' ORDER BY key",
+  ).all())
 })
 
 router.patch('/settings/:key', (req, res) => {
+  // 통계 암호는 해시로 들어 있다 — 이 일반 경로로 평문을 밀어 넣으면 검증이 통째로 막힌다.
+  // 전용 경로(PUT /admin/stats-password)만 이 키를 다룬다.
+  if (req.params.key === 'stats_password_hash') {
+    return res.status(400).json({ error: '통계 암호는 전용 화면에서만 바꿀 수 있습니다' })
+  }
   const setting = db.prepare('SELECT key FROM settings WHERE key = ?').get(req.params.key)
   if (!setting) return res.status(404).json({ error: '존재하지 않는 설정입니다' })
 

@@ -7,7 +7,7 @@
 // 표기는 기록지·CSV와 같은 규칙을 쓴다: `라벨(용량) ×수량 용법`.
 // 용법은 IM·SC만 찍는다 — 수액은 IV가 기본이라 줄마다 반복되면 정작 예외인 IM·SC가 묻힌다.
 
-import bundleDiff from './bundleDiff'
+import bundleDiff, { VITD_CODE } from './bundleDiff'
 
 const ROUTE_SHOWN = ['IM', 'SC']
 
@@ -113,7 +113,12 @@ export default function OrderSummary({ items, checks, bundle = null }) {
                   const it = byCode.get(r.code) ?? r.item
                   const route = ROUTE_SHOWN.includes(it.route) ? it.route : ''
                   return (
-                    <li key={`${r.code}|${r.dose}`} className="bp-summary__row">
+                    /* 비타D는 몇 달에 한 번 맞는 약이라 묶음에 딸려 들어온 걸 못 보고
+                       그대로 나가는 일이 잦다. 목록에서 혼자 빨갛게 서 있게 둔다. */
+                    <li
+                      key={`${r.code}|${r.dose}`}
+                      className={`bp-summary__row${r.code === VITD_CODE ? ' bp-summary__row--alert' : ''}`}
+                    >
                       <span className="bp-summary__name">
                         {it.label}
                         {r.dose ? <span className="bp-summary__dose">({r.dose})</span> : null}

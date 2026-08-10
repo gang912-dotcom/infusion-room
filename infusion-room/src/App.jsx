@@ -3,6 +3,7 @@ import './App.css'
 import ChatPanel from './ChatPanel'
 import BundlePicker from './BundlePicker'
 import OrderSummary from './OrderSummary'
+import { VITD_CODE } from './bundleDiff'
 import Stats from './Stats.jsx'
 import logoIcon from './assets/logo-icon-white.png'
 import logoIconColor from './assets/logo-icon.png'
@@ -28,7 +29,7 @@ import {
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   getSessionRecord, saveDayMemo, purgeSessions,
   listChatDates, listChatByDate, setChatDeleted,
-  listSettings, updateSetting,
+  listSettings, updateSetting, unlockStats, setStatsPassword,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
   ROOM_LABELS,
@@ -3561,6 +3562,7 @@ function DataManageView({
           <OrderItemManageSection offline={offline} />
           <OrderBundleManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
+          <StatsPasswordSection offline={offline} />
           <ChatLogSection offline={offline} />
           <MessageLogSection />
         </div>
@@ -4196,6 +4198,122 @@ function PatientSearchBar({ onPick, disabled }) {
 }
 
 // ─── App ────────────────────────────────────────────────────────
+// ─── 통계 잠금 화면 ──────────────────────────────────────────────────
+// 통계는 원장님이 보는 화면이라 암호를 받는다. 뒤에 통계를 그려 놓고 덮는 게 아니라
+// 아예 안 그린다 — 덮기만 하면 개발자 도구로 걷어내면 그대로 보인다.
+function StatsLock({ onUnlock, onCancel }) {
+  const [pw, setPw] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!pw || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await unlockStats(pw)
+      onUnlock()
+    } catch (err) {
+      setError(err.message)
+      setPw('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay stats-lock">
+      {/* form이라 엔터로도 넘어간다 — 숫자 몇 자를 치고 확인 버튼까지 옮겨 가지 않아도 된다. */}
+      <form className="modal modal--lock" onSubmit={submit}>
+        <div className="modal__header">
+          <div className="modal__header-title"><h2>통계</h2></div>
+        </div>
+        <div className="modal__body">
+          <p className="stats-lock__msg">잠겨 있습니다. 암호를 입력하세요.</p>
+          <label className="field">
+            <span className="field__label">암호</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              className="field__input stats-lock__input"
+              value={pw}
+              onChange={(e) => { setPw(e.target.value); setError('') }}
+              autoFocus
+              aria-label="통계 암호"
+            />
+          </label>
+          {error && <p role="alert" className="field__error">{error}</p>}
+          <div className="stats-lock__actions">
+            <button type="button" className="btn-detail-confirm" onClick={onCancel}>돌아가기</button>
+            <button type="submit" className="btn-register" disabled={!pw || busy}>
+              {busy ? '확인 중...' : '확인'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 통계 암호 재설정 ──────────────────────────────────
+// 현재 암호는 보여줄 수 없다(해시라 되돌릴 수 없다). 새로 정하는 것만 된다.
+function StatsPasswordSection({ offline }) {
+  const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [msg, setMsg] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    // 한 번만 받으면 오타가 그대로 저장되고, 되돌릴 수도 확인할 수도 없다.
+    if (pw !== pw2) { setError('두 칸이 다릅니다'); return }
+    if (pw.trim().length < 4) { setError('암호는 4자 이상이어야 합니다'); return }
+    setBusy(true); setError(''); setMsg('')
+    try {
+      await setStatsPassword(pw)
+      setPw(''); setPw2(''); setMsg('통계 암호를 바꿨습니다.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header"><h4>통계 화면 암호</h4></div>
+      <p className="dm-empty">
+        통계 탭에 들어갈 때 묻는 암호입니다. 지금 암호는 볼 수 없고 새로 정하는 것만 됩니다.
+      </p>
+      {error && <p role="alert" className="field__error">{error}</p>}
+      {msg && <p className="field__hint field__hint--ok">{msg}</p>}
+      <div className="dm-settings-list">
+        <div className="dm-settings-row">
+          <span className="dm-settings-row__label">새 암호</span>
+          <input
+            type="password" inputMode="numeric" className="field__input dm-settings-row__input"
+            value={pw} onChange={(e) => { setPw(e.target.value); setError(''); setMsg('') }}
+          />
+        </div>
+        <div className="dm-settings-row">
+          <span className="dm-settings-row__label">한 번 더</span>
+          <input
+            type="password" inputMode="numeric" className="field__input dm-settings-row__input"
+            value={pw2} onChange={(e) => { setPw2(e.target.value); setError(''); setMsg('') }}
+          />
+        </div>
+        <div className="dm-settings-row">
+          <span className="dm-settings-row__label" />
+          <button type="button" className="btn-register" onClick={save} disabled={offline || busy || !pw || !pw2}>
+            {busy ? '저장 중...' : '암호 바꾸기'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [account, setAccount] = useState(null)
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute('data-theme') || 'dark')
@@ -4241,6 +4359,13 @@ function App() {
   // 직전 방문 증상(읽기전용 상기용). 진행중 상세를 열 때만 채운다.
   const [prevVisitSymptoms, setPrevVisitSymptoms] = useState([])
   const [activeTab, setActiveTab] = useState('all')
+  // 통계 잠금. 탭을 벗어나면 다시 잠근다 — 한 번 풀고 계속 열려 있으면 잠금이 아니다.
+  // effect가 아니라 탭을 바꾸는 자리에서 끈다(setState-in-effect 규칙에 걸리지 않게).
+  const [statsUnlocked, setStatsUnlocked] = useState(false)
+  function changeTab(id) {
+    setActiveTab(id)
+    if (id !== 'stats') setStatsUnlocked(false)
+  }
   // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
   useEffect(() => {
     const el = tabViewRef.current
@@ -5196,7 +5321,7 @@ function App() {
   // 검색 결과에서 환자를 골랐을 때. 이용 중이면 배정하지 않고 그 베드를 보여준다.
   function handlePickSearchedPatient(patient) {
     if (patient.active) {
-      setActiveTab(patient.active.room)
+      changeTab(patient.active.room)
       setPendingPatient(null)
       setMoveBedAlert(
         `${patient.name} 환자는 이미 ${ROOM_LABELS[patient.active.room] ?? patient.active.room} `
@@ -5233,7 +5358,7 @@ function App() {
     }
 
     // 이동한 수액실 탭으로 전환
-    setActiveTab(targetBed.room)
+    changeTab(targetBed.room)
     setMovingBed(null)
     setMoveBedAlert('')
   }
@@ -5461,6 +5586,12 @@ function App() {
     setOrderChecks(next)
     // 묶음이 항목을 통째로 정의하므로 경로도 자동 계산으로 되돌린다.
     setRouteOverride({})
+    // 비타D는 몇 달에 한 번 맞는 약이라, 묶음에 들어 있어도 오늘은 빼고 나가는 처방이 잦다.
+    // 묶음을 누르면 조용히 딸려 들어오므로 여기서 한 번 세워 준다. 알림은 묶음을 누른
+    // 그 순간에만 뜬다 — 체크를 하나씩 손볼 때마다 뜨면 곧 안 읽게 된다.
+    if (bundle.items.some((it) => it.code === VITD_CODE)) {
+      window.alert(`'${bundle.name}' 묶음에는 비타민D가 들어 있습니다.\n오늘 맞을 환자인지 확인하세요.`)
+    }
   }
 
   // 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 되돌린다.
@@ -5987,7 +6118,7 @@ function App() {
             key={tab.id}
             type="button"
             className={`tab ${activeTab === tab.id ? 'tab--active' : ''}${tab.id === 'history' ? ' tab--history' : ''}${tab.id === 'patient' ? ' tab--patient' : ''}${tab.id === 'stats' ? ' tab--stats' : ''}${tab.id === 'datamanage' ? ' tab--datamanage' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => changeTab(tab.id)}
           >
             {tab.label}
           </button>
@@ -6084,7 +6215,9 @@ function App() {
           onInitialChartConsumed={() => setPatientViewSeed(null)}
         />
       ) : activeTab === 'stats' ? (
-        <Stats rows={activeHistory} now={now} />
+        statsUnlocked
+          ? <Stats rows={activeHistory} now={now} />
+          : <StatsLock onUnlock={() => setStatsUnlocked(true)} onCancel={() => changeTab('all')} />
       ) : activeTab === 'datamanage' ? (
         <DataManageView
           allHistory={history}

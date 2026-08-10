@@ -5957,3 +5957,34 @@
 
 /* 탭·검색·요약을 한 줄로 합쳐 세로를 벌던 .board-controls는 뺐다.
    셋 다 원래 자기 줄로 돌아갔다 — 자리가 손에 익은 쪽이 68px보다 컸다. */
+
+/* ─── 통계 잠금 화면 ───────────────────────────────────────────────────
+   .modal-overlay가 이미 position:fixed·inset:0이라 화면을 통째로 덮는다. 뒤에 통계를
+   그려 두고 덮는 게 아니라 아예 안 그린다 — 덮기만 하면 개발자 도구로 걷어내면 보인다.
+   그래서 '잠김'이 형태가 아니라 사실이다. */
+.stats-lock__msg {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* 숫자 몇 자를 넣는 칸이라 넓을 이유가 없다. 글자는 크게 — 가리고 치는 칸이라
+   몇 자를 쳤는지가 점만으로 보여야 한다. */
+.stats-lock__input {
+  box-sizing: border-box;
+  width: 100%;
+  font-size: 20px;
+  letter-spacing: 0.18em;
+  text-align: center;
+}
+
+.stats-lock__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* 44px은 이 앱의 누르는 것 바닥값이다. */
+.stats-lock__actions > button { min-height: 44px; }

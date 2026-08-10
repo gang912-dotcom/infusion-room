@@ -163,6 +163,27 @@
    오른쪽에 붙어 지금 줄과 같은 자리에 온다(표시가 없는 줄은 생김새가 안 바뀐다). */
 .bp-summary__name { color: var(--text-primary); min-width: 0; flex: 1 1 auto; }
 .bp-summary__dose { margin-left: 2px; color: var(--text-secondary); }
+/* 비타D 줄 — 묶음에 딸려 들어온 걸 못 보고 그대로 나가는 일이 잦아 혼자 세워 둔다.
+   색은 새로 정하지 않고 이 앱에서 이미 잰 '빨강 글자 on 빨강 틴트' 짝을 쓴다
+   (다크 #f87171 · 라이트 #c41f16). 틴트를 깔았으니 그 위에서 잰 값이 맞다. */
+.bp-summary__row--alert {
+  background: color-mix(in srgb, var(--status-completed) 14%, transparent);
+  border-radius: 6px;
+  padding-inline: 6px;
+  margin-inline: -6px;
+}
+.bp-summary__row--alert .bp-summary__name,
+.bp-summary__row--alert .bp-summary__dose,
+.bp-summary__row--alert .bp-summary__qty {
+  color: #f87171;
+  font-weight: 700;
+}
+:root[data-theme='light'] .app .bp-summary__row--alert .bp-summary__name,
+:root[data-theme='light'] .app .bp-summary__row--alert .bp-summary__dose,
+:root[data-theme='light'] .app .bp-summary__row--alert .bp-summary__qty {
+  color: #c41f16;
+}
+
 .bp-summary__tail { display: flex; gap: 6px; flex: none; }
 .bp-summary__qty { font-weight: 700; font-variant-numeric: tabular-nums; }
 .bp-summary__route { font-size: 12px; font-weight: 700; color: var(--text-secondary); }

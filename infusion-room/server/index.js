@@ -17,6 +17,7 @@ import ordersRouter from './routes/orders.js'
 import adminRouter from './routes/admin.js'
 import adminOrdersRouter from './routes/adminOrders.js'
 import chatRouter, { adminChatRouter } from './routes/chat.js'
+import { statsRouter, statsAdminRouter } from './routes/statsLock.js'
 import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
 
@@ -41,7 +42,9 @@ app.use('/api', messagesRouter)
 app.use('/api', vitalsRouter)
 app.use('/api', ordersRouter)
 app.use('/api', chatRouter)
+app.use('/api', statsRouter)
 app.use('/api/admin', requireAdmin, adminRouter)
+app.use('/api/admin', requireAdmin, statsAdminRouter)
 app.use('/api/admin', requireAdmin, adminOrdersRouter)
 app.use('/api/admin', requireAdmin, adminChatRouter)
 

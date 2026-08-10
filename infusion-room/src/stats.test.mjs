@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import {
   inRange, byDay, byDowHour, byRoom, byStaff, topRevisits, summary,
-  presetRange, fmtMinutes, dayKey, startOfDay,
+  presetRange, fmtMinutes, dayKey, startOfDay, ROOM_KEYS,
 } from './stats.js'
 
 const DAY = 86_400_000
@@ -59,7 +59,15 @@ const row = (over) => ({
 // ── 단순 집계 ────────────────────────────────────────────────────────
 {
   const rows = [row({}), row({ roomKey: 'room3' }), row({ roomKey: 'room3' })]
-  assert.deepEqual(byRoom(rows).map((r) => r.count), [1, 2, 0]) // room2·room3·floor2 순서 고정
+  const got = byRoom(rows)
+  // 개수를 자리로 세면 방이 하나 늘 때마다 이 줄이 깨진다. 키로 본다.
+  const byKey = Object.fromEntries(got.map((r) => [r.key, r.count]))
+  assert.equal(byKey.room2, 1)
+  assert.equal(byKey.room3, 2)
+  assert.equal(byKey.floor2, 0) // 건수가 0인 방도 막대가 서야 한다
+  // 방이 하나라도 빠지거나 라벨이 비면 통계에서 그 방이 조용히 사라진다 — 여기서 잡는다.
+  assert.deepEqual(got.map((r) => r.key), ROOM_KEYS, '순서는 ROOM_KEYS를 따라야 한다')
+  assert.ok(got.every((r) => r.label), `라벨 없는 방: ${got.filter((r) => !r.label).map((r) => r.key)}`)
   const staff = byStaff([...rows, row({ lineStaff: null })], 'lineStaff')
   assert.deepEqual(staff, [{ name: '박민순', count: 3 }]) // null은 세지 않는다
 }
