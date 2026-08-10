@@ -66,7 +66,9 @@ router.get('/sessions/:id/prescription', (req, res) => {
   const items = db.prepare(
     'SELECT item_code AS code, dose, qty FROM session_orders WHERE session_id = ?',
   ).all(session.id)
-  res.json({ items, visit_symptom: session.visit_symptom })
+  // bundle_id는 처방 내용이 아니라 '어느 묶음에서 시작했나'라는 대조 기준이다.
+  // 화면이 이걸로 묶음을 되찾아 "묶음에서 뭘 바꿨나"를 다시 계산한다.
+  res.json({ items, visit_symptom: session.visit_symptom, bundle_id: session.order_bundle_id ?? null })
 })
 
 // ─── 처방 저장 — 오더 체크 + 내원당시증상을 한 번에 ──────────────────
@@ -76,11 +78,21 @@ router.put('/sessions/:id/prescription', (req, res) => {
   const session = getSessionOr404(req.params.id, res)
   if (!session) return
 
-  const { items, visit_symptom: visitSymptom } = req.body ?? {}
+  const { items, visit_symptom: visitSymptom, bundle_id: bundleId } = req.body ?? {}
   if (items !== undefined && !Array.isArray(items)) {
     return res.status(400).json({ error: 'items는 배열이어야 합니다' })
   }
   const rows = items ?? []
+
+  // 묶음 기준. null은 '묶음 없이 직접 골랐다'는 뜻이라 정상값이다.
+  // 없는 id면 FK 위반으로 500이 나므로 여기서 400으로 잡는다. 비활성 묶음도 받는다 —
+  // 이미 그 묶음으로 작성 중인 처방을 관리자가 내렸다고 저장이 막히면 안 된다.
+  if (bundleId !== undefined && bundleId !== null) {
+    if (!Number.isInteger(bundleId)
+        || !db.prepare('SELECT 1 FROM order_bundles WHERE id = ?').get(bundleId)) {
+      return res.status(400).json({ error: `알 수 없는 묶음입니다: ${bundleId}` })
+    }
+  }
 
   // 존재하지 않는 code가 섞이면 통째로 거부한다 — 일부만 저장되면 기록지가 조용히 틀어진다.
   // 같은 항목을 dose만 달리해 두 번 보내는 건 정상이다(NS 180 + NS 110). 같은 (code, dose)가
@@ -112,11 +124,15 @@ router.put('/sessions/:id/prescription', (req, res) => {
   const del = db.prepare('DELETE FROM session_orders WHERE session_id = ?')
   const ins = db.prepare('INSERT INTO session_orders (session_id, item_code, dose, qty) VALUES (?, ?, ?, ?)')
   const updateSymptom = db.prepare('UPDATE sessions SET visit_symptom = ? WHERE id = ?')
+  const updateBundle = db.prepare('UPDATE sessions SET order_bundle_id = ? WHERE id = ?')
 
   db.transaction(() => {
     del.run(session.id)
     for (const row of parsed) ins.run(session.id, row.code, row.dose, row.qty)
     if (visitSymptom !== undefined) updateSymptom.run(trimmedSymptom || null, session.id)
+    // 항목과 같은 트랜잭션에 둔다 — 처방만 바뀌고 기준이 옛 묶음으로 남으면
+    // 다시 열었을 때 엉뚱한 변경 브리핑이 뜬다.
+    if (bundleId !== undefined) updateBundle.run(bundleId, session.id)
   })()
 
   // 내원당시증상은 상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 한다.

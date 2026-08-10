@@ -5362,6 +5362,10 @@ function App() {
       setOrderChecks(checks)
       setRouteOverride(override)
       setVisitSymptom(saved.visit_symptom ?? '')
+      // 어느 묶음에서 시작했는지 되찾아 변경 브리핑을 다시 세운다. 묶음 목록은 로그인 직후
+      // 받아 두므로 요청이 늘지 않는다. 못 찾으면(묶음 없이 골랐거나 관리자가 내렸거나)
+      // 브리핑만 안 뜨고 처방은 그대로다.
+      setPickedBundle(orderBundles.find((b) => b.id === saved.bundle_id) ?? null)
     } catch (err) {
       setActionError(err.message)
     }
@@ -5474,7 +5478,9 @@ function App() {
     const items = Object.values(orderChecks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty }))
     effectiveRouteCodes().forEach((code) => items.push({ code, dose: '', qty: 1 }))
     try {
-      await savePrescription(prescriptionBed.sessionId, { items, visitSymptom })
+      await savePrescription(prescriptionBed.sessionId, {
+        items, visitSymptom, bundleId: pickedBundle?.id ?? null,
+      })
       await refreshBoard()
       closePrescriptionModal()
     } catch (err) {

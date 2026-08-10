@@ -240,10 +240,12 @@ export async function getPrescription(sessionId) {
 }
 
 // 오더 체크와 내원당시증상을 한 번에 저장한다(세션 단위 전체 재작성).
-export async function savePrescription(sessionId, { items, visitSymptom }) {
+// bundleId는 처방 내용이 아니라 '어느 묶음에서 시작했나'라는 대조 기준이다 — 다시 열었을 때
+// '고른 처방' 칸이 묶음에서 뭘 바꿨는지 보여주는 데 쓴다. 묶음 없이 골랐으면 null.
+export async function savePrescription(sessionId, { items, visitSymptom, bundleId = null }) {
   return apiFetch(`/sessions/${sessionId}/prescription`, {
     method: 'PUT',
-    body: JSON.stringify({ items, visit_symptom: visitSymptom }),
+    body: JSON.stringify({ items, visit_symptom: visitSymptom, bundle_id: bundleId }),
   })
 }
 

@@ -142,11 +142,46 @@
   font-size: 13px; line-height: 1.4;
 }
 .bp-summary__row + .bp-summary__row { border-top: 1px solid var(--divider, var(--card-border)); }
-.bp-summary__name { color: var(--text-primary); min-width: 0; }
+/* flex:1을 주는 이유 — 행이 space-between인데 가운데에 변경 표시가 끼면 세 조각이
+   균등하게 벌어져 이름과 표시가 따로 논다. 이름이 남는 폭을 먹어야 표시·수량이
+   오른쪽에 붙어 지금 줄과 같은 자리에 온다(표시가 없는 줄은 생김새가 안 바뀐다). */
+.bp-summary__name { color: var(--text-primary); min-width: 0; flex: 1 1 auto; }
 .bp-summary__dose { margin-left: 2px; color: var(--text-secondary); }
 .bp-summary__tail { display: flex; gap: 6px; flex: none; }
 .bp-summary__qty { font-weight: 700; font-variant-numeric: tabular-nums; }
 .bp-summary__route { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+
+/* ─── 묶음에서 바뀐 것 ─────────────────────────────────────────────────
+   근무자가 묶음을 고른 뒤 손댄 자리를 짚어 준다. 판정은 bundleDiff.js에 있다.
+   색은 새로 정하지 않고 이 앱에서 이미 잰 짝을 쓴다 — 기본 규칙에 다크 값을 두고
+   라이트만 :root[data-theme='light']로 내린다(카드 배경 대비가 라이트에서 무너져서다). */
+.bp-summary__mark {
+  flex: none;
+  font-size: 12px; font-weight: 600;
+  color: var(--status-warning);           /* 용량·수량: 주황 */
+}
+.bp-summary__mark--add { color: var(--status-occupied); }  /* 추가: 초록 */
+:root[data-theme='light'] .app .bp-summary__mark { color: #915400; }
+:root[data-theme='light'] .app .bp-summary__mark--add { color: var(--solid-green); }
+
+/* 손댄 게 없다는 확인. 표시가 없는 것과 '없음을 확인한 것'은 다르다. */
+.bp-summary__same {
+  align-self: flex-start;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+}
+
+/* 뺀 것 — 체크가 꺼져 있어 위 목록에 행이 없다. 여기서 말해 주지 않으면
+   "묶음에서 뭘 뺐더라"를 확인할 방법이 화면에 없다. */
+.bp-summary__dropped {
+  display: flex; align-items: baseline; gap: 6px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border);
+  font-size: 12px; line-height: 1.4;
+}
+.bp-summary__droppedlabel { flex: none; font-weight: 700; color: #f87171; }
+.bp-summary__droppedlist { min-width: 0; color: var(--text-secondary); }
+:root[data-theme='light'] .app .bp-summary__droppedlabel { color: #c41f16; }
 
 /* ─── 좁은 화면: 요약 칸을 체크리스트 아래로 ───────────────────────────
    경계 960px 근거: 체크리스트가 minmax(200px,1fr) 자동 채움이라 3열에 ~624px이 필요하고,

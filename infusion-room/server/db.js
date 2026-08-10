@@ -41,6 +41,15 @@ if (!sessionColumns.includes('record_snapshot')) {
   db.exec('ALTER TABLE sessions ADD COLUMN record_snapshot TEXT')
 }
 
+// 처방을 어느 묶음에서 시작했는지. 처방 모달의 '고른 처방' 칸이 이걸 기준으로
+// "묶음에서 뭘 바꿨나"를 보여준다. 처방 내용 자체는 session_orders가 온전히 들고 있으므로
+// 이 값은 대조용 기준일 뿐이다 — NULL이면 브리핑만 안 뜨고 처방은 정상이다.
+// ponytail: 묶음 id만 남긴다. 저장 후 관리자가 그 묶음 내용을 고치면 브리핑이 새 정의
+//           기준으로 나온다. 묶음을 자주 고치게 되면 정의를 통째로 스냅샷(JSON)해야 한다.
+if (!sessionColumns.includes('order_bundle_id')) {
+  db.exec('ALTER TABLE sessions ADD COLUMN order_bundle_id INTEGER REFERENCES order_bundles(id)')
+}
+
 // 직원 자필 서명 — base64 dataURL을 컬럼에 넣는다. 파일시스템에 두지 않는 이유는
 // 기존 DB 백업(backup.bat)에 그대로 딸려가고 경로 관리·정적 서빙이 필요 없어서다.
 const staffColumns = db.prepare('PRAGMA table_info(staff)').all().map((c) => c.name)

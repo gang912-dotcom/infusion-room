@@ -78,7 +78,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   day_memo         TEXT,
   exam_room        TEXT,  -- 진료실 번호('1'|'2'|'3'|'6'|'7'). 미선택이면 NULL.
   visit_symptom    TEXT,  -- 내원당시증상(주 증상, 내원 사유). 자유 텍스트. 미입력이면 NULL.
-  record_snapshot  TEXT   -- 종료 시 얼린 기록지 데이터(JSON). 종료 전이면 NULL.
+  record_snapshot  TEXT,  -- 종료 시 얼린 기록지 데이터(JSON). 종료 전이면 NULL.
+  -- 처방을 어느 묶음에서 시작했는지. '고른 처방' 칸의 변경 브리핑이 쓰는 대조 기준일 뿐이고,
+  -- 처방 내용은 session_orders가 온전히 들고 있다. NULL이면 브리핑만 안 뜬다.
+  order_bundle_id  INTEGER REFERENCES order_bundles(id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active

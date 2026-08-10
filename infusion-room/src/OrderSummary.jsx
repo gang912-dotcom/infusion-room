@@ -7,10 +7,24 @@
 // 표기는 기록지·CSV와 같은 규칙을 쓴다: `라벨(용량) ×수량 용법`.
 // 용법은 IM·SC만 찍는다 — 수액은 IV가 기본이라 줄마다 반복되면 정작 예외인 IM·SC가 묻힌다.
 
+import bundleDiff from './bundleDiff'
+
 const ROUTE_SHOWN = ['IM', 'SC']
+
+// 바뀐 줄에 붙는 한 마디. 지금 값은 이미 줄에 있으므로(용량은 이름 옆 괄호, 수량은 꼬리의 ×N)
+// 여기엔 '무엇이 어디서 왔는지'만 적는다 — 같은 숫자를 두 번 찍으면 읽는 눈이 느려진다.
+function MarkTag({ mark }) {
+  if (!mark) return null
+  if (mark.kind === 'added') return <span className="bp-summary__mark bp-summary__mark--add">추가</span>
+  if (mark.kind === 'dose') return <span className="bp-summary__mark">용량 {mark.from}에서</span>
+  return <span className="bp-summary__mark">수량 {mark.from}에서</span>
+}
 
 export default function OrderSummary({ items, checks, bundle = null }) {
   const byCode = new Map(items.map((i) => [i.code, i]))
+
+  // 고른 묶음과의 대조. 판정 규칙과 그 근거는 bundleDiff.js에 있다.
+  const diff = bundleDiff(bundle?.items ?? null, checks)
 
   // 체크리스트와 같은 순서로 세운다 — 두 칸을 눈으로 오갈 때 순서가 다르면 대조가 안 된다.
   const rows = []
@@ -43,6 +57,8 @@ export default function OrderSummary({ items, checks, bundle = null }) {
         <p className="bp-summary__from">
           <span className="bp-summary__fromcode">{bundle.emr_code || '묶음'}</span>
           <span className="bp-summary__fromname">{bundle.name}</span>
+          {/* 손댄 게 없다는 것도 알아야 하는 정보다 — 표시가 없는 것과 '없음을 확인한 것'은 다르다. */}
+          {diff.changed ? null : <span className="bp-summary__same">묶음 그대로</span>}
         </p>
       ) : null}
 
@@ -63,6 +79,7 @@ export default function OrderSummary({ items, checks, bundle = null }) {
                         {it.label}
                         {r.dose ? <span className="bp-summary__dose">({r.dose})</span> : null}
                       </span>
+                      <MarkTag mark={diff.marks[`${r.code}|${r.dose ?? ''}`]} />
                       <span className="bp-summary__tail">
                         {/* ×1도 찍는다 — 수량이 없는 줄과 1인 줄을 눈으로 구분해야
                             EMR 차팅과 한 줄씩 맞출 수 있다. */}
@@ -77,6 +94,23 @@ export default function OrderSummary({ items, checks, bundle = null }) {
           ))}
         </ul>
       )}
+
+      {/* 뺀 것은 목록에 행이 없다 — 체크가 꺼져 있으니까. 여기서 따로 말해 주지 않으면
+          "묶음에서 뭘 뺐더라"를 확인할 방법이 화면 어디에도 없다.
+          rows가 0이어도 떠야 한다(묶음을 고른 뒤 전부 끈 경우). */}
+      {diff.removed.length > 0 ? (
+        <p className="bp-summary__dropped">
+          <span className="bp-summary__droppedlabel">뺌</span>
+          <span className="bp-summary__droppedlist">
+            {diff.removed
+              .map(({ code, dose }) => {
+                const label = byCode.get(code)?.label ?? code
+                return dose ? `${label}(${dose})` : label
+              })
+              .join(' · ')}
+          </span>
+        </p>
+      ) : null}
     </aside>
   )
 }
