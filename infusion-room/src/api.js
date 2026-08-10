@@ -656,6 +656,16 @@ export async function updateSetting(key, value) {
   return apiFetch(`/admin/settings/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) })
 }
 
+// ─── 더미 환자 정리 (관리자) ─────────────────────────────────────────
+// 시험 삼아 등록했다 취소한 이름이 환자 검색에 남는다. 판정은 서버가 한다.
+export async function listDummyPatients() {
+  return apiFetch('/admin/dummy-patients')
+}
+
+export async function purgeDummyPatients(ids) {
+  return apiFetch('/admin/dummy-patients/purge', { method: 'POST', body: JSON.stringify({ ids }) })
+}
+
 // ─── 통계 화면 잠금 ──────────────────────────────────────────────────
 // 암호는 서버에만 해시로 있다. 화면은 맞다/아니다만 받는다 — 내려받아 비교하면 잠근 의미가 없다.
 export async function unlockStats(password) {

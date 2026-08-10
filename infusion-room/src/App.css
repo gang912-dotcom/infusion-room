@@ -5988,3 +5988,45 @@
 
 /* 44px은 이 앱의 누르는 것 바닥값이다. */
 .stats-lock__actions > button { min-height: 44px; }
+
+/* ─── 관리자: 더미 환자 정리 ───────────────────────────────────────────
+   지우는 목록이라 한 줄에 이름·차트번호·언제 등록했는지가 다 보여야 한다.
+   차트번호는 tabular-nums로 자릿수를 맞춰 눈으로 훑을 수 있게 둔다. */
+.dummy-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dummy-list__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* 못 지우는 줄은 물러나 있어야 한다 — 고를 수 있는 것과 헷갈리면 안 된다. */
+.dummy-list__row--skip { opacity: 0.75; border-style: dashed; }
+
+/* 체크박스와 이름은 한 덩어리로 눌린다. 44px은 이 앱의 누르는 것 바닥값이다. */
+.dummy-list__pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.dummy-list__name { font-weight: 700; color: var(--text-primary); }
+.dummy-list__chart { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.dummy-list__when { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+
+.dummy-skipped { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--card-border); }
+.dummy-skipped__head { margin: 0; font-size: 13px; font-weight: 700; color: var(--text-secondary); }

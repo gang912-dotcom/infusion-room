@@ -30,6 +30,7 @@ import {
   getSessionRecord, saveDayMemo, purgeSessions,
   listChatDates, listChatByDate, setChatDeleted,
   listSettings, updateSetting, unlockStats, setStatsPassword,
+  listDummyPatients, purgeDummyPatients,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
   ROOM_LABELS, NON_BED_ROOMS, EXAM_ROOMS,
@@ -3562,6 +3563,7 @@ function DataManageView({
           <OrderBundleManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
           <StatsPasswordSection offline={offline} />
+          <DummyPatientSection offline={offline} />
           <ChatLogSection offline={offline} />
           <MessageLogSection />
         </div>
@@ -4309,6 +4311,122 @@ function StatsPasswordSection({ offline }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── 관리자 설정 — 더미 환자 정리 ────────────────────────────────────
+// 시험 삼아 등록했다 취소한 이름이 환자 검색에 남는다. 판정은 서버가 한다
+// (server/lib/dummyPatients.js — 명령줄 도구와 같은 규칙을 본다).
+function DummyPatientSection({ offline }) {
+  const [targets, setTargets] = useState([])
+  const [skipped, setSkipped] = useState([])
+  const [picked, setPicked] = useState(() => new Set())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // setState를 effect 안에서 동기로 부르면 eslint 규칙에 걸린다(베이스라인 1건을 넘기지 않는다).
+  // loading은 처음부터 true라 여기서 다시 세울 필요가 없고, 지운 뒤 다시 부를 때는
+  // 목록이 짧아 깜빡임도 없다.
+  function reload() {
+    listDummyPatients()
+      .then(({ targets: t, skipped: s }) => {
+        setTargets(t); setSkipped(s)
+        // 기본은 전부 고른 상태. 목록이 짧고, 빼야 할 것만 사용자가 풀면 된다.
+        setPicked(new Set(t.map((x) => x.id)))
+        setError('')
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { reload() }, [offline])
+
+  function toggle(id) {
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function remove() {
+    const ids = [...picked]
+    if (!ids.length) return
+    // 되돌릴 수 없다 — 몇 명인지 보여주고 한 번 더 받는다.
+    if (!window.confirm(`환자 ${ids.length}명과 그 취소된 배정 기록을 지웁니다.\n되돌릴 수 없습니다. 진행할까요?`)) return
+    setBusy(true); setError(''); setMsg('')
+    try {
+      const r = await purgeDummyPatients(ids)
+      setMsg(`환자 ${r.removed}명 · 취소된 배정 ${r.sessions}건을 지웠습니다.`)
+      reload()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const fmt = (t) => new Date(t).toLocaleString('ko-KR')
+
+  return (
+    <div className="dm-admin-section">
+      <div className="dm-note-section__header"><h4>더미 환자 정리</h4></div>
+      <p className="dm-empty">
+        등록했다가 취소해서 실제 방문이 하나도 없는 환자입니다. EMR에서 일괄 등록한 환자는
+        여기 올라오지 않습니다 — 앱에서 등록하며 만들어진 환자만 고릅니다.
+      </p>
+      {error && <p role="alert" className="field__error">{error}</p>}
+      {msg && <p className="field__hint field__hint--ok">{msg}</p>}
+
+      {loading ? (
+        <div className="dm-empty">불러오는 중...</div>
+      ) : (
+        <>
+          {targets.length === 0 ? (
+            <div className="dm-empty">정리할 환자가 없습니다.</div>
+          ) : (
+            <>
+              <ul className="dummy-list">
+                {targets.map((t) => (
+                  <li key={t.id} className="dummy-list__row">
+                    <label className="dummy-list__pick">
+                      <input type="checkbox" checked={picked.has(t.id)} onChange={() => toggle(t.id)} />
+                      <span className="dummy-list__name">{t.name}</span>
+                      <span className="dummy-list__chart">{t.chart_no}</span>
+                    </label>
+                    <span className="dummy-list__when">{fmt(t.created_at)} 등록 · 취소 {t.session_count}건</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button" className="btn-register"
+                onClick={remove} disabled={offline || busy || picked.size === 0}
+              >
+                {busy ? '지우는 중...' : `선택한 ${picked.size}명 지우기`}
+              </button>
+            </>
+          )}
+
+          {/* 무엇이 왜 빠졌는지 이름으로 알린다. 숫자만 보이면 '다 정리됐다'로 읽힌다. */}
+          {skipped.length > 0 && (
+            <div className="dummy-skipped">
+              <p className="dummy-skipped__head">기록이 남아 있어 지울 수 없는 {skipped.length}명</p>
+              <ul className="dummy-list">
+                {skipped.map((s) => (
+                  <li key={s.id} className="dummy-list__row dummy-list__row--skip">
+                    <span className="dummy-list__name">{s.name}</span>
+                    <span className="dummy-list__chart">{s.chart_no}</span>
+                    <span className="dummy-list__when">{s.reason}이(가) 남아 있음</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
