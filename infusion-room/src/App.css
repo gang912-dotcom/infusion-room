@@ -1177,7 +1177,6 @@
   to   { transform: translateX(100%); }
 }
 
-
 .bed-card--warning .progress-fill {
   background: var(--status-warning);
 }
@@ -1261,7 +1260,8 @@
   animation: overlay-in 0.2s ease;
 }
 
-/* 선택자를 두 겹으로 쓴 건 특이도 때문 — 파일 끝에 `.modal-overlay{backdrop-filter:none}`이
+/* 선택자를 두 겹으로 쓴 건 특이도 때문 — 파일 끝에 `.modal-overlay{backdrop-filter:none}
+`이
    있어서 `.modal-overlay--top` 한 겹으론 뒤 규칙에 덮인다. */
 .modal-overlay.modal-overlay--top {
   z-index: 200;
@@ -1894,7 +1894,8 @@
   /* 폰(카드 161px)에서 진행률 줄이 딱 한 칸 모자라 두 줄로 깨졌다(실측: 자리 135px에
      내용 127px + gap 8px). 글자를 줄이는 대신 장식인 물방울을 빼고 간격을 좁힌다.
      `.app`을 붙이는 이유: 미디어쿼리는 특정성을 올리지 않는데 파일 뒤쪽(3636줄)에
-     `.bed-card__droplet{display:inline-block}`이 있어 그냥 쓰면 진다.
+     `.bed-card__droplet{display:inline-block}
+`이 있어 그냥 쓰면 진다.
      nowrap은 '진행률 92%'가 어절 사이에서 쪼개지는 것을 막는다 — 물방울이 없는
      카드에서도 두 줄이 됐던 원인이 이쪽이다. */
   .app .bed-card__droplet {
@@ -2151,7 +2152,6 @@
   color: var(--text-secondary);
 }
 
-
 .history-section {
   display: flex;
   flex-direction: column;
@@ -2363,316 +2363,7 @@
   }
 }
 
-/* ─── 통계 화면 ─────────────────────────────────────────────── */
-.stats-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* 상단 요약 카드 그리드 */
-.stats-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.stats-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px 18px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(30, 58, 95, 0.04);
-}
-
-.stats-card--accent {
-  background: var(--status-occupied-bg);
-  border-color: rgba(91, 157, 255, 0.4);
-}
-
-.stats-card__label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
-}
-
-.stats-card__value {
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-  display: flex;
-  align-items: baseline;
-  gap: 3px;
-}
-
-.stats-card__unit {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-/* 기간 선택 */
-.stats-range {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 18px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-}
-
-.stats-range__label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.stats-range__inputs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 240px;
-}
-
-.stats-range__input {
-  flex: 1;
-  padding: 8px 10px;
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  outline: none;
-  min-width: 0;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.stats-range__input:focus {
-  border-color: var(--status-occupied);
-  box-shadow: 0 0 0 3px rgba(61, 143, 168, 0.12);
-}
-
-.stats-range__sep {
-  font-size: 14px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.stats-range__btn {
-  padding: 9px 22px;
-  font-size: 14px;
-  font-family: inherit;
-  font-weight: 600;
-  color: #ffffff;
-  background: var(--solid-green); /* 흰 글자 배경 — --status-occupied면 1.89다 */
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.2s;
-}
-
-.stats-range__btn:hover {
-  filter: brightness(0.9);
-}
-
-/* 결과 영역 */
-.stats-result {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.stats-result__period {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.stats-empty {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 15px;
-  background: var(--card-bg);
-  border: 1px dashed var(--card-border);
-  border-radius: 10px;
-}
-
-/* 결과 블록 */
-.stats-block {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.stats-block__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.stats-block__count {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.stats-block__count strong {
-  color: var(--status-occupied);
-}
-
-.stats-block__empty {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-/* 수액실별 바 차트 */
-.stats-room-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.stats-room-item {
-  display: grid;
-  grid-template-columns: 80px 1fr 52px;
-  align-items: center;
-  gap: 10px;
-}
-
-.stats-room-item__name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.stats-room-item__bar-wrap {
-  height: 14px;
-  background: var(--card-border);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.stats-room-item__bar {
-  height: 100%;
-  background: var(--status-occupied);
-  border-radius: 999px;
-  transition: width 0.4s ease;
-  min-width: 4px;
-}
-
-.stats-room-item__cnt {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* 재방문 TOP 10 */
-.stats-top-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.stats-top-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-}
-
-.stats-top-item__rank {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-  color: var(--text-secondary);
-  background: var(--card-border);
-}
-
-.stats-top-item__rank--1 {
-  background: #ffd700;
-  color: #7a5a00;
-}
-
-.stats-top-item__rank--2 {
-  background: #c0c8d0;
-  color: #3a4a58;
-}
-
-.stats-top-item__rank--3 {
-  background: #d4956a;
-  color: #6a3010;
-}
-
-.stats-top-item__name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.stats-top-item__chart {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.stats-top-item__count {
-  margin-left: auto;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--status-occupied);
-  white-space: nowrap;
-}
-
 @media (max-width: 640px) {
-  .stats-summary {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .stats-range__inputs {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .stats-room-item {
-    grid-template-columns: 70px 1fr 44px;
-  }
 }
 
 /* ─── 데이터관리 화면 ───────────────────────────────────────── */
@@ -3280,7 +2971,6 @@
 .round-input__title {
   color: var(--status-occupied);
 }
-
 
 .round-history__empty {
   margin: 0;
@@ -4075,6 +3765,7 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 /* ==========================================================================
    수액실 상황판 · iOS(애플) 감성 폴리시 — App.css 맨 끝에 "그대로 붙여넣기"
    --------------------------------------------------------------------------
@@ -4213,6 +3904,7 @@
 .app .bed-card--vacant .bed-card__add-icon{ transition:transform .3s var(--ease-spring), color .3s; }
 .app .bed-card--vacant:hover .bed-card__add-icon{ transform:rotate(90deg); color:var(--status-occupied); }
 .app .bed-card--vacant:hover .bed-card__add-label{ color:var(--status-occupied); }
+
 /* 잠긴(등록중) 카드는 예외로 또렷하게 */
 .app .bed-card--locked{ opacity:1; }
 
@@ -4226,6 +3918,7 @@
   transition:width 1s var(--ease-out);
   position:relative;
 }
+
 /* ── 6. 움직이는 것은 '실제로 움직이는 중'인 것뿐 ──────────────────────
    여기 있던 '곧 완료' 카드 맥동(pulse)은 뺐다 — 카드 전체가 뛰면 옆 칸까지
    시선을 흔드는데, 곧 완료는 앰버 면색과 위 모서리 색띠만으로 충분히 걸린다.
@@ -4252,6 +3945,7 @@
 .app .bed-card{
   animation:iv-rise .5s var(--ease-out) both;
 }
+
 /* 앞쪽 카드부터 40ms씩 밀리게 (최대 20개) */
 .app .bed-card:nth-child(1){ animation-delay:.00s } .app .bed-card:nth-child(2){ animation-delay:.04s }
 .app .bed-card:nth-child(3){ animation-delay:.08s } .app .bed-card:nth-child(4){ animation-delay:.12s }
@@ -4259,6 +3953,7 @@
 .app .bed-card:nth-child(7){ animation-delay:.24s } .app .bed-card:nth-child(8){ animation-delay:.28s }
 .app .bed-card:nth-child(9){ animation-delay:.32s } .app .bed-card:nth-child(10){ animation-delay:.36s }
 .app .bed-card:nth-child(n+11){ animation-delay:.4s }
+
 /* 여기 있던 '곧 완료 = 맥동' 규칙을 지웠다. §6에서 iv-pulse 키프레임을 없앴는데
    이 줄이 남아 있어서, 없는 키프레임을 가리키느라 '곧 완료' 카드만 등장 모션에서
    조용히 빠져 있었다. 이제 다른 카드와 같은 규칙을 탄다. */
@@ -4303,12 +3998,14 @@
   0%  { opacity:1; transform:scale(1)    translateY(0);    filter:blur(0); }
   100%{ opacity:0; transform:scale(.82)  translateY(6px);  filter:blur(6px); }
 }
+
 /* 오버레이(배경 딤)도 아주 살짝 늦게 걷혀 잔상이 자연스럽게 */
 .modal-overlay--closing{ animation:overlay-out .2s ease forwards; }
 
 @media (prefers-reduced-motion:reduce){
   .modal-overlay--closing .modal{ animation-duration:.01ms; }
 }
+
 /* ==========================================================================
    데이터 추출 UI — 이용기록 CSV 바 · 환자 조회 내보내기 버튼
    ========================================================================== */
@@ -4357,9 +4054,9 @@
 .app .dm-search__reset,
 .app .history-search__reset,
 .app .patient-detail__back,
-.app .stats-range__btn,
-.app .occurred-at__now{ min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
+.app .occurred-at__now { min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
 .app .dm-admin-edit-actions__buttons{ gap:8px; }
+
 /* 작은 편집/파괴 알약 — 탭 높이 40+ 확보 + 인접 간격 */
 .app .btn-move-bed,
 .app .btn-edit-patient,
@@ -4375,23 +4072,26 @@
 /* 라이트 '곧 완료' 주황: 배경이 거의 흰색이라 텍스트를 더 진하게 */
 :root[data-theme='light'] .app .bed-card__chip--warning,
 :root[data-theme='light'] .app .bed-card__round--soon{ color:#9a5b00; }
+
 /* 완료/라운딩필요 빨강 텍스트: 자기 틴트 위 대비 보강(다크=조금 밝게, 라이트=조금 진하게) */
 .app .bed-card__chip--completed,
 .app .bed-card__round--due{ color:#f87171; }
 :root[data-theme='light'] .app .bed-card__chip--completed,
 :root[data-theme='light'] .app .bed-card__round--due,
 :root[data-theme='light'] .app .btn-move-bed--danger{ color:#c41f16; }
+
 /* 초록 칩(시작시간 수정·베드이동)은 라이트에서 자기 틴트 위 3.5로 미달이었다(실측).
    글자로 쓸 때만 한 단계 진한 초록으로 내린다 — 채팅 '내 이름'과 같은 처리다.
    :not()으로 빨강 변형을 빼지 않으면 특정성이 같아 순서에 따라 등록 취소까지 초록이 된다. */
 :root[data-theme='light'] .app .btn-move-bed:not(.btn-move-bed--danger){ color:var(--solid-green); }
+
 /* '진행중' 칩만 이 처리에서 빠져 있어 라이트에서 3.86이었다(실측). 같은 초록 쌍을 쓴다. */
 :root[data-theme='light'] .app .bed-card__chip--occupied{ color:var(--solid-green); }
+
 /* 모달 쪽에도 --status-occupied를 글자색으로 쓰는 데가 둘 남아 있었다(실측 라이트
    3.74 / 4.4). 라운딩·바이탈 모달이라 이번에 처음 재본 곳이다. 같은 초록 쌍. */
 :root[data-theme='light'] .app .occurred-at__now,
-:root[data-theme='light'] .app .round-input__title,
-:root[data-theme='light'] .app .stats-top-item__count{ color:var(--solid-green); } /* 통계 '3회' 4.4 */
+:root[data-theme='light'] .app .round-input__title { color:var(--solid-green); } /* 통계 '3회' 4.4 */
 /* ─── 탭 4개(이용기록·환자 조회·통계·데이터관리)의 입력칸·버튼 테두리 ───────────
    이 네 탭은 리디자인에서 손대지 않은 곳이라 옛 짝이 그대로 남아 있었다:
    --card-bg/--card-border를 카드가 아닌 면에 올려 테두리가 1.22~1.34로 사라진다.
@@ -4414,6 +4114,7 @@
 .app .dm-mode-btn:not(.dm-mode-btn--active) {
   border-color: var(--btn-outline);     /* 누르는 것 */
 }
+
 /* 휴지통 배지 — 흰 글자 배경이라 --status-*가 아니라 --solid-*다(헤더 배지와 같은 처리).
    실측 3.76 → 5.91. 헤더 쪽만 고쳐져 있고 여기는 빠져 있었다. */
 .app .dm-mode-btn__badge {
@@ -4446,12 +4147,12 @@
 .app .export-btn:focus-visible,
 .app .dm-search__reset:focus-visible,
 .app .history-search__reset:focus-visible,
-.app .stats-range__btn:focus-visible,
 .app .btn-register:focus-visible,
-.app .btn-confirm:focus-visible{
+.app .btn-confirm:focus-visible {
   outline:2px solid var(--brand);
   outline-offset:2px;
 }
+
 /* 입력창 포커스 표시 복구(테두리 색만 바뀌던 걸 또렷한 링으로) */
 .app .field__input:focus-visible,
 .app .patient-search__input:focus-visible,
@@ -4461,6 +4162,7 @@
   outline:2px solid var(--brand);
   outline-offset:1px;
 }
+
 /* 모션 최소화: 물방울 낙하 애니메이션도 정지 */
 @media (prefers-reduced-motion:reduce){
   .app .bed-card__droplet{ animation:none !important; }
@@ -4489,6 +4191,7 @@
     backdrop-filter: blur(22px) saturate(180%);
   }
 }
+
 /* 닫힐 때도 블러가 서서히 빠진다(툭 사라지지 않게) */
 .modal-overlay--closing{
   animation: overlay-blur-out 0.22s ease forwards;
@@ -4497,6 +4200,7 @@
   from{ opacity:1; -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%); }
   to{ opacity:0; -webkit-backdrop-filter: blur(0px) saturate(1); backdrop-filter: blur(0px) saturate(1); }
 }
+
 /* 패널 자체 블러는 제거(위 오버레이가 담당) — 패널은 반투명 유리 틴트만 */
 .modal{
   -webkit-backdrop-filter: none;
@@ -4528,6 +4232,7 @@
   animation: modal-fade-in 0.3s ease both;
 }
 @keyframes modal-fade-in{ from{ opacity:0 } to{ opacity:1 } }
+
 /* 닫힘은 patch2의 modal-suck(빨려들어가듯)을 그대로 쓴다 — 여기서 덮지 않는다.
    (닫힐 땐 유리가 어차피 걷혀서 transform 중 backdrop-filter가 안 그려지는 게 티나지 않음) */
 @media (prefers-reduced-motion:reduce){
@@ -4630,18 +4335,22 @@
   white-space:pre-wrap; word-break:break-word;
   max-height:40vh; overflow-y:auto;
 }
+
 /* width:100%인데 .field__input이 content-box라 패딩(28)+보더(2)만큼 가로로 넘쳤다.
    다른 입력창들은 flex stretch로 늘어나 width를 안 줘서 문제가 없던 것. */
 .msg-card__input, .msg-compose__text{
   box-sizing:border-box;
   width:100%; resize:vertical; font:inherit; line-height:1.5;
 }
+
 /* 리사이즈로 무한정 늘려 보내기 버튼이 화면 밖으로 밀려나지 않게 가둔다. */
 .msg-compose__text{ min-height:120px; max-height:40vh }
+
 /* 세로 flex에서 눌려 잘리지 않게 — 보내기는 항상 온전한 높이로. */
 .msg-compose__send{ flex-shrink:0 }
 .msg-card__error{ margin:0; font-size:12px; color:var(--status-completed) }
 .msg-card__actions{ display:flex; gap:8px; justify-content:flex-end }
+
 /* 카드 면이 --panel-bg인데 --card-bg/--card-border는 카드 면(#1c1c1c) 기준 값이라
    여기 올리면 테두리가 1.19로 사라진다(§'면 위의 선'과 같은 뿌리). 누르는 것은
    --btn-outline(3.09) — 다른 중립 버튼과 같은 규칙이다. */
@@ -4652,6 +4361,7 @@
   border:1px solid var(--btn-outline);
 }
 .msg-card__btn:hover{ background:var(--hover-tint); border-color:var(--text-muted) }
+
 /* --status-occupied는 '어두운 배경에 얹는 글자색'이라 흰 글자를 올리면 1.89로 무너진다.
    흰 글자를 얹는 배경은 --solid-green(5.87)이다 — 쪽지 쓰기의 보내기 버튼과 같은 짝. */
 .msg-card__btn--primary{
@@ -4730,6 +4440,7 @@
   overflow:hidden;
   flex:1 1 auto;                /* .modal이 세로 flex라 본문이 남는 높이를 차지하게 */
 }
+
 /* 배정 상세와 진행중 상세의 왼쪽 칸은 같은 모습이어야 한다. 진행중에만 2단 레이아웃을
    넣으면서 규칙이 .bed-detail-2col__left에 묶여 배정 쪽만 옛 모습으로 남았다.
    공통은 전부 이 클래스에 둔다 — 두 화면이 같이 붙인다. */
@@ -4838,6 +4549,7 @@
   border-radius:10px; padding:10px 12px;
 }
 .special-note__edit{ display:flex; flex-direction:column; gap:8px }
+
 /* 흰 글자를 얹는 배경은 --solid-green(5.87)이다. --status-occupied는 글자색용이라
    흰 글자를 올리면 1.89로 무너진다(쪽지 답장 버튼과 같은 짝). */
 .rec-btn--primary{ background:var(--solid-green); border-color:transparent; color:#fff }
@@ -4868,6 +4580,7 @@
 }
 .bed-card__vitals:hover{ background:var(--hover-tint) }
 .bed-card__vitals:focus-visible{ outline:2px solid var(--brand); outline-offset:2px }
+
 /* 왼쪽 두 줄과 같은 줄 상자를 써야 체온이 이름과, 혈압이 차트와 가로로 나란히 선다.
    그래서 자기 글자 크기가 아니라 '맞춰야 할 줄'의 크기로 계산한다 —
    체온(14px)은 이름 줄(16px), 혈압(13px)은 차트 줄(13px) 기준. 1.3은 카드 줄간격. */
@@ -4896,6 +4609,7 @@
   padding:8px 10px; border-radius:10px;
   background:var(--card-bg); border:1px dashed var(--card-border);
 }
+
 /* 11px이었다 — 읽으라고 있는 글씨의 바닥은 12px로 맞춘다('지난 방문'·'직전' 두 곳). */
 .prev-visit__label{
   font-size:12px; font-weight:700; color:var(--text-muted); flex-shrink:0;
@@ -4959,7 +4673,6 @@
   .app .export-btn,
   .app .dm-note-btn,
   .app .dm-mode-btn,
-  .app .stats-range__btn,
   .app .rec-btn,
   .app .msg-card__btn,
   .app .bed-card__vitals,
@@ -4979,7 +4692,6 @@
   .app .export-btn:hover:not(:disabled),
   .app .dm-note-btn:hover:not(:disabled),
   .app .dm-mode-btn:hover:not(:disabled),
-  .app .stats-range__btn:hover:not(:disabled),
   .app .rec-btn:hover:not(:disabled),
   .app .msg-card__btn:hover:not(:disabled),
   .app .bed-card__vitals:hover,
@@ -4987,13 +4699,23 @@
     transform:scale(1.03);
   }
 }
-@media (prefers-reduced-motion:reduce){
-  .app .btn-register:hover, .app .btn-round-entry:hover, .app .btn-detail-confirm:hover,
-  .app .btn-move-bed:hover, .app .btn-edit-patient:hover, .app .btn-confirm:hover,
-  .app .chip:hover, .app .tab:hover, .app .duration__btn:hover, .app .occurred-at__now:hover,
-  .app .export-btn:hover, .app .dm-note-btn:hover, .app .dm-mode-btn:hover,
-  .app .stats-range__btn:hover, .app .rec-btn:hover, .app .msg-card__btn:hover,
-  .app .bed-card__vitals:hover, .app .header-msg-btn:hover{
+@media (prefers-reduced-motion:reduce){.app .btn-register:hover,
+.app .btn-round-entry:hover,
+.app .btn-detail-confirm:hover,
+.app .btn-move-bed:hover,
+.app .btn-edit-patient:hover,
+.app .btn-confirm:hover,
+.app .chip:hover,
+.app .tab:hover,
+.app .duration__btn:hover,
+.app .occurred-at__now:hover,
+.app .export-btn:hover,
+.app .dm-note-btn:hover,
+.app .dm-mode-btn:hover,
+.app .rec-btn:hover,
+.app .msg-card__btn:hover,
+.app .bed-card__vitals:hover,
+.app .header-msg-btn:hover {
     transform:none;
   }
 }
@@ -5055,7 +4777,6 @@
   flex: none;
   accent-color: var(--status-occupied);
 }
-
 
 .order-item__label {
   font-size: 13px;
@@ -5688,7 +5409,8 @@
    서 있다가 고르면 조용해진다 — 타이밍 없는 신호라 언제 열어도 같게 보인다.
    글자색은 라이트에서 자기 틴트 위 대비가 모자라 --solid-green으로 내린다
    (btn-move-bed·채팅 '내 이름'과 같은, 이미 실측된 쌍). */
-/* 선택자를 세 겹으로 쓴 건 특정성 때문 — `.app .modal .field__input{background:var(--input-bg)}`이
+/* 선택자를 세 겹으로 쓴 건 특정성 때문 — `.app .modal .field__input{background:var(--input-bg)}
+`이
    (0,3,0)이라 `.app .field__input--needed`(0,2,0)로는 진다. 실제로 틴트와 테두리가 죽어
    초록 글자만 남아 있었다(실측 배경 rgb(20,20,24)).
    '투여 시작' 버튼에서 안내 문구를 뺀 뒤로 이 칸이 유일한 신호라 반드시 이겨야 한다. */
@@ -5808,6 +5530,7 @@
 :root[data-theme='light'] .app .bed-card--warning .bed-card__round--soon .bed-card__round-body {
   color: #7d4a00;
 }
+
 /* '완료' 칩 — 빨강 칩 틴트 위 빨강 글자(4.49). */
 :root[data-theme='light'] .app .bed-card--completed .bed-card__chip { color: #a81c14; }
 
@@ -5935,7 +5658,8 @@
 
 /* ─── 모달 안 입력칸·표면 경계 ────────────────────────────────────────
    같은 뿌리의 문제가 버튼 말고 입력칸에도 있었다. --card-bg/--card-border는
-   카드 면(#1c1c1c) 기준으로 잡힌 값이라, 모달 면(#1e1e22) 위에서는
+   카드 면(#1c1c1c) 기준으로 잡힌 값이라,
+모달 면(#1e1e22) 위에서는
    배경 대비 1.03 · 테두리 1.19 — 어디에 입력하는지 경계가 안 보인다.
    환자 등록 모달만 해도 입력칸이 6개다.
 
@@ -5943,7 +5667,6 @@
 .app .modal .field__input,
 .app .modal .occurred-at__input,
 .app .modal .patient-search__input,
-.app .modal .stats-range__input,
 .app .modal .start-edit,
 .app .modal .patient-list__item,
 .app .modal .patient-card,
