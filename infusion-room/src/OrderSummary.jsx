@@ -56,13 +56,17 @@ export default function OrderSummary({ items, checks, bundle = null }) {
   for (const r of rows) {
     const mark = diff.marks[`${r.code}|${r.dose ?? ''}`]
     if (!mark) continue
-    if (mark.kind === 'added') bucket.added.push(named(r.code, r.dose))
+    // 수량은 ×N으로 붙인다 — 이름만 있으면 몇 개 넣었는지 목록을 다시 봐야 한다.
+    // 표기는 목록 줄·기록지와 같은 규칙이다(×1도 찍는다).
+    if (mark.kind === 'added') bucket.added.push(`${named(r.code, r.dose)}×${r.qty ?? 1}`)
     else if (mark.kind === 'dose') bucket.dose.push(`${named(r.code, '')} ${mark.from}→${r.dose}`)
-    else bucket.qty.push(`${named(r.code, r.dose)} ${mark.from}→${r.qty ?? 1}`)
+    else bucket.qty.push(`${named(r.code, r.dose)}×${mark.from}→${r.qty ?? 1}`)
   }
   const brief = [
     { kind: 'added', label: '추가', list: bucket.added },
     { kind: 'dropped', label: '뺌', list: diff.removed.map((d) => named(d.code, d.dose)) },
+    // 'n/s 용량'으로 부를 뻔했는데 되돌렸다 — 용량 선택지가 있는 항목이 n/s만이 아니다
+    // (메리트씨 5g·10g, 증류수 mL). 그것들이 바뀌면 같은 줄에 걸려 라벨과 어긋난다.
     { kind: 'dose', label: '용량', list: bucket.dose },
     { kind: 'qty', label: '용량 변경', list: bucket.qty },
   ].filter((b) => b.list.length > 0)
