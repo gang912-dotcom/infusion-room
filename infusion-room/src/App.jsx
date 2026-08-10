@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
+import BundlePicker from './BundlePicker'
+import OrderSummary from './OrderSummary'
 import Stats from './Stats.jsx'
 import logoIcon from './assets/logo-icon-white.png'
 import logoIconColor from './assets/logo-icon.png'
@@ -4217,6 +4219,9 @@ function App() {
   // { [code]: dose } — 키가 있으면 체크된 것. 단순 항목은 dose가 ''.
   // { [`${code}|${dose}`]: { code, dose, qty } } — 같은 항목을 용량만 달리해 두 번 담을 수 있다.
   const [orderChecks, setOrderChecks] = useState({})
+  // 어느 묶음에서 시작했는지. 용량을 손봐도 풀지 않는다 — 풀리면 '뭘 반영했더라'를
+  // 다시 확인해야 해서 오히려 헷갈린다. 뜻은 '이 처방 = 이 묶음'이 아니라 '이 묶음에서 시작했다'.
+  const [pickedBundle, setPickedBundle] = useState(null)
   // 경로 박스는 항목에서 자동 계산한다. 여기엔 '자동과 다르게 손으로 켠/끈 것'만 남는다.
   const [routeOverride, setRouteOverride] = useState({})
   const [lineStaffId, setLineStaffId] = useState('')
@@ -5336,6 +5341,7 @@ function App() {
     setPrescriptionBed(target)
     setActionError('')
     setOrderChecks({})
+    setPickedBundle(null)
     setRouteOverride({})
     setVisitSymptom('')
     try {
@@ -5432,6 +5438,7 @@ function App() {
   function applyOrderBundle(bundle) {
     if (Object.keys(orderChecks).length > 0
         && !window.confirm(`현재 체크를 '${bundle.name}' 묶음으로 바꿀까요?`)) return
+    setPickedBundle(bundle)
     const next = {}
     bundle.items.forEach((it) => {
       next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
@@ -7007,15 +7014,16 @@ function App() {
             </div>
 
             <div className="modal__body">
-              {/* 내원당시증상 — 오더를 고르기 전에 읽는 값이라 맨 위다. placeholder·예시 없음. */}
+              {/* 내원당시증상 — 오더를 고르기 전에 읽는 값이라 맨 위다. placeholder·예시 없음.
+                  bp-charting: 읽고 쓰는 본문이라 다른 입력칸(15px)보다 크게 둔다. */}
               <label className="field">
-                <span className="field__label">내원당시증상</span>
+                <span className="field__label">내원당시증상(차팅)</span>
                 <textarea
-                  className="field__input"
+                  className="field__input bp-charting"
                   value={visitSymptom}
                   onChange={(e) => setVisitSymptom(e.target.value)}
                   rows={2}
-                  aria-label="내원당시증상"
+                  aria-label="내원당시증상(차팅)"
                 />
               </label>
 
@@ -7024,49 +7032,38 @@ function App() {
                   로컬 상태만 바꾸고 저장은 아래 '저장'이 담당한다.
                   묶음이 0개여도 줄은 그대로 둔다 — 관리자가 등록하는 순간 아래 체크리스트가
                   밀려 내려가면 근무자가 누르던 자리가 바뀐다(자리를 미리 비워둔다). */}
-              <div className="order-bundles">
-                <span className="order-bundles__label">묶음</span>
-                {orderBundles.length > 0 ? (
-                  orderBundles.map((bundle) => (
-                    <button
-                      key={bundle.id}
-                      type="button"
-                      className="order-bundle-btn"
-                      onClick={() => applyOrderBundle(bundle)}
-                      /* 버튼에는 EMR 묶음코드를 찍는다 — 원장님·근무자가 이 코드로 부른다.
-                         코드가 짧아 7개도 한 줄에 들어간다. 전체 이름은 눌러보기 전에
-                         확인할 수 있게 title로 남긴다. */
-                      title={bundle.emr_code ? bundle.name : undefined}
-                    >
-                      {bundle.emr_code || bundle.name}
-                    </button>
-                  ))
-                ) : (
-                  <span className="order-bundles__empty">등록된 묶음이 없습니다</span>
-                )}
-              </div>
-
-              <OrderChecklist
-                items={orderItems}
-                checks={orderChecks}
-                onToggle={toggleOrderItem}
-                onDose={selectOrderDose}
-                onFreeText={setOrderFreeText}
-                onQty={setOrderQty}
-                routeChecked={new Set(effectiveRouteCodes())}
-                onToggleRoute={toggleRouteItem}
+              <BundlePicker
+                bundles={orderBundles}
+                onPick={applyOrderBundle}
+                pickedId={pickedBundle?.id ?? null}
               />
 
-              {actionError && <p role="alert" className="field__error">{actionError}</p>}
+              {/* 체크리스트(왼쪽)와 고른 처방 대조 칸(오른쪽) — 좁은 화면에서는 아래로 쌓인다. */}
+              <div className="bp-main">
+                <OrderChecklist
+                  items={orderItems}
+                  checks={orderChecks}
+                  onToggle={toggleOrderItem}
+                  onDose={selectOrderDose}
+                  onFreeText={setOrderFreeText}
+                  onQty={setOrderQty}
+                  routeChecked={new Set(effectiveRouteCodes())}
+                  onToggleRoute={toggleRouteItem}
+                />
 
-              <button
-                type="button"
-                className="btn-register"
-                onClick={handleSavePrescription}
-                disabled={offline}
-              >
-                저장
-              </button>
+                {actionError && <p role="alert" className="field__error">{actionError}</p>}
+
+                <button
+                  type="button"
+                  className="btn-register"
+                  onClick={handleSavePrescription}
+                  disabled={offline}
+                >
+                  저장
+                </button>
+              </div>
+
+              <OrderSummary items={orderItems} checks={orderChecks} bundle={pickedBundle} />
             </div>
           </div>
         </div>
