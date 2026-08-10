@@ -10,12 +10,17 @@
    공간으로 보였다(차팅칸 아래 54px). 대신 위쪽 24px을 같은 색 box-shadow로 덮는다 —
    자리를 안 먹으면서 틈만 가린다. */
 .bp-stick {
+  /* 덮개 높이 = .modal__body의 위쪽 padding. 이 값 하나에서 덮개와 위 간격을 함께 뽑는다.
+     box-shadow는 자기 상자 '밖'에 그려지고 붙어 있든 아니든 항상 그려지므로, 바로 위 칸과의
+     간격이 이 값보다 좁으면 그 칸의 아랫부분을 덮어 버린다 — 격자 row-gap이 14px뿐이라
+     차팅칸 아래가 10px 잘려 테두리가 사라져 있었다(실측). 위 간격을 덮개만큼 벌려 둔다. */
+  --bp-cover: 24px;
   position: sticky;
   top: 0;
   z-index: 2;
-  box-shadow: 0 -24px 0 var(--panel-bg);
+  box-shadow: 0 calc(-1 * var(--bp-cover)) 0 var(--panel-bg);
   /* 좌우 -24px은 .modal__body의 padding을 되짚어 막대가 모달 폭을 꽉 채우는 값이다. */
-  margin: 0 -24px 12px;
+  margin: var(--bp-cover) -24px 12px;
   padding: 12px 24px;
   background: var(--panel-bg);
   border-bottom: 1px solid var(--card-border);
