@@ -4656,6 +4656,17 @@ function App() {
   const roundModalBed = roundModalBedIdHeld
     ? beds.find((bed) => bed.id === roundModalBedIdHeld) ?? null
     : null
+  // 배정 폼에서 '지금 채울 칸' 하나. 필수 칸을 한꺼번에 물들이면 어디부터 손대야 할지가
+  // 다시 흐려져서, 위에서부터 아직 안 채운 첫 칸만 강조한다(채우면 다음 칸으로 넘어간다).
+  // 진입경로가 둘이라 이 방식이 맞는다 — 베드 카드로 들어오면 환자명부터, 환자조회로
+  // 들어오면 이름·차트가 이미 차 있어 라인 담당자부터 강조된다. 순서는 화면에 놓인 순서다.
+  // 목록은 '배정' 버튼의 disabled 조건과 같아야 한다 — 어긋나면 강조가 없는데 버튼이 회색이다.
+  const assignNeeds = !patientName.trim() ? 'patientName'
+    : !chartNumber.trim() ? 'chartNumber'
+      : !lineStaffId ? 'lineStaffId'
+        : !examRoom ? 'examRoom' : null
+  const neededClass = (field) => `field__input${assignNeeds === field ? ' field__input--needed' : ''}`
+
   const isVacant = currentBed?.status === 'vacant'
   const isReserved = currentBed?.status === 'reserved'
   const isInProgress = currentBed?.status === 'in-progress'
@@ -5614,7 +5625,9 @@ function App() {
   }
 
   async function handleRegister() {
-    if (!patientName.trim() || !chartNumber.trim() || !selectedBed || !lineStaffId) return
+    // 버튼의 disabled·칸 강조와 같은 값을 본다 — 셋이 따로 놀면 강조는 없는데 버튼만 회색이거나,
+    // 여기서만 막혀 아무 반응이 없는 칸이 생긴다. 실제로 이 가드엔 진료실이 빠져 있었다.
+    if (assignNeeds || !selectedBed) return
     setActionError('')
     try {
       await assignBed({
@@ -6230,7 +6243,7 @@ function App() {
                   <span className="field__label">환자명</span>
                   <input
                     type="text"
-                    className="field__input"
+                    className={neededClass('patientName')}
                     value={patientName}
                     onChange={(e) => setPatientName(e.target.value)}
                     placeholder="환자명 입력"
@@ -6241,7 +6254,7 @@ function App() {
                   <span className="field__label">차트번호</span>
                   <input
                     type="text"
-                    className="field__input"
+                    className={neededClass('chartNumber')}
                     value={chartNumber}
                     onChange={(e) => setChartNumber(e.target.value)}
                     onBlur={handleChartNumberBlur}
@@ -6270,10 +6283,11 @@ function App() {
                   </select>
                 </label>
 
+                {/* 필수 칸은 위에서부터 하나씩 강조된다(assignNeeds). 믹스 담당자와 같은 신호다. */}
                 <label className="field">
                   <span className="field__label">라인 담당자</span>
                   <select
-                    className="field__input"
+                    className={neededClass('lineStaffId')}
                     value={lineStaffId}
                     onChange={(e) => {
                       setLineStaffId(e.target.value)
@@ -6291,7 +6305,7 @@ function App() {
                 <label className="field">
                   <span className="field__label">진료실</span>
                   <select
-                    className="field__input"
+                    className={neededClass('examRoom')}
                     value={examRoom}
                     onChange={(e) => setExamRoom(e.target.value)}
                   >
@@ -6321,7 +6335,7 @@ function App() {
                   type="button"
                   className="btn-register"
                   onClick={handleRegister}
-                  disabled={offline || !patientName.trim() || !chartNumber.trim() || !lineStaffId || !examRoom}
+                  disabled={offline || assignNeeds !== null}
                 >
                   배정
                 </button>
