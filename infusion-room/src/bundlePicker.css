@@ -62,10 +62,21 @@
 }
 
 /* 내원당시증상(차팅) — 오더를 고르기 전에 읽고 뒤에 기록으로도 남는 본문이라
-   다른 입력칸(15px)보다 크게 둔다. 줄 간격도 같이 벌려야 두 줄이 붙어 보이지 않는다. */
+   다른 입력칸(15px)보다 크게 둔다.
+
+   높이는 두 줄 → 한 줄로 줄였다(73 → 44px). 예전엔 content-box에 height가 딱 두 줄
+   높이(51px = 25.5 × 2)라 여유가 0이었다 — 줄 상자가 조금만 커져도 아래가 잘린다.
+   border-box로 바꾸고 min-height에 여유를 남긴다(내용 30px vs 줄 25.5px).
+   44px은 이 앱의 누르는 것 바닥값과도 같다.
+   길게 차팅할 땐 세로로 끌어 늘린다 — 특이사항 칸(.special-note__input)과 같은 방식. */
 .field__input.bp-charting {
+  box-sizing: border-box;
   font-size: 17px;
   line-height: 1.5;
+  padding-block: 6px;
+  min-height: 44px;
+  max-height: 30vh;
+  resize: vertical;
 }
 
 /* ─── 두 칸 구조 ──────────────────────────────────────────────────────
@@ -170,18 +181,36 @@
   font-size: 12px; font-weight: 600; color: var(--text-muted);
 }
 
-/* 뺀 것 — 체크가 꺼져 있어 위 목록에 행이 없다. 여기서 말해 주지 않으면
-   "묶음에서 뭘 뺐더라"를 확인할 방법이 화면에 없다. */
-.bp-summary__dropped {
-  display: flex; align-items: baseline; gap: 6px;
-  margin: 10px 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--card-border);
+/* 묶음에서 바뀐 것 — 종류별로 한 줄씩. 줄에 붙는 표시만으로는 "뭐가 추가되고 빠지고
+   용량이 바뀌었나"를 알려면 목록을 일일이 훑어야 했다. '묶음 그대로'가 서던 자리다.
+   라벨 칸을 max-content 격자로 둔다 — 고정폭(2.4em)으로 두면 '용량 변경' 같은 긴 라벨이
+   넘치고, 라벨마다 제 폭을 주면 내용의 왼쪽 끝이 들쭉날쭉해진다. 격자가 가장 긴 라벨에
+   맞춰 한 칸을 잡아 주므로 라벨 문구를 고쳐도 숫자를 다시 안 만져도 된다. */
+.bp-summary__brief {
+  list-style: none;
+  margin: -4px 0 10px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--card-border);
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 8px; row-gap: 4px;
+  align-items: baseline;
   font-size: 12px; line-height: 1.4;
 }
-.bp-summary__droppedlabel { flex: none; font-weight: 700; color: #f87171; }
-.bp-summary__droppedlist { min-width: 0; color: var(--text-secondary); }
-:root[data-theme='light'] .app .bp-summary__droppedlabel { color: #c41f16; }
+/* 줄 상자는 없애고 라벨·내용을 격자 칸에 직접 앉힌다. 종류별 색은 이 클래스의
+   자손 선택자로 계속 걸린다(display:contents여도 선택자는 살아 있다). */
+.bp-summary__briefrow { display: contents; }
+.bp-summary__brieflabel {
+  font-weight: 700;
+  color: var(--status-warning);
+  white-space: nowrap;
+}
+.bp-summary__briefrow--added .bp-summary__brieflabel { color: var(--status-occupied); }
+.bp-summary__briefrow--dropped .bp-summary__brieflabel { color: #f87171; }
+.bp-summary__brieftext { min-width: 0; color: var(--text-primary); word-break: break-word; }
+:root[data-theme='light'] .app .bp-summary__brieflabel { color: #915400; }
+:root[data-theme='light'] .app .bp-summary__briefrow--added .bp-summary__brieflabel { color: var(--solid-green); }
+:root[data-theme='light'] .app .bp-summary__briefrow--dropped .bp-summary__brieflabel { color: #c41f16; }
 
 /* ─── 좁은 화면: 요약 칸을 체크리스트 아래로 ───────────────────────────
    경계 960px 근거: 체크리스트가 minmax(200px,1fr) 자동 채움이라 3열에 ~624px이 필요하고,

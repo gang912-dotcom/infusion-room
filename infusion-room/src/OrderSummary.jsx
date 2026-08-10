@@ -17,7 +17,8 @@ function MarkTag({ mark }) {
   if (!mark) return null
   if (mark.kind === 'added') return <span className="bp-summary__mark bp-summary__mark--add">추가</span>
   if (mark.kind === 'dose') return <span className="bp-summary__mark">용량 {mark.from}에서</span>
-  return <span className="bp-summary__mark">수량 {mark.from}에서</span>
+  // ×N을 늘리고 줄인 것도 근무자에겐 용량 변경이다 — 앰플을 두 개 달면 그만큼 더 들어간다.
+  return <span className="bp-summary__mark">용량 변경 {mark.from}에서</span>
 }
 
 export default function OrderSummary({ items, checks, bundle = null }) {
@@ -44,6 +45,28 @@ export default function OrderSummary({ items, checks, bundle = null }) {
     else groups.push({ key, rows: [r] })
   }
 
+  // 묶음에서 바뀐 것을 종류별로 한 줄씩. 줄에 붙는 표시만으로는 "뭐가 추가되고 빠지고
+  // 용량이 바뀌었나"를 알려면 목록을 일일이 훑어야 한다 — 그걸 대신 세워 준다.
+  // 순서는 목록과 같다(rows가 이미 체크리스트 순서다).
+  const named = (code, dose) => {
+    const label = byCode.get(code)?.label ?? code
+    return dose ? `${label}(${dose})` : label
+  }
+  const bucket = { added: [], dose: [], qty: [] }
+  for (const r of rows) {
+    const mark = diff.marks[`${r.code}|${r.dose ?? ''}`]
+    if (!mark) continue
+    if (mark.kind === 'added') bucket.added.push(named(r.code, r.dose))
+    else if (mark.kind === 'dose') bucket.dose.push(`${named(r.code, '')} ${mark.from}→${r.dose}`)
+    else bucket.qty.push(`${named(r.code, r.dose)} ${mark.from}→${r.qty ?? 1}`)
+  }
+  const brief = [
+    { kind: 'added', label: '추가', list: bucket.added },
+    { kind: 'dropped', label: '뺌', list: diff.removed.map((d) => named(d.code, d.dose)) },
+    { kind: 'dose', label: '용량', list: bucket.dose },
+    { kind: 'qty', label: '용량 변경', list: bucket.qty },
+  ].filter((b) => b.list.length > 0)
+
   return (
     <aside className="bp-summary" aria-label="고른 처방">
       <div className="bp-summary__head">
@@ -57,9 +80,21 @@ export default function OrderSummary({ items, checks, bundle = null }) {
         <p className="bp-summary__from">
           <span className="bp-summary__fromcode">{bundle.emr_code || '묶음'}</span>
           <span className="bp-summary__fromname">{bundle.name}</span>
-          {/* 손댄 게 없다는 것도 알아야 하는 정보다 — 표시가 없는 것과 '없음을 확인한 것'은 다르다. */}
+          {/* 손댄 게 없다는 것도 알아야 하는 정보다 — 표시가 없는 것과 '없음을 확인한 것'은 다르다.
+              바뀌면 이 자리에 아래 브리핑 줄들이 대신 선다. */}
           {diff.changed ? null : <span className="bp-summary__same">묶음 그대로</span>}
         </p>
+      ) : null}
+
+      {brief.length > 0 ? (
+        <ul className="bp-summary__brief">
+          {brief.map((b) => (
+            <li key={b.kind} className={`bp-summary__briefrow bp-summary__briefrow--${b.kind}`}>
+              <span className="bp-summary__brieflabel">{b.label}</span>
+              <span className="bp-summary__brieftext">{b.list.join(' · ')}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {rows.length === 0 ? (
@@ -94,23 +129,6 @@ export default function OrderSummary({ items, checks, bundle = null }) {
           ))}
         </ul>
       )}
-
-      {/* 뺀 것은 목록에 행이 없다 — 체크가 꺼져 있으니까. 여기서 따로 말해 주지 않으면
-          "묶음에서 뭘 뺐더라"를 확인할 방법이 화면 어디에도 없다.
-          rows가 0이어도 떠야 한다(묶음을 고른 뒤 전부 끈 경우). */}
-      {diff.removed.length > 0 ? (
-        <p className="bp-summary__dropped">
-          <span className="bp-summary__droppedlabel">뺌</span>
-          <span className="bp-summary__droppedlist">
-            {diff.removed
-              .map(({ code, dose }) => {
-                const label = byCode.get(code)?.label ?? code
-                return dose ? `${label}(${dose})` : label
-              })
-              .join(' · ')}
-          </span>
-        </p>
-      ) : null}
     </aside>
   )
 }

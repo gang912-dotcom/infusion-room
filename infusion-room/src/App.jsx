@@ -7028,7 +7028,7 @@ function App() {
                   className="field__input bp-charting"
                   value={visitSymptom}
                   onChange={(e) => setVisitSymptom(e.target.value)}
-                  rows={2}
+                  rows={1}
                   aria-label="내원당시증상(차팅)"
                 />
               </label>
