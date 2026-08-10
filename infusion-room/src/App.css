@@ -3890,6 +3890,10 @@
 
 .dm-note-manage__search {
   max-width: 280px;
+  /* .dm-search__field의 flex-basis 320px는 부모가 가로일 때 '폭'이다(검색줄 4곳이 그렇다).
+     여기 부모는 세로라 그 값이 '높이'로 먹혀 빈 칸 320px이 생겼다 — max-width는 폭만
+     잡으니 좁고 긴 여백으로 남았다. 이 자리에서만 내용 높이로 되돌린다. */
+  flex: 0 0 auto;
 }
 
 .dm-note-section {
