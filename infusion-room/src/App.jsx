@@ -1230,8 +1230,10 @@ function openRecordSheet(record) {
     /* 처방 — 화면의 '고른 처방' 칸과 같은 모양. 그룹 머리말 + 라벨(용량) ×수량 용법.
        2단으로 흘리되 그룹은 쪼개지지 않게 한다(머리말만 앞 단에 남으면 못 읽는다). */
     .orders{columns:2;column-gap:26px;font-size:14px}
-    .ord-grp{break-inside:avoid;margin:0 0 10px}
-    .ord-grp h3{margin:0 0 2px;font-size:11px;font-weight:700;color:#666;letter-spacing:0.02em}
+    /* 그룹을 통째로 안 쪼개면(break-inside:avoid) '기본' 12줄이 1단을 다 먹고 2단이 빈다.
+       쪼개지되 머리말만 단 끝에 홀로 남지 않게 h3에 break-after:avoid를 건다. */
+    .ord-grp{margin:0 0 10px}
+    .ord-grp h3{margin:0 0 2px;font-size:11px;font-weight:700;color:#666;letter-spacing:0.02em;break-after:avoid}
     .ord-grp ul{list-style:none;margin:0;padding:0}
     .ord-grp li{display:flex;align-items:baseline;gap:6px;padding:1px 0;break-inside:avoid}
     .nm{flex:1;min-width:0}
@@ -6213,7 +6215,21 @@ function App() {
       <div className="header-zone">
         <div className={`header-wrap${devilPop ? ' header-wrap--devil' : ''}`}>
           <header className="header">
-            <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+            {/* 앱 창(홈 화면 추가·설치)에는 새로고침 버튼이 없다. 로고를 그 자리로 쓴다.
+                모달이 열려 있으면 한 번 묻는다 — 처방·배정 폼을 쓰다 잘못 누르면 입력이 날아간다. */}
+            <button
+              type="button"
+              className="header__logo-btn"
+              onClick={() => {
+                if (document.querySelector('.modal-overlay')
+                  && !window.confirm('작성 중인 내용이 있으면 사라집니다. 새로고침할까요?')) return
+                window.location.reload()
+              }}
+              title="새로고침"
+              aria-label="새로고침"
+            >
+              <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+            </button>
             <div className="header__text">
               <span className="header__clinic">벗이비인후과</span>
               <h1 className="header__title">수액실 관리</h1>
