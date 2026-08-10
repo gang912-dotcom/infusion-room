@@ -293,9 +293,47 @@ router.post('/sessions/:id/cancel', (req, res) => {
 
   db.prepare('UPDATE sessions SET cancelled = 1, cancel_reason = ? WHERE id = ?')
     .run(req.body?.reason ?? null, session.id)
+
+  // 이 등록이 만들어낸 환자였고 아무것도 안 남겼으면 흔적을 지운다.
+  // 안 지우면 시험 삼아 등록했다 취소한 이름이 환자 검색에 영영 남는다(실제로 쌓였다).
+  //
+  // '이 등록이 만든 환자'는 정확히 가려낼 수 있다 — 환자 행과 세션 행이 같은 요청에서
+  // 만들어져 created_at과 assigned_at이 같다. EMR에서 일괄 임포트한 환자는 환자가 먼저
+  // 있었으니 두 값이 다르다. 그래서 '실제 환자인데 라인 실패로 취소된 경우'는 안 걸린다.
+  //
+  // 조건을 좁게 잡는다 — 하나라도 걸리면 아무것도 안 지운다. 지우는 건 되돌릴 수 없다.
+  const cleaned = removeIfThrowawayPatient(session)
   bumpRevision(db)
-  res.json({ ok: true })
+  res.json({ ok: true, patient_removed: cleaned })
 })
+
+// 위 취소 경로에서만 쓴다. 지울 수 있으면 지우고 지웠는지 돌려준다.
+function removeIfThrowawayPatient(session) {
+  const patient = db.prepare('SELECT id, created_at FROM patients WHERE id = ?').get(session.patient_id)
+  if (!patient) return false
+  // 앱이 이 등록에서 만든 환자인가 (5초는 같은 요청 안의 오차 여유)
+  if (Math.abs(patient.created_at - session.assigned_at) >= 5000) return false
+  // 시작한 적이 있으면 남긴다 — 실제로 뭔가 있었던 방문이다
+  if (session.started_at !== null) return false
+  // 이 환자의 다른 세션이 있으면 남긴다
+  const others = db.prepare(
+    'SELECT COUNT(*) n FROM sessions WHERE patient_id = ? AND id <> ?',
+  ).get(patient.id, session.id).n
+  if (others > 0) return false
+  // 이 세션에 붙은 기록이 하나라도 있으면 남긴다
+  for (const t of ['rounds', 'session_notes', 'vitals', 'session_orders']) {
+    if (db.prepare(`SELECT 1 FROM ${t} WHERE session_id = ? LIMIT 1`).get(session.id)) return false
+  }
+  // 환자에 붙은 기록이 있으면 남긴다
+  if (db.prepare('SELECT 1 FROM patient_notes WHERE patient_id = ? LIMIT 1').get(patient.id)) return false
+
+  db.transaction(() => {
+    // session_notes가 없는 것을 위에서 확인했으므로 session_note_actions도 없다.
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id)
+    db.prepare('DELETE FROM patients WHERE id = ?').run(patient.id)
+  })()
+  return true
+}
 
 // ─── end — 종료 → 이용기록으로 ─────────────────────────────────────
 router.post('/sessions/:id/end', (req, res) => {
