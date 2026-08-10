@@ -5868,7 +5868,10 @@
    숨기면 아예 못 누르므로, 거기서는 테두리만 지워 조용하게 둔다.
    키보드는 :focus-within이 받는다. */
 @media (hover: hover) and (pointer: fine) {
-  .app .rec-item__actions {
+  /* 반드시 .rec-item 안으로 한정한다 — 특이사항·당일 메모의 인라인 편집도
+     같은 .rec-item__actions를 쓰는데 조상에 .rec-item이 없어서, 한정하지 않으면
+     되살리는 :hover/:focus-within 규칙에 안 걸려 저장·취소가 영영 안 보인다. */
+  .app .rec-item .rec-item__actions {
     opacity: 0;
     transition: opacity 0.15s;
   }
