@@ -2504,6 +2504,11 @@
 }
 
 .dm-mode-btn--active:hover {
+  /* 초록 배경을 다시 못 박는다 — 안 하면 위의 .dm-mode-btn:hover가 --hover-tint로 배경을
+     덮어(같은 0,2,0인데 여기가 뒤라 이겨야 하지만 배경 선언이 없어서 base :hover가 이긴다)
+     라이트에서 흰 글자만 연한 배경에 남아 안 보였다. */
+  background: var(--solid-green);
+  border-color: var(--status-occupied);
   filter: brightness(0.9);
 }
 
@@ -2946,6 +2951,15 @@
   color: #ffffff;
   background: var(--solid-green);
   border-color: var(--status-occupied);
+}
+
+.note-segment__btn--active:hover {
+  /* 초록 배경을 다시 못 박는다 — 안 하면 위의 .note-segment__btn:hover가 --hover-tint로
+     배경을 덮어 라이트에서 흰 글자만 연한 배경에 남아 안 보인다(.dm-mode-btn과 같은 버그). */
+  color: #ffffff;
+  background: var(--solid-green);
+  border-color: var(--status-occupied);
+  filter: brightness(0.95);
 }
 
 .note-elapsed {
