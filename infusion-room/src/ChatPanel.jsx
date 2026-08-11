@@ -61,6 +61,12 @@ export default function ChatPanel({ account, onClose, onSeen }) {
   const dayStartRef = useRef(0)
   // 사용자가 위로 올려 지난 대화를 보는 중이면 새 메시지가 와도 끌어내리지 않는다.
   const stickToBottomRef = useRef(true)
+  // 한글 조합 확정용 엔터 처리(#5). draftRef는 최신 입력값(state는 리렌더 뒤에야 갱신되므로),
+  // enterPendingRef는 '조합 중 엔터가 눌렸으니 확정되면 보내라' 예약, skipInputRef는 전송 직후
+  // 밀려오는 input(onChange)이 보낸 글을 다시 칸에 채우지 않게 한 번 무시하는 표식.
+  const draftRef = useRef('')
+  const enterPendingRef = useRef(false)
+  const skipInputRef = useRef(false)
   const isAdmin = account?.role === 'admin'
 
   // ── 폴링 ──
@@ -175,9 +181,19 @@ export default function ChatPanel({ account, onClose, onSeen }) {
   }
 
   // ── 전송 ──
-  async function submit() {
-    const content = draft.trim()
+  // draftRef를 같이 들고 있는 이유: onKeyDown/compositionend 시점엔 state(draft)가 아직 옛 값이라
+  // 최신 입력을 ref에서 읽는다. onChange가 이 둘을 함께 갱신한다.
+  function handleDraftChange(e) {
+    // 전송 직후 밀려오는 input 한 번은 무시한다(방금 보낸 글이 칸에 되살아나는 것 방지).
+    if (skipInputRef.current) { skipInputRef.current = false; return }
+    draftRef.current = e.target.value
+    setDraft(e.target.value)
+  }
+
+  async function send(text) {
+    const content = (text ?? draftRef.current).trim()
     if (!content) return
+    draftRef.current = ''
     setDraft('')
     stickToBottomRef.current = true
     try {
@@ -185,17 +201,32 @@ export default function ChatPanel({ account, onClose, onSeen }) {
       await pull()
     } catch (err) {
       setError(err.message)
+      draftRef.current = content
       setDraft(content) // 실패하면 입력을 돌려준다 — 다시 타이핑하게 만들지 않는다
     }
   }
 
-  // 엔터 전송, 쉬프트+엔터 줄바꿈. 한글 조합 중(isComposing)에는 보내지 않는다 —
-  // 조합이 끝나기 전에 전송되면 마지막 글자가 잘려 나간다(쪽지에서 겪은 것과 같은 함정).
+  // 조합 확정(compositionend) 직후: 조합 중 눌러둔 엔터가 있으면 그때 보낸다(#5).
+  function onCompositionEnd(e) {
+    draftRef.current = e.target.value
+    if (enterPendingRef.current) {
+      enterPendingRef.current = false
+      skipInputRef.current = true
+      send(e.target.value)
+    }
+  }
+
+  // 엔터 전송, 쉬프트+엔터 줄바꿈.
   function onKeyDown(e) {
     if (e.key !== 'Enter' || e.shiftKey) return
-    if (e.nativeEvent.isComposing) return
+    // 한글 조합 중 엔터는 '조합 확정용'이다 — 지금 보내면 마지막 글자가 잘린다. 확정되면
+    // compositionend에서 보내도록 예약만 한다(예전엔 그냥 무시해서 엔터를 두 번 눌러야 했다).
+    if (e.nativeEvent.isComposing) {
+      enterPendingRef.current = true
+      return
+    }
     e.preventDefault()
-    submit()
+    send()
   }
 
   // 관리자는 채팅창에서 바로 지운다. 소프트 삭제라 관리 페이지에서 되돌릴 수 있어
@@ -301,13 +332,14 @@ export default function ChatPanel({ account, onClose, onSeen }) {
         <textarea
           className="chat-input__box"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={handleDraftChange}
+          onCompositionEnd={onCompositionEnd}
           onKeyDown={onKeyDown}
           rows={2}
           placeholder="엔터로 전송 · 쉬프트+엔터 줄바꿈"
           aria-label="메시지 입력"
         />
-        <button type="button" className="chat-panel__btn chat-panel__btn--send" onClick={submit}>전송</button>
+        <button type="button" className="chat-panel__btn chat-panel__btn--send" onClick={() => send()}>전송</button>
       </div>
 
       {/* 네 변·네 모서리 어디를 끌어도 크기가 바뀐다. 모서리가 변을 덮어야 하므로

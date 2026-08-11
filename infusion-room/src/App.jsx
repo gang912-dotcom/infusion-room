@@ -4693,6 +4693,9 @@ function App() {
   const [cleanupReopenBed, setCleanupReopenBed] = useState(null)
   const [patientName, setPatientName] = useState('')
   const [chartNumber, setChartNumber] = useState('')
+  // 배정 폼에서 지금 포커스된 칸. 이게 있으면 '이미 찼다'는 판정으로 강조가 앞서 넘어가지
+  // 않게 이 칸을 잡아둔다(입력 도중 초록 강조가 다음 칸으로 튀던 것 방지).
+  const [assignFocus, setAssignFocus] = useState(null)
   // 이 방문의 특이사항(등록 모달 입력값). 재방문이면 조회 시 지난 값이 채워진다.
   const [specialNote, setSpecialNote] = useState('')
   // 2단 상세 오른쪽의 특이사항 인라인 편집
@@ -5050,6 +5053,8 @@ function App() {
   // 베드 모달이 '방금 누른 카드'에서 확대되며 나타나고, 닫힐 때 그 카드로 축소되며 빨려들어간다.
   const modalOriginRef = useRef(null)   // 소스 카드의 화면 좌표
   const bedModalRef = useRef(null)      // 베드 모달 .modal 요소
+  const chartNumberRef = useRef(null)   // 배정 폼: 엔터로 환자명 → 차트번호 이동
+  const lineStaffRef = useRef(null)     // 배정 폼: 엔터로 차트번호 → 라인담당 이동
   useEffect(() => {
     const el = bedModalRef.current
     if (!el) return
@@ -5102,7 +5107,11 @@ function App() {
     : !chartNumber.trim() ? 'chartNumber'
       : !lineStaffId ? 'lineStaffId'
         : !examRoom ? 'examRoom' : null
-  const neededClass = (field) => `field__input${assignNeeds === field ? ' field__input--needed' : ''}`
+  // 지금 입력 중인(포커스된) 필수 칸이 있으면 강조를 거기 붙잡는다 — 한 글자만 쳐도 강조가
+  // 다음 칸으로 튀던 것 방지. 칸을 떠나면(포커스 없음) 위에서부터 아직 안 채운 첫 칸을 강조.
+  const REQUIRED_ASSIGN_FIELDS = ['patientName', 'chartNumber', 'lineStaffId', 'examRoom']
+  const assignHighlight = REQUIRED_ASSIGN_FIELDS.includes(assignFocus) ? assignFocus : assignNeeds
+  const neededClass = (field) => `field__input${assignHighlight === field ? ' field__input--needed' : ''}`
 
   const isVacant = currentBed?.status === 'vacant'
   const isReserved = currentBed?.status === 'reserved'
@@ -6673,7 +6682,12 @@ function App() {
       )}
 
       {selectedBedHeld && (
-        <div className={`modal-overlay${selectedBedClosing ? ' modal-overlay--closing' : ''}`}>
+        // 배경 클릭으로 닫기 — 진행중 '베드 상세'(보기용)에서만. 빈 베드=등록폼,
+        // 예약=입력 있음이라 실수로 닫혀 입력이 날아가지 않게 제외한다(안쪽 modal은 stopPropagation).
+        <div
+          className={`modal-overlay${selectedBedClosing ? ' modal-overlay--closing' : ''}`}
+          onClick={isInProgress ? closeModal : undefined}
+        >
           <div
             className={`modal modal--genie${isInProgress ? ' modal--detail-wide' : ''}`}
             ref={bedModalRef}
@@ -6708,6 +6722,9 @@ function App() {
                     className={neededClass('patientName')}
                     value={patientName}
                     onChange={(e) => setPatientName(e.target.value)}
+                    onFocus={() => setAssignFocus('patientName')}
+                    onBlur={() => setAssignFocus(null)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); chartNumberRef.current?.focus() } }}
                     placeholder="환자명 입력"
                   />
                 </label>
@@ -6716,10 +6733,13 @@ function App() {
                   <span className="field__label">차트번호</span>
                   <input
                     type="text"
+                    ref={chartNumberRef}
                     className={neededClass('chartNumber')}
                     value={chartNumber}
                     onChange={(e) => setChartNumber(e.target.value)}
-                    onBlur={handleChartNumberBlur}
+                    onFocus={() => setAssignFocus('chartNumber')}
+                    onBlur={(e) => { handleChartNumberBlur(e); setAssignFocus(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); lineStaffRef.current?.focus() } }}
                     inputMode="numeric" placeholder="차트번호 입력"
                   />
                 </label>
@@ -6749,8 +6769,11 @@ function App() {
                 <label className="field">
                   <span className="field__label">라인 담당자</span>
                   <select
+                    ref={lineStaffRef}
                     className={neededClass('lineStaffId')}
                     value={lineStaffId}
+                    onFocus={() => setAssignFocus('lineStaffId')}
+                    onBlur={() => setAssignFocus(null)}
                     onChange={(e) => {
                       setLineStaffId(e.target.value)
                       maybeAlertBaselineNote(lookupInfo, e.target.value)
@@ -6769,6 +6792,8 @@ function App() {
                   <select
                     className={neededClass('examRoom')}
                     value={examRoom}
+                    onFocus={() => setAssignFocus('examRoom')}
+                    onBlur={() => setAssignFocus(null)}
                     onChange={(e) => setExamRoom(e.target.value)}
                   >
                     {/* 필수라 되돌아갈 수 없는 자리다 — 초기 표시만 하고 다시 고르지는 못하게. */}

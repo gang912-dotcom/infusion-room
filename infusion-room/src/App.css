@@ -5229,7 +5229,7 @@
 }
 
 .chat-msg__who { font-weight: 800; color: var(--text-secondary); flex: none; }
-.chat-msg__body { color: var(--text-primary); word-break: break-word; flex: 1 1 auto; min-width: 0; }
+.chat-msg__body { color: var(--text-primary); word-break: break-word; white-space: pre-wrap; flex: 1 1 auto; min-width: 0; }
 .chat-msg__at { font-size: 10px; color: var(--text-muted); flex: none; }
 
 /* 내 말은 이름을 강조해 눈으로 빠르게 가른다(말풍선까지 갈 필요는 없다 — 로그형 채팅이다).
