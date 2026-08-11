@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import db from '../db.js'
-import { isUniqueConstraintError } from '../lib/validation.js'
+import { isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
 import { logAccess, ACTIONS } from '../lib/accessLog.js'
-import { findDummyPatients, purgeDummyPatients } from '../lib/dummyPatients.js'
+import { getPatientFootprint, deletePatientByChartNo } from '../lib/deletePatient.js'
 
 const router = Router()
 
@@ -281,28 +281,25 @@ router.post('/sessions/purge', (req, res) => {
   res.json({ purged: purged.length, skipped: skipped.length })
 })
 
-// ─── 더미 환자 정리 ─────────────────────────────────────────────────
-// 시험 삼아 등록했다 취소한 이름이 환자 검색에 남는다. 판정 규칙은 lib/dummyPatients.js
-// 한 곳에 있다(명령줄 도구 tools/purge-dummy-patients.mjs와 같은 것을 본다).
-router.get('/dummy-patients', (req, res) => {
-  const { targets, skipped } = findDummyPatients(db)
-  res.json({ targets, skipped })
+// ─── 환자 수동 삭제 ─────────────────────────────────────────────────
+// 검색해서 고른 환자 하나를 딸린 기록까지 통째로 지운다(lib/deletePatient.js).
+// 지우기 전에 흔적(이용·라운딩·처방 수)을 보여줘 실제 환자를 실수로 지우지 않게 한다.
+router.get('/patients/:chartNo/footprint', (req, res) => {
+  const chartNo = normalizeChartNo(req.params.chartNo)
+  if (chartNo === null) return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
+  const footprint = getPatientFootprint(chartNo)
+  if (!footprint) return res.status(404).json({ error: '존재하지 않는 환자입니다' })
+  res.json(footprint)
 })
 
-router.post('/dummy-patients/purge', (req, res) => {
-  const { ids } = req.body ?? {}
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: '지울 대상이 없습니다' })
-  }
-  if (!ids.every((id) => Number.isInteger(id))) {
-    return res.status(400).json({ error: 'ids는 정수 배열이어야 합니다' })
-  }
-  // 화면이 보낸 id를 그대로 믿지 않는다 — 목록을 본 뒤 누가 그 환자로 뭔가 했을 수 있어
-  // purgeDummyPatients가 지우기 직전에 다시 가려낸다.
-  const r = purgeDummyPatients(db, ids)
-  // 되돌릴 수 없는 삭제라 누가 언제 어떤 차트번호를 지웠는지 남긴다.
-  logAccess(req, ACTIONS.SESSION_PURGE, { targetType: `patient:${r.chartNos.join(',') || 'none'}` })
-  res.json({ removed: r.patients, sessions: r.sessions, chartNos: r.chartNos })
+router.delete('/patients/:chartNo', (req, res) => {
+  const chartNo = normalizeChartNo(req.params.chartNo)
+  if (chartNo === null) return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
+  // 되돌릴 수 없다 → 활성 세션이면 lib가 거부(409)한다. 성공/거부 모두 여기서 응답이 갈린다.
+  const r = deletePatientByChartNo(chartNo)
+  // 누가 언제 어떤 차트번호를 지웠는지 반드시 남긴다.
+  logAccess(req, ACTIONS.SESSION_PURGE, { targetType: `patient:${r.chart_no}` })
+  res.json(r)
 })
 
 export default router

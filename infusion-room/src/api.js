@@ -656,14 +656,14 @@ export async function updateSetting(key, value) {
   return apiFetch(`/admin/settings/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) })
 }
 
-// ─── 더미 환자 정리 (관리자) ─────────────────────────────────────────
-// 시험 삼아 등록했다 취소한 이름이 환자 검색에 남는다. 판정은 서버가 한다.
-export async function listDummyPatients() {
-  return apiFetch('/admin/dummy-patients')
+// ─── 환자 수동 삭제 (관리자) ─────────────────────────────────────────
+// 검색(searchPatients)으로 찾은 환자를 고른 뒤, 지우기 전에 흔적을 받아 확인시키고 지운다.
+export async function getPatientFootprint(chartNo) {
+  return apiFetch(`/admin/patients/${encodeURIComponent(chartNo)}/footprint`)
 }
 
-export async function purgeDummyPatients(ids) {
-  return apiFetch('/admin/dummy-patients/purge', { method: 'POST', body: JSON.stringify({ ids }) })
+export async function deletePatient(chartNo) {
+  return apiFetch(`/admin/patients/${encodeURIComponent(chartNo)}`, { method: 'DELETE' })
 }
 
 // ─── 통계 화면 잠금 ──────────────────────────────────────────────────
