@@ -3191,6 +3191,7 @@ function DataManageView({
   // 이용기록 탭과 같은 규칙 — 이름·차트번호를 한 칸에서 받는다.
   const [searchText, setSearchText] = useState('')
   const [searchDate, setSearchDate] = useState('')
+  const [page, setPage] = useState(1)
 
   // 선택된 항목 id Set
   const [checkedIds, setCheckedIds] = useState(new Set())
@@ -3239,6 +3240,15 @@ function DataManageView({
     return true
   })
 
+  // ── 페이지네이션 ──
+  // 선택·삭제는 filtered 전체 기준을 그대로 둔다(검색결과 전체 선택→삭제 워크플로 보존).
+  // 화면에 그리는 줄만 페이지로 끊는다. 필터를 걸어 결과가 줄면 현재 페이지가 넘칠 수 있어 가둔다.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DM_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * DM_PAGE_SIZE
+  const pageRows = filtered.slice(pageStart, pageStart + DM_PAGE_SIZE)
+  const resetToFirstPage = () => setPage(1)
+
   // ── 전체 선택 ──
   const allChecked = filtered.length > 0 && filtered.every((e) => checkedIds.has(e.id))
   const someChecked = filtered.some((e) => checkedIds.has(e.id))
@@ -3271,6 +3281,7 @@ function DataManageView({
   function switchMode(trash) {
     setTrashMode(trash)
     setCheckedIds(new Set())
+    setPage(1)
   }
 
   // ── 선택 삭제 (deleted: true) ──
@@ -3409,7 +3420,7 @@ function DataManageView({
               type="search"
               className="dm-search__input"
               value={searchText}
-              onChange={(e) => { setSearchText(e.target.value); setCheckedIds(new Set()) }}
+              onChange={(e) => { setSearchText(e.target.value); setCheckedIds(new Set()); resetToFirstPage() }}
               placeholder="이름 또는 차트번호"
             />
           </label>
@@ -3419,7 +3430,7 @@ function DataManageView({
               type="date"
               className="dm-search__input"
               value={searchDate}
-              onChange={(e) => { setSearchDate(e.target.value); setCheckedIds(new Set()) }}
+              onChange={(e) => { setSearchDate(e.target.value); setCheckedIds(new Set()); resetToFirstPage() }}
             />
           </label>
           {hasFilter && (
@@ -3483,6 +3494,7 @@ function DataManageView({
             : (totalActive === 0 ? '이용 기록이 없습니다.' : '검색 결과가 없습니다.')}
         </div>
       ) : (
+        <>
         <div className="dm-table-wrap">
           <table className="dm-table">
             <thead>
@@ -3507,7 +3519,7 @@ function DataManageView({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((entry) => (
+              {pageRows.map((entry) => (
                 <tr
                   key={entry.id}
                   className={checkedIds.has(entry.id) ? 'dm-table__row--checked' : ''}
@@ -3533,6 +3545,43 @@ function DataManageView({
             </tbody>
           </table>
         </div>
+        {filtered.length > DM_PAGE_SIZE && (
+          <nav className="history-pager" aria-label="데이터관리 이용기록 페이지">
+            <span className="history-pager__range">
+              {filtered.length}건 중 <strong>{pageStart + 1}–{pageStart + pageRows.length}</strong>
+            </span>
+            <div className="history-pager__controls">
+              <button
+                type="button" className="history-pager__btn"
+                onClick={() => setPage(safePage - 1)} disabled={safePage <= 1}
+              >
+                ‹ 이전
+              </button>
+              {pageWindow(safePage, totalPages).map((p) => (
+                typeof p === 'number' ? (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`history-pager__num${p === safePage ? ' history-pager__num--active' : ''}`}
+                    onClick={() => setPage(p)}
+                    aria-current={p === safePage ? 'page' : undefined}
+                  >
+                    {p}
+                  </button>
+                ) : (
+                  <span key={p} className="history-pager__gap">…</span>
+                )
+              ))}
+              <button
+                type="button" className="history-pager__btn"
+                onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages}
+              >
+                다음 ›
+              </button>
+            </div>
+          </nav>
+        )}
+        </>
       )}
 
       {/* ── 증상 데이터 관리 ── */}
@@ -3653,6 +3702,8 @@ function DataManageView({
 // ─── 이용기록 화면 ──────────────────────────────────────────────
 // 한 페이지에 보여줄 이용기록 줄 수. 표가 한 화면을 크게 넘지 않는 선.
 const HISTORY_PAGE_SIZE = 50
+// 데이터관리 표는 체크박스가 붙어 줄 높이가 더 커서 조금 적게(30) 끊는다.
+const DM_PAGE_SIZE = 30
 
 // 페이지 번호 막대. 많아지면 가운데를 '…'로 접는다: 1 … 5 6 7 … 12
 function pageWindow(current, total) {
