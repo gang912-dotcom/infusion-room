@@ -3651,6 +3651,24 @@ function DataManageView({
 }
 
 // ─── 이용기록 화면 ──────────────────────────────────────────────
+// 한 페이지에 보여줄 이용기록 줄 수. 표가 한 화면을 크게 넘지 않는 선.
+const HISTORY_PAGE_SIZE = 50
+
+// 페이지 번호 막대. 많아지면 가운데를 '…'로 접는다: 1 … 5 6 7 … 12
+function pageWindow(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const wanted = [1, total, current, current - 1, current + 1].filter((p) => p >= 1 && p <= total)
+  const sorted = [...new Set(wanted)].sort((a, b) => a - b)
+  const out = []
+  let prev = 0
+  for (const p of sorted) {
+    if (p - prev > 1) out.push(`gap-${p}`) // '…' 자리 — key가 겹치지 않게 표식을 남긴다
+    out.push(p)
+    prev = p
+  }
+  return out
+}
+
 function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore }) {
   // 환자명·차트번호를 한 칸에서 받는다. 둘을 나눠 두면 어느 칸에 넣을지부터 고르게 되는데,
   // 이름은 한글이고 차트번호는 K+숫자라 섞일 일이 없어 나눌 이유가 없었다.
@@ -3658,6 +3676,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   const [searchExamRoom, setSearchExamRoom] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
   const [searchDateTo, setSearchDateTo] = useState('')
+  const [page, setPage] = useState(1)
 
   const filtered = history.filter((entry) => {
     const q = searchText.trim()
@@ -3692,7 +3711,17 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
     setSearchExamRoom('')
     setSearchDateFrom('')
     setSearchDateTo('')
+    setPage(1)
   }
+
+  // 필터가 바뀌면 결과가 달라지니 늘 첫 페이지부터. 필터 setter마다 붙여 effect+setState 없이 처리한다.
+  const resetToFirstPage = () => setPage(1)
+
+  // 필터를 건 뒤 결과가 줄어 현재 페이지가 범위를 벗어날 수 있다 → 렌더에서 안전하게 가둔다.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * HISTORY_PAGE_SIZE
+  const pageRows = filtered.slice(pageStart, pageStart + HISTORY_PAGE_SIZE)
 
   function handleExportCsv() {
     const csv = buildHistoryCsv(filtered, sessionNotes, rounds, vitals)
@@ -3711,7 +3740,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
               type="search"
               className="history-search__input"
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e) => { setSearchText(e.target.value); resetToFirstPage() }}
               placeholder="이름 또는 차트번호"
             />
           </label>
@@ -3720,7 +3749,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
             <select
               className="history-search__input"
               value={searchExamRoom}
-              onChange={(e) => setSearchExamRoom(e.target.value)}
+              onChange={(e) => { setSearchExamRoom(e.target.value); resetToFirstPage() }}
             >
               <option value="">전체</option>
               {EXAM_ROOMS.map((room) => (
@@ -3737,14 +3766,14 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
                 type="date"
                 className="history-search__input history-search__input--date"
                 value={searchDateFrom}
-                onChange={(e) => setSearchDateFrom(e.target.value)}
+                onChange={(e) => { setSearchDateFrom(e.target.value); resetToFirstPage() }}
               />
               <span className="history-search__date-sep">~</span>
               <input
                 type="date"
                 className="history-search__input history-search__input--date"
                 value={searchDateTo}
-                onChange={(e) => setSearchDateTo(e.target.value)}
+                onChange={(e) => { setSearchDateTo(e.target.value); resetToFirstPage() }}
               />
             </div>
           </div>
@@ -3786,6 +3815,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
           <p>{history.length === 0 ? '이용 기록이 없습니다.' : '검색 결과가 없습니다.'}</p>
         </div>
       ) : (
+        <>
         <div className="history-wrapper">
           <table className="history-table">
             <thead>
@@ -3805,7 +3835,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
               </tr>
             </thead>
             <tbody>
-              {filtered.map((entry) => (
+              {pageRows.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.date}</td>
                   <td>{entry.examRoom ? `${entry.examRoom}진료실` : '—'}</td>
@@ -3845,6 +3875,43 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
             </tbody>
           </table>
         </div>
+        {filtered.length > HISTORY_PAGE_SIZE && (
+            <nav className="history-pager" aria-label="이용기록 페이지">
+              <span className="history-pager__range">
+                {filtered.length}건 중 <strong>{pageStart + 1}–{pageStart + pageRows.length}</strong>
+              </span>
+              <div className="history-pager__controls">
+                <button
+                  type="button" className="history-pager__btn"
+                  onClick={() => setPage(safePage - 1)} disabled={safePage <= 1}
+                >
+                  ‹ 이전
+                </button>
+                {pageWindow(safePage, totalPages).map((p) => (
+                  typeof p === 'number' ? (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`history-pager__num${p === safePage ? ' history-pager__num--active' : ''}`}
+                      onClick={() => setPage(p)}
+                      aria-current={p === safePage ? 'page' : undefined}
+                    >
+                      {p}
+                    </button>
+                  ) : (
+                    <span key={p} className="history-pager__gap">…</span>
+                  )
+                ))}
+                <button
+                  type="button" className="history-pager__btn"
+                  onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages}
+                >
+                  다음 ›
+                </button>
+              </div>
+            </nav>
+          )}
+        </>
       )}
     </div>
   )

@@ -2300,6 +2300,47 @@
   box-shadow: 0 2px 8px rgba(30, 58, 95, 0.04);
 }
 
+/* ── 이용기록 페이지네이션 ── */
+.history-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.history-pager__range { font-size: 13px; color: var(--text-muted); }
+.history-pager__range strong { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.history-pager__controls { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+
+.history-pager__btn,
+.history-pager__num {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg, transparent);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.history-pager__btn:disabled { opacity: 0.4; cursor: default; }
+
+/* 현재 페이지 — 신호등 규칙상 색은 의미에만. 여기선 '지금 위치'라 초록(진행) 대신 중성 강조로 둔다. */
+.history-pager__num--active {
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+  color: var(--page-bg);
+  font-weight: 700;
+}
+
+.history-pager__gap { min-width: 24px; text-align: center; color: var(--text-muted); }
+
 .history-table {
   width: 100%;
   min-width: 680px;
