@@ -7388,7 +7388,11 @@ function App() {
       )}
 
       {noteModalHeld && currentBed && (
-        <div className={`modal-overlay modal-overlay--top${noteModalClosing ? ' modal-overlay--closing' : ''}`}>
+        // 배경 클릭으로 이 모달만 닫기. 최상위(--top) 형제라 밑의 환자정보 모달은 안 닫힌다.
+        <div
+          className={`modal-overlay modal-overlay--top${noteModalClosing ? ' modal-overlay--closing' : ''}`}
+          onClick={closeNoteModal}
+        >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2>증상 기록</h2>
@@ -7578,7 +7582,8 @@ function App() {
 
       {/* ── 바이탈 기록 (체온·혈압·맥박) ── */}
       {vitalsModalBed && (
-        <div className="modal-overlay modal-overlay--top">
+        // 배경 클릭으로 닫기(요청). 안쪽 .modal은 stopPropagation이라 내부 클릭은 안 닫힌다.
+        <div className="modal-overlay modal-overlay--top" onClick={closeVitalsModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
@@ -7659,7 +7664,11 @@ function App() {
       )}
 
       {roundModalHeld && roundModalBed && (
-        <div className={`modal-overlay modal-overlay--top${roundModalClosing ? ' modal-overlay--closing' : ''}`}>
+        // 배경 클릭으로 이 모달만 닫기. 최상위(--top) 형제라 밑의 환자정보 모달은 안 닫힌다.
+        <div
+          className={`modal-overlay modal-overlay--top${roundModalClosing ? ' modal-overlay--closing' : ''}`}
+          onClick={closeRoundModal}
+        >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="round-header">
