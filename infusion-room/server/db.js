@@ -695,6 +695,22 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'beds_etc_260810'").get()) {
   })()
 }
 
+// 2수액실(room2)에 21번 베드 추가(2026-08 요청). seed.js는 빈 DB에만 도므로 운영 DB엔 여기서 넣는다.
+// 화면은 베드를 '번호'로 정렬하므로 21이 22 앞에 저절로 오고, 방 범위도 '21–27번'으로 자동 조정된다.
+// sort_order는 기존 최대값 뒤에 붙인다(정렬은 번호로 하니 순서엔 영향 없고, 앞에 끼우면 다른 방이 밀린다).
+// INSERT OR IGNORE라 code(room2-21)가 이미 있으면 건드리지 않는다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'beds_room2_21_260812'").get()) {
+  db.transaction(() => {
+    const base = (db.prepare('SELECT MAX(sort_order) m FROM beds').get()?.m ?? -1) + 1
+    const made = db.prepare(
+      'INSERT OR IGNORE INTO beds (code, room, number, sort_order, is_active) VALUES (?, ?, ?, ?, 1)',
+    ).run('room2-21', 'room2', '21', base).changes
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('beds_room2_21_260812', String(made), Date.now())
+    console.log(`[db] 2수액실 21번 베드 ${made}개 추가`)
+  })()
+}
+
 // ─── 통계 화면 암호 (2026-08-10) ────────────────────────────────────────
 // 통계는 원장님이 보는 화면이라 잠가 둔다. 초기 암호 8058.
 // 평문으로 두지 않는다 — settings는 관리자 화면에서 통째로 조회되는 표이고, 계정 비밀번호와

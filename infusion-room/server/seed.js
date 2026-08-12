@@ -6,6 +6,7 @@ const now = Date.now()
 // ─── beds 40개 (기존 createDefaultBeds() 순서 그대로 + 기타 10개) ──────
 // room 키는 화면 라벨이 아니라 DB·베드코드 값이다 — 라벨은 src/api.js의 ROOM_LABELS 한 곳.
 const beds = [
+  { code: 'room2-21', room: 'room2', number: '21' },
   ...Array.from({ length: 6 }, (_, i) => ({ code: `room2-${22 + i}`, room: 'room2', number: String(22 + i) })),
   ...Array.from({ length: 13 }, (_, i) => ({ code: `room3-${1 + i}`, room: 'room3', number: String(1 + i) })),
   ...Array.from({ length: 11 }, (_, i) => ({ code: `floor2-${i + 1}`, room: 'floor2', number: `2F-${i + 1}` })),
