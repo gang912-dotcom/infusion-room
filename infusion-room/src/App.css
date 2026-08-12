@@ -587,23 +587,20 @@
   color: var(--text-primary);
 }
 
-/* 번호 범위(21–27번)는 배경으로 물러난다. 예전엔 '사용중'까지 같은 13px 회색이라
-   방마다 몇 자리가 찼는지가 안 읽혔다. */
 .room-section__meta {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
-/* 방 이름(17px/800)과 번호 범위(13px/500) 사이에 앉힌다 — 이름보다 크면 방 제목이
-   무엇인지가 흐려지고, 범위와 같으면 강조가 아니다. 카드 격자를 안 건드리도록
-   줄 높이는 이름이 정한 채로 둔다(15px은 17px 줄 안에 들어간다). */
-.room-section__used {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.room-section__used b {
+/* 이 줄에서 실제로 읽는 값은 이 숫자 하나다 — 나머지(번호 범위·'사용중')는 그 숫자가
+   무엇인지 알려주는 말이라 회색 그대로 둔다.
+   크기는 방 이름(17px/800)과 이 줄(13px/500) 사이 — 이름보다 크면 방 제목이 무엇인지가
+   흐려진다. 15px은 17px 줄 안에 들어가므로 머리말 높이·카드 격자는 안 밀린다. */
+.room-section__count {
   font-size: 15px;
+  font-weight: 700;
+  color: var(--accent-strong);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1252,11 +1249,9 @@
 .bed-card__meta.bed-card__meta--start {
   font-size: 15px;
   font-weight: 700;
-  color: var(--brand);
+  /* 테마별 값은 --accent-strong 한 곳에 있다(방 머리말의 사용중 수와 같은 파랑). */
+  color: var(--accent-strong);
 }
-/* 라이트의 --brand(#2a78d6)는 흰 면 위 15px 글자에서 4.41로 4.5에 못 미친다(실측).
-   이 한 자리만 한 단 진한 파랑으로 간다 — 통계의 --viz-ink-bg와 같은 값이다(6.63). */
-:root[data-theme='light'] .app .bed-card__meta--start { color: #1c5cab; }
 
 .bed-card__footer > .bed-card__remaining {
   justify-self: end;
@@ -3885,6 +3880,10 @@
      예전엔 포커스 링이 초록 7곳 / 하드코딩 파랑 6곳으로 갈려 있었다(실측).
      초록을 포커스에 쓰면 '진행중'이라는 뜻이 흐려진다. */
   --brand:#3987e5;
+  /* 면 위 작은 글자에 쓰는 강조 파랑(카드 시작시각 · 방 머리말 사용중 수).
+     다크는 브랜드 파랑 그대로다 — 라이트에서 쓰는 남색을 여기 그대로 쓰면
+     #121212 면에 가라앉아 안 읽힌다(히트맵에서 겪은 것과 같은 함정). */
+  --accent-strong:var(--brand);
   --ease-spring:cubic-bezier(.34,1.56,.64,1);
   --ease-out:cubic-bezier(.22,.61,.36,1);
   --hair:rgba(255,255,255,.06);  /* 카드 상단 하이라이트(재질감) */
@@ -3895,6 +3894,9 @@
 :root[data-theme='light'] .app{
   /* 라이트에서는 한 단계 진한 파랑 — 흰 면 위 대비를 맞춘 값이다. */
   --brand:#2a78d6;
+  /* 밝은 면 위 15px 글자에서 브랜드 파랑은 4.41로 4.5에 못 미친다(실측).
+     한 단 짙은 남색으로 간다 — 카드 면 6.63 / 페이지 면 5.94. */
+  --accent-strong:#1c5cab;
   --hair:rgba(255,255,255,.9);
   --card-shadow:0 1px 2px rgba(20,20,40,.05), 0 8px 22px rgba(20,20,50,.07);
   --card-shadow-hover:0 2px 6px rgba(20,20,40,.09), 0 20px 46px rgba(20,20,50,.14);

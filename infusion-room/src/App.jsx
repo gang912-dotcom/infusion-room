@@ -6527,9 +6527,8 @@ function App() {
                         '기타'는 번호 범위가 뜻이 없다 — 1~10번이라는 자리가 실재하지 않는다. */}
                     <span className="room-section__meta">
                       {!NON_BED_ROOMS.has(room.id) && `${firstNumber}–${lastNumber}번 · `}
-                      <span className="room-section__used">
-                        <b>{occupiedCount}</b>{NON_BED_ROOMS.has(room.id) ? '곳 사용중' : ' 사용중'}
-                      </span>
+                      <b className="room-section__count">{occupiedCount}</b>
+                      {NON_BED_ROOMS.has(room.id) ? '곳 사용중' : ' 사용중'}
                     </span>
                   </button>
                   {!isCollapsed && (
