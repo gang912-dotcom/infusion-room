@@ -184,6 +184,9 @@ export async function getBoard(sinceRevision) {
     revision: board.revision,
     serverNow: board.server_now,
     beds,
+    // 마스터 설정에서 고칠 수 있는 값들(미열·고열 기준 등). 카드가 이걸 읽어야
+    // 설정 화면이 실제로 뭔가를 바꾸는 칸이 된다 — 안 읽으면 "바꿨는데 왜 그대로냐"가 된다.
+    settings: board.settings ?? null,
     chatLatestId: board.chat_latest_id ?? 0,
   }
 }

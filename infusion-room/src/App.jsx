@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
 import BundlePicker from './BundlePicker'
@@ -151,8 +151,11 @@ const ROUND_INTERVAL_MIN = 30 // 2회차 이후 라운딩 간격(분)
 const ROUND_FIRST_INTERVAL_MIN = 15
 const ROUND_SOON_LEAD_MIN = 10 // "곧 라운딩" 힌트를 띄우는 리드타임(분)
 
-const FEVER_MILD_MIN = 37.5 // 이상: 미열(주황)
-const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강). 37.5 미만은 카드에 체온 표시 안 함
+// 기본값이다 — 실제로 쓰이는 값은 마스터 설정(settings.fever_mild_min/fever_high_min)이고,
+// 서버 응답을 아직 못 받았거나 값이 비었을 때만 이 둘로 떨어진다(readFeverThresholds).
+const FEVER_MILD_MIN = 37.5 // 이상: 미열(앰버)
+const FEVER_HIGH_MIN = 38.0 // 이상: 고열(빨강)
+const FEVER_THRESHOLDS = { mild: FEVER_MILD_MIN, high: FEVER_HIGH_MIN }
 
 // 진료실 목록은 api.js 한 벌에서 온다 — 등록 폼과 통계가 같은 목록을 봐야 한다.
 // 관리자 편집은 아직 필요 없어 상수로 둔다.
@@ -331,12 +334,27 @@ function getRoundsByChartNumber(rounds, chartNumber) {
     .sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))
 }
 
-// 체온 색 톤: 고열(≥FEVER_HIGH_MIN) → 'high', 미열(≥FEVER_MILD_MIN) → 'mild', 그 외/null → null
-function getRoundTempTone(temp) {
+// 체온 색 톤: 고열 → 'high'(빨강), 미열 → 'mild'(앰버), 그 외/null → null.
+// 기준값은 마스터 설정에서 고칠 수 있다(board.settings). 못 받았을 때만 상수로 떨어진다 —
+// 예전엔 상수만 봐서, 설정 화면에서 기준을 바꿔도 카드 색이 그대로였다.
+function getRoundTempTone(temp, fever = FEVER_THRESHOLDS) {
   if (temp == null) return null
-  if (temp >= FEVER_HIGH_MIN) return 'high'
-  if (temp >= FEVER_MILD_MIN) return 'mild'
+  if (temp >= fever.high) return 'high'
+  if (temp >= fever.mild) return 'mild'
   return null
+}
+
+// settings의 문자열('37.5')을 수로. 비었거나 숫자가 아니면 기본값을 지킨다 —
+// 잘못된 값 하나 때문에 전 카드의 열 표시가 사라지면 안 된다.
+function readFeverThresholds(settings) {
+  const num = (v, fallback) => {
+    const n = parseFloat(v)
+    return Number.isFinite(n) ? n : fallback
+  }
+  const mild = num(settings?.fever_mild_min, FEVER_MILD_MIN)
+  const high = num(settings?.fever_high_min, FEVER_HIGH_MIN)
+  // 고열이 미열보다 낮게 저장돼 있으면 'mild'가 영영 안 나온다. 뒤집힌 입력은 그냥 맞바꾼다.
+  return high < mild ? { mild: high, high: mild } : { mild, high }
 }
 
 // 체온 입력 문자열 → number | null. 빈값/공백/숫자아님은 null.
@@ -384,7 +402,7 @@ function getRoundStatus(bed, latestRound, now) {
 
 // 카드 우상단 바이탈 — 서버가 준 '필드별 최신'을 표시 문자열로. 잰 항목만 채운다.
 // 체온은 열이면(mild/high) 색조를 얹고, 정상이면 색 없이 값만 보여준다(전과 달리 항상 표시).
-function getCardVitals(bed) {
+function getCardVitals(bed, fever = FEVER_THRESHOLDS) {
   const temp = bed.latestTemp?.value
   const bp = bed.latestBp
   const pulseOnly = bed.latestPulse?.value
@@ -396,7 +414,7 @@ function getCardVitals(bed) {
   }
   return {
     temp: temp != null ? `${temp}℃` : null,
-    tone: temp != null ? getRoundTempTone(temp) : null,
+    tone: temp != null ? getRoundTempTone(temp, fever) : null,
     bp: bpText,
   }
 }
@@ -4533,6 +4551,9 @@ function App() {
   }, [theme])
   const [authChecked, setAuthChecked] = useState(false)
   const [beds, setBeds] = useState([])
+  // 마스터 설정 값(미열·고열 기준 등) — board 응답에 함께 실려 온다.
+  const [boardSettings, setBoardSettings] = useState(null)
+  const feverThresholds = useMemo(() => readFeverThresholds(boardSettings), [boardSettings])
   const [staffList, setStaffList] = useState([])
   // 처방 작성 — 오더 항목은 DB가 원본이다(하드코딩 목록 없음).
   const [orderItems, setOrderItems] = useState([])
@@ -4823,6 +4844,7 @@ function App() {
           clockOffsetRef.current = result.serverNow - Date.now()
           if (!result.unchanged && !isModalBusyRef.current) {
             setBeds(result.beds)
+            if (result.settings) setBoardSettings(result.settings)
             revisionRef.current = result.revision
             // 서버 상태가 바뀌었다 = 다른 단말이 특이사항·라운딩·종료 등을 했을 수 있다.
             // 보드만 갱신하면 카드의 note_count는 맞지만 특이사항 내용·이용기록은 옛것이라
@@ -5205,6 +5227,8 @@ function App() {
       setNow(result.serverNow)
       if (!result.unchanged) {
         setBeds(result.beds)
+        // unchanged 응답에는 설정이 안 실려 온다 — 그때는 마지막 값을 그대로 둔다.
+        if (result.settings) setBoardSettings(result.settings)
         revisionRef.current = result.revision
       }
       // 채팅 배지 — 창이 닫혀 있어도 이 값으로 새 메시지 여부를 안다(추가 요청 없음).
@@ -6123,7 +6147,7 @@ function App() {
       rawRoundStatus?.status === 'soon' && !roomDueMap[bed.room]
         ? { ...rawRoundStatus, status: 'ok' }
         : rawRoundStatus
-    const vitalsView = getCardVitals(bed)
+    const vitalsView = getCardVitals(bed, feverThresholds)
     // 버튼이 뜰 때만 이름·차트 줄에 자리를 비운다(절대배치라 스스로 자리를 안 만든다).
     // 늘 비워두면 값이 없는 카드에서 이름만 이유 없이 좁아진다.
     const showVitals = !completed && !!(vitalsView.temp || vitalsView.bp)

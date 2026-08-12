@@ -4,6 +4,7 @@ import db from '../db.js'
 import { isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
 import { logAccess, ACTIONS } from '../lib/accessLog.js'
 import { getPatientFootprint, deletePatientByChartNo } from '../lib/deletePatient.js'
+import { bumpRevision } from '../lib/revision.js'
 
 const router = Router()
 
@@ -227,6 +228,10 @@ router.patch('/settings/:key', (req, res) => {
 
   db.prepare('UPDATE settings SET value = ?, updated_at = ? WHERE key = ?')
     .run(String(value), Date.now(), req.params.key)
+  // 설정은 board 응답에 함께 실려 나가고 카드가 그 값을 읽는다(미열·고열 기준 등).
+  // revision을 올려야 폴링이 unchanged로 끊기지 않고 새 값을 가져간다 — 안 올리면
+  // 벽걸이 모니터는 다른 변경이 생길 때까지, 혹은 새로고침할 때까지 옛 기준을 쓴다.
+  bumpRevision(db)
   // settings는 키가 문자열이라 INTEGER인 target_id에 못 담는다. 어떤 설정을 바꿨는지는
   // 감사 기록에서 중요한 정보라 target_type에 'setting:<key>' 형태로 붙여 보존한다
   // (스키마 변경 없이. 설정 변경 전체 조회는 target_type LIKE 'setting:%').
