@@ -5385,6 +5385,13 @@ function App() {
       await handleAssignPendingToBed(bed)
       return
     }
+    // 열람 계정(viewer): 빈 베드는 등록도 볼 것도 없어 무반응, 나머지는 읽기 상세만 연다
+    // (아래 완료→정리확인, 빈베드→잠금+등록 분기를 건너뛴다). 편집 버튼은 모달에서 숨긴다.
+    if (!canEdit(account?.role)) {
+      if (bed.status === 'vacant') return
+      openModal(bed)
+      return
+    }
     if (bed.status === 'completed') {
       setEndStaffId('') // 종료 확인마다 라인 제거 담당자를 새로 고르게 한다
       setCleanupBed(bed)
@@ -6154,11 +6161,12 @@ function App() {
               할 수 있다(예전엔 잰 값이 있을 때만 떠서, 첫 기록은 상세를 열어야 했다).
               대신 빈 상태는 온도계 아이콘 하나로만 둔다 — 값일 때처럼 76px을 늘 비워두면
               값이 없는 카드에서 이름이 이유 없이 좁아진다. */}
-          {!completed && (
+          {/* 열람 계정은 잰 값이 있으면 그 값만 보고, 없으면 버튼 자체를 숨긴다(기록 못 하므로). */}
+          {!completed && (canEdit(account?.role) || showVitals) && (
             <button
               type="button"
               className={`bed-card__vitals${showVitals ? '' : ' bed-card__vitals--empty'}`}
-              onClick={(e) => { e.stopPropagation(); openVitalsModal(bed) }}
+              onClick={(e) => { e.stopPropagation(); if (canEdit(account?.role)) openVitalsModal(bed) }}
               aria-label={showVitals ? '바이탈 기록' : '바이탈 기록 — 아직 잰 값 없음'}
               title="바이탈 기록"
             >
@@ -6433,7 +6441,7 @@ function App() {
           sessionNotes={sessionNotes}
           rounds={rounds}
           vitals={vitals}
-          onRestore={handleRestoreSession}
+          onRestore={canEdit(account?.role) ? handleRestoreSession : undefined}
         />
       ) : activeTab === 'patient' ? (
         <PatientView
