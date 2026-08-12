@@ -12,8 +12,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   username      TEXT    NOT NULL UNIQUE,
   display_name  TEXT    NOT NULL,
   password_hash TEXT    NOT NULL,
+  -- 권한 4단계: viewer(열람) < staff(실무자) < manager(관리자) < admin(마스터).
+  -- 기존 DB는 db.js가 이 CHECK로 accounts를 1회 재작성한다(SQLite는 CHECK를 ALTER로 못 바꾼다).
   role          TEXT    NOT NULL DEFAULT 'staff'
-                        CHECK (role IN ('staff','admin')),
+                        CHECK (role IN ('viewer','staff','manager','admin')),
   is_active     INTEGER NOT NULL DEFAULT 1,
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL

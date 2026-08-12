@@ -19,7 +19,7 @@ router.post('/accounts', (req, res) => {
   if (!username || !display_name || !password) {
     return res.status(400).json({ error: 'username, display_name, password가 필요합니다' })
   }
-  if (!['staff', 'admin'].includes(role)) {
+  if (!['viewer', 'staff', 'manager', 'admin'].includes(role)) {
     return res.status(400).json({ error: '유효하지 않은 role입니다' })
   }
 
@@ -48,7 +48,7 @@ router.patch('/accounts/:id', (req, res) => {
   if (!account) return res.status(404).json({ error: '존재하지 않는 계정입니다' })
 
   const { display_name, password, is_active, role } = req.body ?? {}
-  if (role !== undefined && !['staff', 'admin'].includes(role)) {
+  if (role !== undefined && !['viewer', 'staff', 'manager', 'admin'].includes(role)) {
     return res.status(400).json({ error: '유효하지 않은 role입니다' })
   }
 

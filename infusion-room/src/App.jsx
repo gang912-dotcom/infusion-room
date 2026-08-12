@@ -29,7 +29,7 @@ import {
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   getSessionRecord, saveDayMemo, purgeSessions,
   listChatDates, listChatByDate, setChatDeleted,
-  listSettings, updateSetting, unlockStats, setStatsPassword,
+  listSettings, updateSetting,
   getPatientFootprint, deletePatient,
   MESSAGE_TTL_MS, getInbox, sendMessage, markMessageRead, getRecipients, getAdminMessages,
   deleteAdminMessage, deleteAdminBroadcast,
@@ -87,10 +87,25 @@ const DEFAULT_DURATION = 120
 const MIN_DURATION = 10
 
 // ─── 관리자 설정 화면 — 계정 role / 설정값 메타 ──────────────────────
+// 권한 4단계: viewer(열람) < staff(직원/실무자) < manager(관리자) < admin(마스터).
 const ACCOUNT_ROLE_OPTIONS = [
-  { value: 'admin', label: '관리자' },
+  { value: 'admin', label: '마스터' },
+  { value: 'manager', label: '관리자' },
   { value: 'staff', label: '직원' },
+  { value: 'viewer', label: '열람' },
 ]
+
+// 권한 헬퍼 — 백엔드(requireAuth.blockViewerWrites / requireAdmin)와 뜻을 맞춘다.
+// viewer는 서버에서도 쓰기가 막히므로, 여기 UI 숨김은 '보이지도 않게' 하는 편의다.
+const canEdit = (role) => role !== 'viewer'                        // 편집·종료·복귀 등
+const canSeeStats = (role) => role === 'manager' || role === 'admin' // 통계 탭(암호 폐지, 역할로)
+const canManage = (role) => role === 'admin'                        // 관리자 설정(마스터)
+// 탭 접근: viewer는 통계·데이터관리 없음, staff는 통계 없음. 나머지(상황판·이용기록·환자조회·방탭)는 전원.
+const canSeeTab = (role, tabId) => {
+  if (tabId === 'stats') return canSeeStats(role)
+  if (tabId === 'datamanage') return role !== 'viewer'
+  return true
+}
 
 // 라운딩 간격(1회차 15분 / 이후 30분)과 '곧' 리드타임은 화면에서 빼뒀다.
 // settings 테이블에 행은 남아 있지만 코드가 상수를 쓰기 때문에 바꿔도 아무 일이 없다 —
@@ -3657,16 +3672,15 @@ function DataManageView({
 
       </div>
 
-      {/* ── 관리자 설정 (admin 롤 전용) ── */}
-      {account?.role === 'admin' && (
+      {/* ── 마스터 설정 (admin=마스터 롤 전용) ── */}
+      {canManage(account?.role) && (
         <div className="dm-admin">
-          <h3 className="dm-note-manage__title">관리자 설정</h3>
+          <h3 className="dm-note-manage__title">마스터 설정</h3>
           <AccountManageSection offline={offline} />
           <StaffManageSection offline={offline} />
           <OrderItemManageSection offline={offline} />
           <OrderBundleManageSection offline={offline} />
           <SettingsManageSection offline={offline} />
-          <StatsPasswordSection offline={offline} />
           <PatientDeleteSection offline={offline} />
           <ChatLogSection offline={offline} />
           <MessageLogSection />
@@ -4371,122 +4385,6 @@ function PatientSearchBar({ onPick, disabled }) {
   )
 }
 
-// ─── App ────────────────────────────────────────────────────────
-// ─── 통계 잠금 화면 ──────────────────────────────────────────────────
-// 통계는 원장님이 보는 화면이라 암호를 받는다. 뒤에 통계를 그려 놓고 덮는 게 아니라
-// 아예 안 그린다 — 덮기만 하면 개발자 도구로 걷어내면 그대로 보인다.
-function StatsLock({ onUnlock, onCancel }) {
-  const [pw, setPw] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function submit(e) {
-    e.preventDefault()
-    if (!pw || busy) return
-    setBusy(true)
-    setError('')
-    try {
-      await unlockStats(pw)
-      onUnlock()
-    } catch (err) {
-      setError(err.message)
-      setPw('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="modal-overlay stats-lock">
-      {/* form이라 엔터로도 넘어간다 — 숫자 몇 자를 치고 확인 버튼까지 옮겨 가지 않아도 된다. */}
-      <form className="modal modal--lock" onSubmit={submit}>
-        <div className="modal__header">
-          <div className="modal__header-title"><h2>통계</h2></div>
-        </div>
-        <div className="modal__body">
-          <p className="stats-lock__msg">잠겨 있습니다. 암호를 입력하세요.</p>
-          <label className="field">
-            <span className="field__label">암호</span>
-            <input
-              type="password"
-              inputMode="numeric"
-              className="field__input stats-lock__input"
-              value={pw}
-              onChange={(e) => { setPw(e.target.value); setError('') }}
-              autoFocus
-              aria-label="통계 암호"
-            />
-          </label>
-          {error && <p role="alert" className="field__error">{error}</p>}
-          <div className="stats-lock__actions">
-            <button type="button" className="btn-detail-confirm" onClick={onCancel}>돌아가기</button>
-            <button type="submit" className="btn-register" disabled={!pw || busy}>
-              {busy ? '확인 중...' : '확인'}
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-// ─── 관리자 설정 — 통계 암호 재설정 ──────────────────────────────────
-// 현재 암호는 보여줄 수 없다(해시라 되돌릴 수 없다). 새로 정하는 것만 된다.
-function StatsPasswordSection({ offline }) {
-  const [pw, setPw] = useState('')
-  const [pw2, setPw2] = useState('')
-  const [msg, setMsg] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function save() {
-    // 한 번만 받으면 오타가 그대로 저장되고, 되돌릴 수도 확인할 수도 없다.
-    if (pw !== pw2) { setError('두 칸이 다릅니다'); return }
-    if (pw.trim().length < 4) { setError('암호는 4자 이상이어야 합니다'); return }
-    setBusy(true); setError(''); setMsg('')
-    try {
-      await setStatsPassword(pw)
-      setPw(''); setPw2(''); setMsg('통계 암호를 바꿨습니다.')
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="dm-admin-section">
-      <div className="dm-note-section__header"><h4>통계 화면 암호</h4></div>
-      <p className="dm-empty">
-        통계 탭에 들어갈 때 묻는 암호입니다. 지금 암호는 볼 수 없고 새로 정하는 것만 됩니다.
-      </p>
-      {error && <p role="alert" className="field__error">{error}</p>}
-      {msg && <p className="field__hint field__hint--ok">{msg}</p>}
-      <div className="dm-settings-list">
-        <div className="dm-settings-row">
-          <span className="dm-settings-row__label">새 암호</span>
-          <input
-            type="password" inputMode="numeric" className="field__input dm-settings-row__input"
-            value={pw} onChange={(e) => { setPw(e.target.value); setError(''); setMsg('') }}
-          />
-        </div>
-        <div className="dm-settings-row">
-          <span className="dm-settings-row__label">한 번 더</span>
-          <input
-            type="password" inputMode="numeric" className="field__input dm-settings-row__input"
-            value={pw2} onChange={(e) => { setPw2(e.target.value); setError(''); setMsg('') }}
-          />
-        </div>
-        <div className="dm-settings-row">
-          <span className="dm-settings-row__label" />
-          <button type="button" className="btn-register" onClick={save} disabled={offline || busy || !pw || !pw2}>
-            {busy ? '저장 중...' : '암호 바꾸기'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── 관리자 설정 — 환자 삭제 ──────────────────────────────────────────
 // 옛 '더미 환자 정리'(자동 판정)를 걷어내고, 검색해서 사람이 골라 지우는 방식으로 바꿨다.
@@ -4661,12 +4559,8 @@ function App() {
   // 직전 방문 증상(읽기전용 상기용). 진행중 상세를 열 때만 채운다.
   const [prevVisitSymptoms, setPrevVisitSymptoms] = useState([])
   const [activeTab, setActiveTab] = useState('all')
-  // 통계 잠금. 탭을 벗어나면 다시 잠근다 — 한 번 풀고 계속 열려 있으면 잠금이 아니다.
-  // effect가 아니라 탭을 바꾸는 자리에서 끈다(setState-in-effect 규칙에 걸리지 않게).
-  const [statsUnlocked, setStatsUnlocked] = useState(false)
   function changeTab(id) {
     setActiveTab(id)
-    if (id !== 'stats') setStatsUnlocked(false)
   }
   // 탭 전환 시 좌/우 슬라이드 (요소 재마운트 없이 WAAPI로 — 뷰의 데이터/상태 유지)
   useEffect(() => {
@@ -6448,7 +6342,7 @@ function App() {
       </div>
 
       <nav className="tabs">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => canSeeTab(account?.role, tab.id)).map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -6461,8 +6355,9 @@ function App() {
       </nav>
 
       {/* 환자 검색 — 베드가 있는 탭에서만. 이용기록·환자조회·통계·데이터관리에서는
-          고른 환자를 놓을 자리가 없어 배정이 성립하지 않는다. */}
-      {ROOM_TABS.some((t) => t.id === activeTab) && (
+          고른 환자를 놓을 자리가 없어 배정이 성립하지 않는다.
+          열람 계정(viewer)은 배정을 못 하므로 검색바 자체를 숨긴다. */}
+      {ROOM_TABS.some((t) => t.id === activeTab) && canEdit(account?.role) && (
         <PatientSearchBar onPick={handlePickSearchedPatient} disabled={offline} />
       )}
 
@@ -6550,9 +6445,8 @@ function App() {
           onInitialChartConsumed={() => setPatientViewSeed(null)}
         />
       ) : activeTab === 'stats' ? (
-        statsUnlocked
-          ? <Stats rows={activeHistory} now={now} />
-          : <StatsLock onUnlock={() => setStatsUnlocked(true)} onCancel={() => changeTab('all')} />
+        // 통계는 암호 폐지 — manager/admin만 탭 진입(위 canSeeTab). 방어적으로 한 번 더 확인.
+        canSeeStats(account?.role) ? <Stats rows={activeHistory} now={now} /> : null
       ) : activeTab === 'datamanage' ? (
         <DataManageView
           allHistory={history}

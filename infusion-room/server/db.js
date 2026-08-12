@@ -83,6 +83,39 @@ if (!patientColumns.includes('gender')) {
   db.exec('ALTER TABLE patients ADD COLUMN gender TEXT')
 }
 
+// ─── 권한 4단계 확장 (2026-08) ────────────────────────────────────────
+// role을 viewer/staff/manager/admin 4단계로. 기존 CHECK(role IN ('staff','admin'))가
+// viewer/manager 삽입을 막으므로 accounts 테이블을 새 CHECK로 1회 재작성한다
+// (SQLite는 CHECK를 ALTER로 못 바꾼다 — 표준 절차: 새 표 만들고 복사 후 교체).
+// FK가 accounts.id를 참조하므로 재작성 동안 foreign_keys를 끈다(id는 그대로 보존 → 참조 유지).
+// PRAGMA foreign_keys는 트랜잭션 안에서 안 먹으므로 토글은 트랜잭션 바깥에서 한다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'accounts_role_4tier_260812'").get()) {
+  db.pragma('foreign_keys = OFF')
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE accounts_new (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT    NOT NULL UNIQUE,
+        display_name  TEXT    NOT NULL,
+        password_hash TEXT    NOT NULL,
+        role          TEXT    NOT NULL DEFAULT 'staff'
+                              CHECK (role IN ('viewer','staff','manager','admin')),
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+      INSERT INTO accounts_new (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+        SELECT id, username, display_name, password_hash, role, is_active, created_at, updated_at FROM accounts;
+      DROP TABLE accounts;
+      ALTER TABLE accounts_new RENAME TO accounts;
+    `)
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('accounts_role_4tier_260812', '1', Date.now())
+  })()
+  db.pragma('foreign_keys = ON')
+  console.log('[db] 권한 4단계 확장 — accounts에 viewer/manager 역할 허용')
+}
+
 // 구 환자 메모는 성격상 기저질환 정본에 가깝다(차트별 영구) → 1회 이관한다.
 // patient_memos는 지우지 않는다 — 이관이 잘못됐을 때 돌아갈 원본이다.
 // 이미 값이 있는 정본은 건드리지 않는다(COALESCE 아니라 IS NULL 조건).

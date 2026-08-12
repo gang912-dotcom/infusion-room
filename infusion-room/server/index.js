@@ -18,7 +18,7 @@ import adminRouter from './routes/admin.js'
 import adminOrdersRouter from './routes/adminOrders.js'
 import chatRouter, { adminChatRouter } from './routes/chat.js'
 import { statsRouter, statsAdminRouter } from './routes/statsLock.js'
-import { requireAuth, requireAdmin } from './middleware/requireAuth.js'
+import { requireAuth, requireAdmin, blockViewerWrites } from './middleware/requireAuth.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
 
 const app = express()
@@ -31,6 +31,9 @@ app.use(cookieParser())
 app.use('/api', authRouter)
 
 app.use('/api', requireAuth)
+// 열람 전용(viewer)의 쓰기(POST/PATCH/DELETE)를 여기서 일괄 차단한다 — 라우터마다 막지 않고
+// 한 곳에서. 읽기는 GET이라 통과, 편집만 403. (admin 라우트는 아래 requireAdmin이 또 막는다.)
+app.use('/api', blockViewerWrites)
 app.use('/api', boardRouter)
 app.use('/api', patientsRouter)
 app.use('/api', sessionsRouter)
