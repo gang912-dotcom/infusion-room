@@ -442,7 +442,9 @@ function formatDurationClock(minutes) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-function DurationControls({ minutes, onAdjust, remainingMs }) {
+// readOnly(열람 계정): 남은 시간 계기는 그대로 보여주고 ±조정 버튼만 뺀다.
+// 시간 자체가 상황판의 핵심 정보라 통째로 숨기면 상세를 열 이유가 사라진다.
+function DurationControls({ minutes, onAdjust, remainingMs, readOnly = false }) {
   // remainingMs가 전달되면 남은 시간 표시, 아니면 총 시간 표시
   const displayLabel = remainingMs !== undefined ? '남은 시간' : '예상 소요시간'
   const remaining = remainingMs !== undefined
@@ -459,6 +461,7 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
       <p className={`duration__display${isExpired ? ' duration__display--expired' : ''}`}>
         {displayClock}
       </p>
+      {!readOnly && (
       <div className="duration__controls">
         <div className="duration__row duration__row--plus">
           <button
@@ -507,6 +510,7 @@ function DurationControls({ minutes, onAdjust, remainingMs }) {
           </button>
         </div>
       </div>
+      )}
     </div>
   )
 }
@@ -5008,6 +5012,9 @@ function App() {
   const neededClass = (field) => `field__input${assignHighlight === field ? ' field__input--needed' : ''}`
 
   const isVacant = currentBed?.status === 'vacant'
+  // 열람 계정 — 베드 상세는 열리되 편집 진입로(종료·라운딩·처방·정보수정 등)를 전부 숨긴다.
+  // 서버가 이미 쓰기를 403으로 막으므로 이건 보안이 아니라 "누를 게 없게" 하는 UX다.
+  const viewerMode = !canEdit(account?.role)
   const isReserved = currentBed?.status === 'reserved'
   const isInProgress = currentBed?.status === 'in-progress'
   const currentBedIsWarning = isInProgress ? getBedProgress(currentBed, now).isWarning : false
@@ -5057,7 +5064,7 @@ function App() {
         className="field__input"
         value={String(currentBed.lineStaffId ?? '')}
         onChange={(e) => handleChangeStaff({ line_staff_id: Number(e.target.value) })}
-        disabled={offline}
+        disabled={offline || viewerMode}
       >
         <option value="" disabled>{staffList.length ? '선택' : '직원 목록 불러오는 중...'}</option>
         {staffList.map((st) => (
@@ -5075,7 +5082,7 @@ function App() {
         className="field__input"
         value={String(currentBed.mixStaffId)}
         onChange={(e) => handleChangeStaff({ mix_staff_id: Number(e.target.value) })}
-        disabled={offline}
+        disabled={offline || viewerMode}
       >
         {staffList.map((st) => (
           <option key={st.id} value={st.id}>{st.name}</option>
@@ -5091,7 +5098,7 @@ function App() {
         className="field__input"
         value={currentBed.examRoom ?? ''}
         onChange={(e) => handleChangeExamRoom(e.target.value)}
-        disabled={offline}
+        disabled={offline || viewerMode}
       >
         {/* 진료실 필수화 이전에 배정된 세션은 값이 비어 있다 — 그 상태를 보여주되
             다시 '선택'으로 되돌리지는 못하게 한다(서버도 비우기를 400으로 막는다). */}
@@ -6744,17 +6751,19 @@ function App() {
                       {currentBed.examRoom ? `${currentBed.examRoom}진료실 · ` : ''}
                       라인 담당 {currentBed.lineStaff} · 배정 {formatHour24(currentBed.assignedAt)}
                     </span>
-                    <div className="bed-detail-summary__meta-actions">
-                      <button
-                        type="button"
-                        className="btn-move-bed"
-                        onClick={() => setReservedEditOpen((open) => !open)}
-                        disabled={offline}
-                        aria-expanded={reservedEditOpen}
-                      >
-                        {reservedEditOpen ? '접기' : '수정'}
-                      </button>
-                    </div>
+                    {!viewerMode && (
+                      <div className="bed-detail-summary__meta-actions">
+                        <button
+                          type="button"
+                          className="btn-move-bed"
+                          onClick={() => setReservedEditOpen((open) => !open)}
+                          disabled={offline}
+                          aria-expanded={reservedEditOpen}
+                        >
+                          {reservedEditOpen ? '접기' : '수정'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -6770,6 +6779,10 @@ function App() {
                   </div>
                 )}
 
+                {/* 열람 계정은 투여를 시작할 수 없다 — 담당자 지정·소요시간·시작 버튼을 통째로 뺀다.
+                    (아직 값이 없는 입력칸이라 남겨둬도 보여줄 정보가 없다.) */}
+                {!viewerMode && (
+                  <>
                 <label className="field">
                   <span className="field__label">믹스 담당자</span>
                   <select
@@ -6803,9 +6816,12 @@ function App() {
                 >
                   투여 시작
                 </button>
+                  </>
+                )}
 
                 {/* 처방 작성은 투여 시작과 독립이다 — 예약 상태에서도 먼저 열 수 있다.
-                    다만 주 동선이 아니라 아래로 내렸다. */}
+                    다만 주 동선이 아니라 아래로 내렸다.
+                    기록지는 읽기라 열람 계정도 본다. 처방 작성은 편집이라 뺀다. */}
                 <div className="rec-block__actions">
                   <button
                     type="button"
@@ -6815,24 +6831,28 @@ function App() {
                   >
                     수액간호기록지
                   </button>
-                  <button
-                    type="button"
-                    className="dm-note-btn"
-                    onClick={() => openPrescriptionModal()}
-                    disabled={offline}
-                  >
-                    처방 작성
-                  </button>
+                  {!viewerMode && (
+                    <button
+                      type="button"
+                      className="dm-note-btn"
+                      onClick={() => openPrescriptionModal()}
+                      disabled={offline}
+                    >
+                      처방 작성
+                    </button>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  className="btn-remove-patient-link"
-                  onClick={() => setRemovePatientConfirm(true)}
-                  disabled={offline}
-                >
-                  배정 취소
-                </button>
+                {!viewerMode && (
+                  <button
+                    type="button"
+                    className="btn-remove-patient-link"
+                    onClick={() => setRemovePatientConfirm(true)}
+                    disabled={offline}
+                  >
+                    배정 취소
+                  </button>
+                )}
               </div>
             ) : (
               /* 배정 상세는 한 칸, 진행중 상세는 2단이지만 왼쪽 칸의 모습은 같아야 한다.
@@ -6843,7 +6863,7 @@ function App() {
                   <div className="bed-detail-summary__patient">
                     <span className="bed-detail-summary__name">{currentBed.patientName}</span>
                     <span className="bed-detail-summary__chart">차트 {currentBed.chartNumber}</span>
-                    {isInProgress && (
+                    {isInProgress && !viewerMode && (
                       <button
                         type="button"
                         className="btn-edit-patient"
@@ -6860,7 +6880,7 @@ function App() {
                       {formatHour24(currentBed.startTime)} · 진행{' '}
                       {getBedProgress(currentBed, now).progress}%
                     </span>
-                    {isInProgress && (
+                    {isInProgress && !viewerMode && (
                       <div className="bed-detail-summary__meta-actions">
                         <button
                           type="button"
@@ -6922,7 +6942,8 @@ function App() {
                   </div>
                 )}
 
-                {/* 기록지는 진행중·완료 모두에서 연다. 완료면 종료 시 얼린 스냅샷이 나온다. */}
+                {/* 기록지는 진행중·완료 모두에서 연다. 완료면 종료 시 얼린 스냅샷이 나온다.
+                    읽기라 열람 계정도 그대로 본다 — 옆의 처방 작성만 뺀다. */}
                 <div className="rec-block__actions">
                   <button
                     type="button"
@@ -6932,14 +6953,16 @@ function App() {
                   >
                     수액간호기록지
                   </button>
-                  <button
-                    type="button"
-                    className="dm-note-btn"
-                    onClick={() => openPrescriptionModal()}
-                    disabled={offline}
-                  >
-                    처방 작성
-                  </button>
+                  {!viewerMode && (
+                    <button
+                      type="button"
+                      className="dm-note-btn"
+                      onClick={() => openPrescriptionModal()}
+                      disabled={offline}
+                    >
+                      처방 작성
+                    </button>
+                  )}
                 </div>
 
                 {/* 셋 다 짧은 선택칸이다. 세로로 쌓으면 213px을 먹어 확인 버튼이 화면 밖으로
@@ -6964,6 +6987,7 @@ function App() {
                   <DurationControls
                     minutes={currentBed.durationMinutes}
                     onAdjust={adjustBedDuration}
+                    readOnly={viewerMode}
                     remainingMs={
                       currentBed.startTime && currentBed.durationMinutes
                         ? currentBed.startTime + currentBed.durationMinutes * 60000 - now
@@ -6975,7 +6999,7 @@ function App() {
                 {/* 라운딩·증상 기록 버튼은 오른쪽 기록 패널 헤더로 옮겼다. */}
 
                 <div className="detail-footer-actions">
-                  {isInProgress && (
+                  {isInProgress && !viewerMode && (
                     <button
                       type="button"
                       className="btn-register"
@@ -7006,7 +7030,7 @@ function App() {
                     <section className="rec-block">
                       <div className="rec-block__head">
                         <h3 className="rec-block__title">특이사항(기저질환)</h3>
-                        {!specialNoteEditing && (
+                        {!specialNoteEditing && !viewerMode && (
                           <button
                             type="button"
                             className="dm-note-btn"
@@ -7056,7 +7080,7 @@ function App() {
                     <section className="rec-block">
                       <div className="rec-block__head">
                         <h3 className="rec-block__title">당일 메모</h3>
-                        {!dayMemoEditing && (
+                        {!dayMemoEditing && !viewerMode && (
                           <button
                             type="button"
                             className="dm-note-btn"
@@ -7107,6 +7131,7 @@ function App() {
                     <section className="rec-block">
                       <div className="rec-block__head">
                         <h3 className="rec-block__title">금일 기록</h3>
+                        {!viewerMode && (
                         <div className="rec-block__actions">
                           {/* 처방 작성 버튼은 왼쪽 수액간호기록지 옆으로 옮겼다. */}
                           <button
@@ -7137,6 +7162,7 @@ function App() {
                             바이탈
                           </button>
                         </div>
+                        )}
                       </div>
                       {currentBedEvents.length === 0 ? (
                         <p className="rec-empty">오늘 기록이 아직 없습니다</p>
@@ -7153,6 +7179,7 @@ function App() {
                               </div>
                               <div className="rec-item__foot">
                                 <span className="rec-item__sub" />
+                                {!viewerMode && (
                                 <div className="rec-item__actions">
                                   <button
                                     type="button"
@@ -7175,6 +7202,7 @@ function App() {
                                     삭제
                                   </button>
                                 </div>
+                                )}
                               </div>
                             </li>
                           ))}
