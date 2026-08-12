@@ -235,7 +235,9 @@ const ORDER_SEED = [
 
   { code: 'ns50', label: 'n/s 50', group: '독감' },
   { code: 'peramiflu', label: '페라미플루', group: '독감' },
-  { code: 'peravit', label: '페라비트주', group: '독감' },
+  // EMR 등록코드 perami4(청구코드 659901991) = '페라미비르주(주사)'.
+  // 처음엔 '페라비트주'로 옮겨 적었다 — 실물 명칭이 아니다(아래 peravit_label_fix가 정정한다).
+  { code: 'peravit', label: '페라미비르주', group: '독감' },
   { code: 'mpc_flu', label: 'MPC FILTER SET', group: '독감' },
 
   { code: 'distilled', label: '증류수', group: '증류수', freeText: true },
@@ -752,6 +754,103 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'stats_password_hash'").get(
   db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
     .run('stats_password_hash', bcrypt.hashSync('8058', 10), Date.now())
   console.log('[db] 통계 화면 암호 초기값(8058) 설정')
+}
+
+// ─── '페라비트주' → '페라미비르주' 표기 정정 (2026-08-12) ────────────────
+// 3a단계에서 종이 목록을 옮겨 적을 때 실물 명칭을 잘못 썼다. 원장님 EMR의
+// 등록코드 perami4 / 청구코드 659901991 줄이 '페라미비르주(주사)'다.
+// (같은 독감 그룹의 peramiflu '페라미플루'는 다른 항목이라 손대지 않는다.)
+//
+// 알려진 오기일 때만 바꾼다 — 관리자가 이미 손으로 고쳐 뒀거나 다른 이름으로 바꿔
+// 쓰고 있다면 그 편집을 덮으면 안 된다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'peravit_label_fix'").get()) {
+  db.transaction(() => {
+    const WRONG = ['페라비트주', '페라미비트주', '페라비르주']
+    const changed = db.prepare(
+      `UPDATE order_items SET label = '페라미비르주'
+       WHERE code = 'peravit' AND label IN (${WRONG.map(() => '?').join(',')})`,
+    ).run(...WRONG).changes
+
+    // 종료된 세션의 기록지는 라벨 문자열이 스냅샷에 굳어 있다(lib/record.js). 약 이름이
+    // 틀린 채로 인쇄되면 안 되므로 여기도 고친다 — 다만 orders 배열의 label 자리만
+    // 정확히 짚는다(자유 텍스트 통째 치환은 특이사항·메모까지 건드린다).
+    const like = WRONG.map(() => 'record_snapshot LIKE ?').join(' OR ')
+    const snaps = db.prepare(`SELECT id, record_snapshot FROM sessions WHERE ${like}`)
+      .all(...WRONG.map((w) => `%${w}%`))
+    const setSnap = db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?')
+    let fixedSnaps = 0
+    for (const s of snaps) {
+      let doc
+      try { doc = JSON.parse(s.record_snapshot) } catch { continue } // 못 읽는 건 손대지 않는다
+      if (!Array.isArray(doc?.orders)) continue
+      let touched = false
+      for (const o of doc.orders) {
+        if (WRONG.includes(o?.label)) { o.label = '페라미비르주'; touched = true }
+      }
+      if (touched) { setSnap.run(JSON.stringify(doc), s.id); fixedSnaps++ }
+    }
+
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('peravit_label_fix', `items:${changed} snapshots:${fixedSnaps}`, Date.now())
+    console.log(`[db] 페라미비르주 표기 정정: 항목 ${changed}개, 기록지 스냅샷 ${fixedSnaps}건`)
+  })()
+}
+
+// ─── 묶음처방 2종 추가 (2026-08-12) ─────────────────────────────────────
+// 원장님 EMR '묶음코드 등록 및 수정' 화면 사진 2장을 옮긴 것이다. 매핑 규칙은 위
+// bundle_add_260806 머리말과 같다. 이번 사진에서 처음 나온 줄은 둘이다:
+//   dw110(5%포도당키트주사 110mL) → dw110  ·  cin0(지씨치옥트산) → thioctacid
+//   perami4(페라미비르주) → peravit
+// '연결=병명'인 줄(j101·j209·l238·e568)은 진단코드라 처방이 아니다.
+// ⚠️ 수량은 사진의 '용량' 칸 판독값이다 — 원본 대조 전에는 확정이 아니다.
+const BUNDLE_ADD_260812 = [
+  // 110-10(부신기능저하증 110)과 견주면 후리아민이 빠지고 치옥트산4·DW110이 붙은 형태다.
+  { emr: '110-105', name: '부신기능저하증+치옥트산', items: [
+    { code: 'ns', dose: '110' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '5g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6', qty: 3 }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'lainec', qty: 4 }, { code: 'thioctacid', qty: 4 }, { code: 'dw110' },
+    { code: 'mpc_basic', qty: 2 },
+  ] },
+  // EMR 묶음명칭은 '성인독감수액 (페라비르주포함)'인데, 정작 그 줄의 명칭은 '페라미비르주'다.
+  // 위 표기 정정과 같은 이름으로 맞춘다.
+  // 소아수액(독감)의 페라미플루와 달리 희석액 n/s 50 줄이 사진에 없다 — 넣지 않는다.
+  { emr: '200-6', name: '성인독감수액 (페라미비르주 포함)', items: [
+    { code: 'ns', dose: '180' }, { code: 'nac' }, { code: 'licorice' },
+    { code: 'merit', dose: '10g' }, { code: 'meganesium' }, { code: 'panbicomp' },
+    { code: 'b6' }, { code: 'b12' }, { code: 'gcbbon' },
+    { code: 'denogan', qty: 2 }, { code: 'ord_basic' }, { code: 'peravit' },
+    { code: 'mpc_basic', qty: 2 },
+  ] },
+]
+
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260812'").get()) {
+  db.transaction(() => {
+    // 항목코드가 카탈로그에 없으면 조용히 빈 묶음이 된다 — 먼저 막는다.
+    const known = new Set(db.prepare('SELECT code FROM order_items').all().map((r) => r.code))
+    for (const b of BUNDLE_ADD_260812) {
+      for (const it of b.items) {
+        if (!known.has(it.code)) throw new Error(`묶음 ${b.emr}: 없는 항목코드 ${it.code}`)
+      }
+    }
+    const exists = db.prepare('SELECT 1 FROM order_bundles WHERE emr_code = ?')
+    const insBundle = db.prepare('INSERT INTO order_bundles (name, emr_code, sort_order) VALUES (?, ?, ?)')
+    const insItem = db.prepare(
+      'INSERT INTO order_bundle_items (bundle_id, item_code, dose, qty) VALUES (?, ?, ?, ?)',
+    )
+    let next = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 m FROM order_bundles').get().m
+    const made = []
+    for (const b of BUNDLE_ADD_260812) {
+      // 이미 있는 코드는 건너뛴다 — 관리자가 손으로 만들어 뒀을 수 있고, 덮으면 편집이 날아간다.
+      if (exists.get(b.emr)) continue
+      const { lastInsertRowid } = insBundle.run(b.name, b.emr, next++)
+      for (const it of b.items) insItem.run(lastInsertRowid, it.code, it.dose ?? '', it.qty ?? 1)
+      made.push(`${b.emr}(${b.items.length}개)`)
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('bundle_add_260812', made.join(' · ') || '대상 없음', Date.now())
+    console.log('[db] 묶음처방 추가:', made.join(' · ') || '대상 없음')
+  })()
 }
 
 export default db
