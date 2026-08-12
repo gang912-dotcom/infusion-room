@@ -587,10 +587,24 @@
   color: var(--text-primary);
 }
 
+/* 번호 범위(21–27번)는 배경으로 물러난다. 예전엔 '사용중'까지 같은 13px 회색이라
+   방마다 몇 자리가 찼는지가 안 읽혔다. */
 .room-section__meta {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+}
+
+/* 방 이름(17px/800)과 번호 범위(13px/500) 사이에 앉힌다 — 이름보다 크면 방 제목이
+   무엇인지가 흐려지고, 범위와 같으면 강조가 아니다. 카드 격자를 안 건드리도록
+   줄 높이는 이름이 정한 채로 둔다(15px은 17px 줄 안에 들어간다). */
+.room-section__used {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.room-section__used b {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─── 베드 그리드 ────────────────────────────────────────────── */

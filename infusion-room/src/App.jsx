@@ -6522,11 +6522,14 @@ function App() {
                       ⌄
                     </span>
                     <span className="room-section__name">{room.label}</span>
+                    {/* 이 줄에서 실제로 읽는 값은 '몇 자리가 차 있나' 하나다. 번호 범위는
+                        자리를 알려주는 배경이라 같은 톤으로 두면 둘이 섞여 아무것도 안 읽힌다.
+                        '기타'는 번호 범위가 뜻이 없다 — 1~10번이라는 자리가 실재하지 않는다. */}
                     <span className="room-section__meta">
-                      {/* '기타'는 번호 범위가 뜻이 없다 — 1~10번이라는 자리가 실재하지 않는다. */}
-                      {NON_BED_ROOMS.has(room.id)
-                        ? `${occupiedCount}곳 사용중`
-                        : `${firstNumber}–${lastNumber}번 · ${occupiedCount} 사용중`}
+                      {!NON_BED_ROOMS.has(room.id) && `${firstNumber}–${lastNumber}번 · `}
+                      <span className="room-section__used">
+                        <b>{occupiedCount}</b>{NON_BED_ROOMS.has(room.id) ? '곳 사용중' : ' 사용중'}
+                      </span>
                     </span>
                   </button>
                   {!isCollapsed && (
