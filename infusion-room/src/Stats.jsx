@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  inRange, byDay, byDowHour, byRoom, byExamRoom, byStaff, topRevisits, summary,
-  presetRange, fmtMinutes, startOfDay, DOW_LABEL,
+  inRange, byDay, hourProfile, byRoom, byExamRoom, byStaff, topRevisits, summary,
+  presetRange, fmtMinutes, startOfDay,
 } from './stats.js'
 import './stats.css'
 
@@ -12,7 +12,8 @@ import './stats.css'
 //  - 추이(시간에 따른 변화) → 영역, 단일 계열. 수액실별로 쌓지 않는다 — 부분/전체는 막대의 일이다.
 //  - 수액실별·담당자별(이름 비교) → 가로 막대, 전부 같은 한 색. 막대 길이가 이미 크기를
 //    말하는데 색까지 값으로 칠하면 정체성 채널을 낭비한다.
-//  - 요일×시간대(크기의 격자) → 히트맵, 한 색 순차 램프.
+//  - 시간대 이용 분포(하루의 모양) → 영역 곡선 하나 + 요일 세그먼트. 요일×시간대 격자를
+//    색으로 칠하던 히트맵을 걷어낸 자리다 — 크기를 묻는 그림은 색보다 높이가 정확하다.
 //  - 재방문 TOP → 표. 열 개짜리 순위는 차트로 만들 이유가 없다.
 //
 // 색은 눈으로 고르지 않고 검증기를 돌렸다(라이트 #ffffff / 다크 #1c1c1c 카드 면 각각).
@@ -24,9 +25,6 @@ const PRESETS = [
   ['d30', '최근 30일'],
   ['d90', '최근 90일'],
 ]
-
-// 히트맵 5단계. 순차 램프는 '연할수록 적다'가 뜻이라 단계 수가 적어야 읽힌다.
-const HEAT_STEPS = 5
 
 function useWidth() {
   const ref = useRef(null)
@@ -56,7 +54,7 @@ export default function Stats({ rows, now }) {
   const ranged = useMemo(() => inRange(rows, range.from, range.to), [rows, range])
   const sum = useMemo(() => summary(ranged), [ranged])
   const days = useMemo(() => byDay(ranged, range.from, range.to), [ranged, range])
-  const heat = useMemo(() => byDowHour(ranged), [ranged])
+  const profile = useMemo(() => hourProfile(ranged), [ranged])
   const rooms = useMemo(() => byRoom(ranged), [ranged])
   const examRooms = useMemo(() => byExamRoom(ranged), [ranged])
   const revisits = useMemo(() => topRevisits(ranged), [ranged])
@@ -137,7 +135,7 @@ export default function Stats({ rows, now }) {
 
           <TrendCard days={days} />
 
-          <HeatCard heat={heat} />
+          <HourProfileCard profile={profile} />
 
           <div className="sv-stats__cols">
             <BarCard
@@ -292,74 +290,187 @@ function TrendCard({ days }) {
   )
 }
 
-// ─── 요일 × 시간대 히트맵 ────────────────────────────────────────────
-// 이 앱 어디에도 없던 그림이다. "언제 사람이 몰리나"는 인력 배치를 바꾸는 유일한 축인데,
-// 지금까지는 30칸을 눈으로 훑는 것 말고는 답할 방법이 없었다.
-function HeatCard({ heat }) {
+// ─── 시간대 이용 분포 ────────────────────────────────────────────────
+// "언제 사람이 몰리나"는 인력 배치를 바꾸는 유일한 축이다. 처음엔 요일×시간대 77칸을
+// 색 5단계로 칠한 히트맵이었는데, 값이 칸 안에 숨어서 칸마다 커서를 올려야 답이 나왔고
+// 테마를 바꾸면 램프 방향까지 뒤집혔다. 크기를 묻는 그림은 색보다 높이가 정확하다 —
+// 하루의 모양을 곡선 하나로 두고 요일을 갈아 끼우는 편이 훨씬 빨리 읽힌다.
+//
+// 축은 요일을 바꿔도 고정이고(stats.js의 max), 요일을 고르면 '전체 평균' 기준선이
+// 회색으로 함께 남는다 — 곡선 하나만 떠 있으면 그게 높은 건지 낮은 건지 알 수가 없다.
+function HourProfileCard({ profile }) {
+  const [ref, w] = useWidth()
   const [hover, setHover] = useState(null)
   const [table, setTable] = useState(false)
-  const { hours, grid, max } = heat
+  const [picked, setPicked] = useState(null) // null = 전체
 
-  const step = (v) => (v <= 0 ? 0 : Math.min(HEAT_STEPS, Math.ceil((v / max) * HEAT_STEPS)))
+  const { hours, dows, all, max } = profile
+  const open = dows.filter((d) => d.days > 0) // 휴진 요일(일요일)은 칩 자체를 안 만든다
+  // 기간을 좁히면 골라둔 요일이 사라질 수 있다 — 그때는 조용히 전체로 돌아간다.
+  const dow = open.some((d) => d.dow === picked) ? picked : null
+  const active = dow == null ? all : open.find((d) => d.dow === dow)
+
+  const H = 200
+  const PAD = { t: 16, r: 12, b: 26, l: 40 }
+  const iw = Math.max(0, w - PAD.l - PAD.r)
+  const ih = H - PAD.t - PAD.b
+
+  // 눈금은 정수 간격이다(niceTicks). 평균이 0.4건이어도 축은 0·1로 서는 게 맞다 —
+  // 소수 눈금은 '0.25건 시작'처럼 셀 수 없는 수를 축에 적는 일이 된다.
+  const ticks = niceTicks(Math.max(max, 1), 4)
+  const top = ticks[ticks.length - 1]
+
+  const x = (i) => (hours.length <= 1 ? iw / 2 : (i / (hours.length - 1)) * iw)
+  const y = (v) => ih - (v / top) * ih
+  const toPath = (avg) => avg.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
+
+  const line = toPath(active.avg)
+  const area = `${line} L${x(hours.length - 1).toFixed(1)} ${ih} L${x(0).toFixed(1)} ${ih} Z`
+  const peakIdx = active.avg.reduce((best, v, i) => (v > active.avg[best] ? i : best), 0)
+
+  const onMove = useCallback((e) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    const px = e.clientX - box.left - PAD.l
+    const i = Math.round((px / iw) * (hours.length - 1))
+    setHover(Math.max(0, Math.min(hours.length - 1, i)))
+  }, [hours.length, iw, PAD.l])
 
   return (
     <section className="sv-vcard">
       <div className="sv-vcard__head">
-        <h3 className="sv-vcard__title">요일 × 시간대</h3>
-        <div className="sv-heat__legend" aria-hidden="true">
-          <span className="sv-heat__legend-label">적음</span>
-          {Array.from({ length: HEAT_STEPS }, (_, i) => (
-            <span key={i} className={`sv-heat__swatch sv-heat__swatch--${i + 1}`} />
+        <h3 className="sv-vcard__title">시간대 이용 분포</h3>
+        {/* 요일 고르기는 기간 고르기와 같은 일이라 같은 세그먼트 화법을 쓴다. */}
+        <div className="sv-seg-group sv-seg-group--sm" role="group" aria-label="요일">
+          <button
+            type="button"
+            className={`sv-seg${dow == null ? ' sv-seg--on' : ''}`}
+            onClick={() => setPicked(null)}
+            aria-pressed={dow == null}
+          >
+            전체
+          </button>
+          {open.map((d) => (
+            <button
+              key={d.dow}
+              type="button"
+              className={`sv-seg${dow === d.dow ? ' sv-seg--on' : ''}`}
+              onClick={() => setPicked(d.dow)}
+              aria-pressed={dow === d.dow}
+            >
+              {d.label}
+            </button>
           ))}
-          <span className="sv-heat__legend-label">많음</span>
         </div>
         <button type="button" className="sv-vcard__toggle" onClick={() => setTable((v) => !v)} aria-pressed={table}>
-          {table ? '격자 보기' : '표 보기'}
+          {table ? '그래프 보기' : '표 보기'}
         </button>
       </div>
 
-      <div className="sv-heat-wrap">
-        <table className={`sv-heat${table ? ' sv-heat--table' : ''}`}>
-          <caption className="sv-sr">요일과 시간대별 이용 시작 건수</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="sv-heat__corner"><span className="sv-sr">요일</span></th>
-              {hours.map((h) => <th key={h} scope="col" className="sv-heat__hour">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {DOW_LABEL.map((dow, r) => (
-              <tr key={dow}>
-                <th scope="row" className="sv-heat__dow">{dow}</th>
-                {hours.map((h, c) => {
-                  const v = grid[r][c]
-                  return (
-                    <td
-                      key={h}
-                      className={`sv-heat__cell sv-heat__cell--${step(v)}`}
-                      onMouseEnter={() => setHover({ dow, h, v })}
-                      onMouseLeave={() => setHover(null)}
-                      /* <title> 자식으로 두면 HTML title 요소로 렌더돼 문서 제목을 갈아치운다
-                         (탭 이름이 '토요일 20시 · 0건'이 됐다). 네이티브 툴팁은 속성으로 낸다. */
-                      title={`${dow}요일 ${h}시 · ${v}건`}
-                    >
-                      <span className="sv-heat__v">{v}</span>
-                    </td>
-                  )
-                })}
+      {table ? (
+        <div className="sv-vtable-wrap">
+          <table className="sv-vtable">
+            <caption className="sv-sr">시간대별 하루 평균 이용 시작 건수</caption>
+            <thead>
+              <tr>
+                <th scope="col">시간</th>
+                <th scope="col">전체</th>
+                {open.map((d) => <th key={d.dow} scope="col">{d.label}</th>)}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {hours.map((h, i) => (
+                <tr key={h}>
+                  <th scope="row">{h}시</th>
+                  <td>{fmtAvg(all.avg[i])}</td>
+                  {open.map((d) => <td key={d.dow}>{fmtAvg(d.avg[i])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="sv-plot" ref={ref}>
+          {w > 0 && (
+            <svg
+              width={w} height={H} className="sv-svg" role="img"
+              aria-label={`${active.label} 시간대 이용 분포. 가장 붐비는 시각 ${hours[peakIdx]}시, 하루 평균 ${fmtAvg(active.avg[peakIdx])}건 시작.`}
+              onMouseMove={onMove} onMouseLeave={() => setHover(null)}
+            >
+              <g transform={`translate(${PAD.l},${PAD.t})`}>
+                {ticks.map((t) => (
+                  <g key={t}>
+                    <line x1={0} x2={iw} y1={y(t)} y2={y(t)} className="sv-grid" />
+                    <text x={-8} y={y(t)} className="sv-axis sv-axis--y">{t.toLocaleString()}</text>
+                  </g>
+                ))}
 
-      <p className="sv-heat__note" role="status">
-        {hover
-          ? <><b>{hover.dow}요일 {hover.h}시</b> · {hover.v}건 시작</>
-          : '칸에 커서를 올리면 값이 나옵니다. 색은 시작 건수를 뜻합니다.'}
+                <path d={area} className="sv-area" />
+                <path d={line} className="sv-line" />
+
+                {/* 기준선 — 고른 요일이 전체와 견줘 높은지 낮은지를 말한다.
+                    면 없이 얇은 파선이라 앞의 곡선을 가리지 않는다. */}
+                {dow != null && <path d={toPath(all.avg)} className="sv-ref" />}
+
+                {/* 값은 최고점 하나만 직접 단다 — 점마다 달면 아무도 안 읽는다. */}
+                <circle cx={x(peakIdx)} cy={y(active.avg[peakIdx])} r={4.5} className="sv-dot" />
+                <text
+                  x={Math.min(iw - 4, Math.max(20, x(peakIdx)))}
+                  y={y(active.avg[peakIdx]) - 10}
+                  className="sv-peak"
+                  textAnchor={x(peakIdx) > iw - 50 ? 'end' : 'middle'}
+                >
+                  {hours[peakIdx]}시 {fmtAvg(active.avg[peakIdx])}건
+                </text>
+
+                {hover != null && (
+                  <>
+                    <line x1={x(hover)} x2={x(hover)} y1={0} y2={ih} className="sv-crosshair" />
+                    <circle cx={x(hover)} cy={y(active.avg[hover])} r={4.5} className="sv-dot sv-dot--hover" />
+                  </>
+                )}
+
+                <line x1={0} x2={iw} y1={ih} y2={ih} className="sv-baseline" />
+                {hours.map((h, i) => (
+                  // 11칸에 라벨을 전부 달면 12px 글자가 서로 붙는다 — 한 칸 걸러 단다.
+                  (i % 2 === 0) && <text key={h} x={x(i)} y={ih + 17} className="sv-axis sv-axis--x">{h}</text>
+                ))}
+              </g>
+            </svg>
+          )}
+          {hover != null && (
+            <div
+              className="sv-tip"
+              style={{ left: Math.min(Math.max(PAD.l + x(hover), 70), Math.max(70, w - 70)) }}
+            >
+              <b>{hours[hover]}시</b>
+              <span>{fmtAvg(active.avg[hover])}건</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="sv-vcard__foot">
+        {/* 표 보기에서는 범례를 뺀다 — 열 이름이 이미 어느 요일인지 말한다. */}
+        {dow != null && !table && (
+          <span className="sv-legend" aria-hidden="true">
+            <span className="sv-legend__item"><i className="sv-legend__key" />{active.label}요일</span>
+            <span className="sv-legend__item"><i className="sv-legend__key sv-legend__key--ref" />전체 평균</span>
+          </span>
+        )}
+        <span className="sv-vcard__hint">
+          {active.days
+            ? `하루 평균 건수 · ${active.label === '전체' ? '진료일' : `${active.label}요일`} ${active.days}일 기준`
+            : '이 기간에는 기록이 없습니다'}
+        </span>
       </p>
     </section>
   )
+}
+
+// 평균은 소수 첫째 자리까지. 딱 떨어지면 '.0'을 달지 않는다 — 하루만 조회하면 평균이
+// 곧 그날의 건수라, 거기 '12.0건'이라고 적히면 없던 정밀도가 있는 것처럼 읽힌다.
+function fmtAvg(v) {
+  return String(Math.round(v * 10) / 10)
 }
 
 // ─── 가로 막대 ───────────────────────────────────────────────────────

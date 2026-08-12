@@ -60,24 +60,56 @@ export function byDay(rows, fromMs, toMs) {
   return [...buckets.values()]
 }
 
-// ─── 요일 × 시간대 ───────────────────────────────────────────────────
+// ─── 시간대 이용 분포(요일별) ─────────────────────────────────────────
 // 시작 시각 기준이다 — "몇 시에 사람이 몰리나"를 묻는 것이라 끝난 시각은 답이 아니다.
-// 병원 운영시간은 오전 9시~오후 7시다. 그 밖의 칸은 늘 비어 있어 격자만 넓혔다.
-// 창 밖에서 시작된 기록은 이 표에 안 잡힌다(아래 col < 0). 그런 기록은 대개 종료를
-// 늦게 누른 것이라 '가장 붐빈 시간' 지표에서는 창을 걸지 않고 그대로 드러나게 둔다.
-export function byDowHour(rows, hourFrom = 9, hourTo = 19) {
+// 병원 운영시간은 오전 9시~오후 7시다. 창 밖에서 시작된 기록은 이 곡선에 안 잡힌다
+// (아래 col < 0). 그런 기록은 대개 종료를 늦게 누른 것이라 '가장 붐빈 시간' 지표에서는
+// 창을 걸지 않고 그대로 드러나게 둔다.
+//
+// 값은 합계가 아니라 '그 요일 하루 평균'이다. 조회 기간에 월요일이 5번, 토요일이 4번
+// 들어 있으면 합계끼리 겹쳐 보는 순간 월요일이 그냥 더 커 보인다 — 요일을 비교하는
+// 그림에서 그건 거짓말이다. 나누는 수는 달력 날짜가 아니라 '그 요일에 기록이 있던 날'
+// 이다(KPI의 진료일 기준과 같은 규칙 — 휴진이 평균을 끌어내리면 안 된다).
+export function hourProfile(rows, hourFrom = 9, hourTo = 19) {
   const hours = []
   for (let h = hourFrom; h <= hourTo; h++) hours.push(h)
-  const grid = DOW_LABEL.map(() => hours.map(() => 0))
-  let max = 0
+
+  const counts = DOW_LABEL.map(() => hours.map(() => 0))
+  const openDays = DOW_LABEL.map(() => new Set())
+
   for (const r of rows) {
     const d = new Date(r.startedAt)
+    // 진료일은 창과 무관하게 센다 — 9시 전에 시작한 한 건뿐인 날도 문을 연 날이다.
+    openDays[d.getDay()].add(dayKey(r.startedAt))
     const col = hours.indexOf(d.getHours())
     if (col < 0) continue
-    const v = ++grid[d.getDay()][col]
-    if (v > max) max = v
+    counts[d.getDay()][col]++
   }
-  return { hours, grid, max }
+
+  const dows = DOW_LABEL.map((label, i) => {
+    const days = openDays[i].size
+    return {
+      dow: i, label, days,
+      counts: counts[i],
+      avg: counts[i].map((c) => (days ? c / days : 0)),
+    }
+  })
+
+  // '전체'는 요일 평균들의 평균이 아니라 전 기간 합계 ÷ 전체 진료일이다. 평균의 평균은
+  // 적게 열린 요일(토요일 반나절 같은)을 다른 요일과 같은 무게로 세어 기준선을 띄운다.
+  const allDays = dows.reduce((n, d) => n + d.days, 0)
+  const allCounts = hours.map((_, c) => dows.reduce((n, d) => n + d.counts[c], 0))
+  const all = {
+    dow: null, label: '전체', days: allDays,
+    counts: allCounts,
+    avg: allCounts.map((c) => (allDays ? c / allDays : 0)),
+  }
+
+  // y 눈금은 모든 계열의 최댓값 하나로 고정한다. 고른 요일에 맞춰 축이 늘었다 줄면
+  // 곡선의 높이가 값이 아니라 축을 뜻하게 되어, 요일을 바꿔 봐도 비교가 안 된다.
+  const max = Math.max(0, ...dows.flatMap((d) => d.avg), ...all.avg)
+
+  return { hours, dows, all, max }
 }
 
 // ─── 단순 집계 ───────────────────────────────────────────────────────

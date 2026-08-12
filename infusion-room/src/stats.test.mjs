@@ -1,7 +1,7 @@
 // node src/v3/stats.test.mjs
 import assert from 'node:assert/strict'
 import {
-  inRange, byDay, byDowHour, byRoom, byStaff, topRevisits, summary,
+  inRange, byDay, hourProfile, byRoom, byStaff, topRevisits, summary,
   presetRange, fmtMinutes, dayKey, startOfDay, ROOM_KEYS, byExamRoom,
 } from './stats.js'
 import { EXAM_ROOMS } from './api.js'
@@ -42,19 +42,61 @@ const row = (over) => ({
   assert.equal(days[0].key, dayKey(T0))
 }
 
-// ── 요일 × 시간대: 시작 시각 기준 ────────────────────────────────────
+// ── 시간대 분포: 시작 시각 기준 · 하루 평균 ──────────────────────────
+const MONDAY = new Date(T0).getDay()
+const TUESDAY = (MONDAY + 1) % 7
+// dayOffset일 뒤 hour시에 시작해 두 시간 뒤 끝나는 기록
+const at = (dayOffset, hour) => row({
+  startedAt: T0 + dayOffset * DAY + hour * 3600_000,
+  endedAt: T0 + dayOffset * DAY + (hour + 2) * 3600_000,
+})
+
 {
-  // 10시에 시작해 다음 날 새벽에 끝나는 기록 — '시작'인 10시 칸에 잡혀야 한다.
-  const overnight = row({ startedAt: T0 + 22 * 3600_000, endedAt: T0 + DAY + 3600_000 })
-  const { hours, grid, max } = byDowHour([row({}), row({}), overnight])
-  const monday = new Date(T0).getDay()
-  assert.equal(grid[monday][hours.indexOf(10)], 2)
-  assert.equal(hours.includes(22), false)               // 22시는 창(9~19시) 밖이라 칸 자체가 없다
-  assert.equal(grid[monday].reduce((a, b) => a + b, 0), 2) // 그래서 그 기록은 어디에도 안 잡힌다
-  assert.equal(max, 2)
-  assert.equal(hours[0], 9)                             // 병원 운영시간 = 오전 9시~오후 7시
+  // 22시에 시작해 다음 날 새벽에 끝나는 기록 — 운영시간 창(9~19시) 밖이다.
+  const overnight = at(0, 22)
+  const { hours, dows, all, max } = hourProfile([at(0, 10), at(0, 10), at(7, 10), overnight])
+  const h10 = hours.indexOf(10)
+
+  assert.equal(hours[0], 9)                    // 병원 운영시간 = 오전 9시~오후 7시
   assert.equal(hours[hours.length - 1], 19)
   assert.equal(hours.length, 11)
+  assert.equal(hours.includes(22), false)      // 창 밖 시각은 칸 자체가 없고
+
+  const mon = dows[MONDAY]
+  assert.equal(mon.counts.reduce((a, b) => a + b, 0), 3) // 그 기록은 어디에도 안 잡힌다
+  assert.equal(mon.counts[h10], 3)
+  assert.equal(mon.days, 2)                    // 두 주의 월요일 — 창 밖 기록도 '연 날'로는 센다
+  assert.equal(mon.avg[h10], 1.5)              // 값은 합계가 아니라 하루 평균이다
+
+  // 기록이 없는 요일은 진료일이 0이라 화면이 칩 자체를 안 만든다.
+  assert.equal(dows[0].days, 0)
+  assert.equal(dows[0].avg.every((v) => v === 0), true)
+
+  // 전체 = 합계 ÷ 전체 진료일. 여기선 진료일이 월요일 이틀뿐이라 월요일과 같다.
+  assert.equal(all.days, 2)
+  assert.equal(all.avg[h10], 1.5)
+  assert.equal(max, 1.5)                       // y축은 모든 계열의 최댓값 하나로 고정
+}
+
+// 평균이 아니라 합계로 그리면 '많이 열린 요일'이 그냥 더 커 보인다 — 그걸 막는 규칙이다.
+{
+  const rows = [
+    at(0, 14), at(0, 14), at(7, 14), at(7, 14),  // 월요일: 이틀 동안 4건 → 하루 2건
+    at(1, 14), at(1, 14), at(1, 14),             // 화요일: 하루 동안 3건 → 하루 3건
+  ]
+  const { hours, dows, all } = hourProfile(rows)
+  const h14 = hours.indexOf(14)
+
+  assert.equal(dows[MONDAY].counts[h14], 4)
+  assert.equal(dows[TUESDAY].counts[h14], 3)
+  // 합계는 월요일이 크지만, 하루 평균으로 보면 화요일이 더 붐빈다.
+  assert.ok(dows[TUESDAY].avg[h14] > dows[MONDAY].avg[h14])
+  assert.equal(dows[MONDAY].avg[h14], 2)
+  assert.equal(dows[TUESDAY].avg[h14], 3)
+
+  // 전체는 '요일 평균들의 평균'(2.5)이 아니라 합계 7 ÷ 진료일 3이다.
+  assert.equal(all.days, 3)
+  assert.equal(all.avg[h14], 7 / 3)
 }
 
 // ── 단순 집계 ────────────────────────────────────────────────────────
