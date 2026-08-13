@@ -4424,14 +4424,14 @@
   margin:-4px -4px 0; padding:4px;
 }
 .msg-card__head:active{ cursor:grabbing }
-.msg-card__from{ font-weight:700; font-size:14px; color:var(--text-primary) }
+.msg-card__from{ font-weight:700; font-size:15px; color:var(--text-primary) }
 .msg-card__badge{
-  font-size:11px; font-weight:600; padding:2px 7px; border-radius:999px;
+  font-size:12px; font-weight:600; padding:2px 7px; border-radius:999px;
   color:var(--status-reserved); background:color-mix(in srgb, var(--status-reserved) 16%, transparent);
   border:1px solid color-mix(in srgb, var(--status-reserved) 45%, transparent);
 }
 .msg-card__body{
-  margin:0; font-size:14px; line-height:1.5; color:var(--text-primary);
+  margin:0; font-size:16px; line-height:1.55; color:var(--text-primary);
   white-space:pre-wrap; word-break:break-word;
   max-height:40vh; overflow-y:auto;
 }
@@ -4448,7 +4448,7 @@
 
 /* 세로 flex에서 눌려 잘리지 않게 — 보내기는 항상 온전한 높이로. */
 .msg-compose__send{ flex-shrink:0 }
-.msg-card__error{ margin:0; font-size:12px; color:var(--status-completed) }
+.msg-card__error{ margin:0; font-size:13px; color:var(--status-completed) }
 .msg-card__actions{ display:flex; gap:8px; justify-content:flex-end }
 
 /* 카드 면이 --panel-bg인데 --card-bg/--card-border는 카드 면(#1c1c1c) 기준 값이라
@@ -5188,7 +5188,7 @@
   user-select: none;
 }
 
-.chat-panel__title { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+.chat-panel__title { font-size: 14px; font-weight: 800; color: var(--text-primary); }
 
 .chat-panel__close {
   padding: 2px 6px;
@@ -5213,19 +5213,19 @@
 .chat-notice__text {
   flex: 1 1 100%;
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
   white-space: pre-wrap;
 }
 
 /* 공지 배경(틴트) 위에서는 --text-muted가 다크에서 3.89로 떨어진다 — 한 단계 밝은 값. */
-.chat-notice__by { font-size: 11px; color: var(--text-secondary); }
+.chat-notice__by { font-size: 12px; color: var(--text-secondary); }
 
 .chat-notice__edit,
 .chat-notice__add {
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);
   background: none;
@@ -5244,7 +5244,7 @@
   width: 100%;
   padding: 6px 8px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -5262,20 +5262,20 @@
   gap: 6px;
 }
 
-.chat-log__empty { margin: auto; font-size: 12px; color: var(--text-muted); }
+.chat-log__empty { margin: auto; font-size: 13px; color: var(--text-muted); }
 
 .chat-msg {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .chat-msg__who { font-weight: 800; color: var(--text-secondary); flex: none; }
 .chat-msg__body { color: var(--text-primary); word-break: break-word; white-space: pre-wrap; flex: 1 1 auto; min-width: 0; }
-.chat-msg__at { font-size: 10px; color: var(--text-muted); flex: none; }
+.chat-msg__at { font-size: 11px; color: var(--text-muted); flex: none; }
 
 /* 내 말은 이름을 강조해 눈으로 빠르게 가른다(말풍선까지 갈 필요는 없다 — 로그형 채팅이다).
    --solid-green은 '흰 글자를 얹는 배경'용이라 글자색으로 쓰면 다크에서 2.84로 무너진다.
@@ -5290,7 +5290,7 @@
 .chat-panel__error {
   margin: 0;
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--status-completed);
 }
 
@@ -5306,7 +5306,7 @@
   min-width: 0;
   padding: 6px 8px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -5318,7 +5318,7 @@
   flex: none;
   padding: 6px 12px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-secondary);
   background: var(--card-bg);
