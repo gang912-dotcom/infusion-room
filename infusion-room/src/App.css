@@ -5210,11 +5210,14 @@
   border-bottom: 1px solid var(--record-btn-border);
 }
 
+/* 볼드는 빼고 굵기 대신 틴트 배경으로 구분한다 — 14px 한글 볼드는 좁은 창에서
+   글자가 서로 붙어 뭉개져 보인다(같은 이유로 줄간격도 대화와 같은 1.5로 맞췄다). */
 .chat-notice__text {
   flex: 1 1 100%;
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--text-primary);
   white-space: pre-wrap;
 }
