@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
-import { QTY_MAX, roundQty } from '../lib/validation.js'
+import { DOSE_MAX_LENGTH, QTY_MAX, roundQty } from '../lib/validation.js'
 
 const router = Router()
 
@@ -23,6 +23,8 @@ function toItemPayload(row) {
     group_key: row.group_key,
     dose_options: row.dose_options ? row.dose_options.split(',') : null,
     free_text: row.free_text === 1,
+    // 체크·수량 옆에 붙는 용량 칸(페라미플루 mL). free_text와 달리 체크를 대체하지 않는다.
+    free_dose: row.free_dose === 1,
     sort_order: row.sort_order,
     // route 없이 보내면 IV/IM/SC 자동 체크가 화면에서 아무 일도 안 한다.
     route: row.route ?? null,
@@ -107,6 +109,9 @@ router.put('/sessions/:id/prescription', (req, res) => {
       return res.status(400).json({ error: `알 수 없는 오더 항목입니다: ${row?.code}` })
     }
     const dose = typeof row.dose === 'string' ? row.dose.trim() : ''
+    if (dose.length > DOSE_MAX_LENGTH) {
+      return res.status(400).json({ error: `용량은 ${DOSE_MAX_LENGTH}자를 넘을 수 없습니다: ${row.code}` })
+    }
     const key = `${row.code} ${dose}`
     if (seen.has(key)) {
       return res.status(400).json({ error: `같은 항목이 같은 용량으로 두 번 있습니다: ${row.code}` })

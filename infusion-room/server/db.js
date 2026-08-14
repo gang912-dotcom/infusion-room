@@ -142,6 +142,10 @@ const orderItemColumns = db.prepare('PRAGMA table_info(order_items)').all().map(
 if (!orderItemColumns.includes('route')) {
   db.exec('ALTER TABLE order_items ADD COLUMN route TEXT')
 }
+// 용량 직접입력(2026-08-14) — 체크·수량은 그대로 두고 mL 칸을 하나 더 붙인다(페라미플루).
+if (!orderItemColumns.includes('free_dose')) {
+  db.exec('ALTER TABLE order_items ADD COLUMN free_dose INTEGER NOT NULL DEFAULT 0')
+}
 const bundleColumns = db.prepare('PRAGMA table_info(order_bundles)').all().map((c) => c.name)
 if (!bundleColumns.includes('emr_code')) {
   db.exec('ALTER TABLE order_bundles ADD COLUMN emr_code TEXT')
@@ -850,6 +854,19 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'bundle_add_260812'").get())
     db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
       .run('bundle_add_260812', made.join(' · ') || '대상 없음', Date.now())
     console.log('[db] 묶음처방 추가:', made.join(' · ') || '대상 없음')
+  })()
+}
+
+// ─── 페라미플루 용량 직접입력 켜기 (2026-08-14) ─────────────────────────
+// 소아는 체중에 따라 24mL 식으로 처방이 나온다 — 개수만으로는 적을 수가 없다.
+// 다른 항목은 건드리지 않는다. 필요하면 관리자가 마스터 설정에서 항목별로 켠다.
+// 한 번만 켠다 — 관리자가 다시 끈 것을 재부팅 때마다 되살리면 안 된다.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'peramiflu_free_dose'").get()) {
+  db.transaction(() => {
+    const changed = db.prepare("UPDATE order_items SET free_dose = 1 WHERE code = 'peramiflu'").run().changes
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('peramiflu_free_dose', `items:${changed}`, Date.now())
+    console.log(`[db] 페라미플루 용량 직접입력: 항목 ${changed}개`)
   })()
 }
 

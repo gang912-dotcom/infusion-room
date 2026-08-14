@@ -195,6 +195,32 @@ function checkKey(code, dose) {
   return `${code}|${dose ?? ''}`
 }
 
+// 용량을 직접 타이핑하는 항목(증류수 mL·페라미플루 mL)은 상태 키에 dose를 넣지 않는다.
+// 한 글자 칠 때마다 키가 바뀌면 React가 다른 행으로 보고 입력이 끊긴다(커서가 튄다).
+// 저장본·묶음을 되읽을 때도 같은 규칙으로 키를 만들어야 한다 — 안 그러면 다시 열었을 때
+// 값이 이미 있는데도 칸이 비어 보이고, 거기 다시 적으면 같은 약이 두 줄로 저장된다.
+function freeDoseCodeSet(items = []) {
+  return new Set(items.filter((it) => it.free_text || it.free_dose).map((it) => it.code))
+}
+function stateKey(code, dose, freeCodes) {
+  return freeCodes?.has(code) ? checkKey(code, '') : checkKey(code, dose)
+}
+
+// 자유 용량은 숫자만 적히기 쉽다. 기록지에 '페라미플루(24)'만 남으면 24개인지 24mL인지
+// 나중에 아무도 못 가른다 — 개수로도 적는 항목이라 더 그렇다. 숫자뿐이면 단위를 붙인다.
+// 단위까지 적은 값('1/2A' 같은 표기 포함)은 근무자가 쓴 그대로 둔다.
+// 단위를 붙이는 건 free_dose 항목뿐이다. 증류수(free_text)는 예전 기록이 전부 숫자만
+// 남아 있어 지금 와서 붙이면 같은 칸에 '20'과 '20mL'이 섞이고, 묶음 대조가 그걸
+// '용량 바뀜'으로 읽는다. 칸 이름에 이미 mL이 붙어 있어 헷갈릴 일도 없다.
+const FREE_DOSE_UNIT = 'mL'
+function unitDoseCodeSet(items = []) {
+  return new Set(items.filter((it) => it.free_dose).map((it) => it.code))
+}
+function withDoseUnit(dose) {
+  const v = String(dose ?? '').trim()
+  return /^\d+(\.\d+)?$/.test(v) ? `${v}${FREE_DOSE_UNIT}` : v
+}
+
 // 체크된 항목들의 route를 OR 해서 켤 경로 박스를 정한다.
 // route가 NULL인 항목(ORD — 용법에 따라 IV/IM이 갈린다)은 기여하지 않는다.
 // 그래서 근무자가 직접 켤 수 있어야 하고, 그게 routeOverride다.
@@ -1786,7 +1812,7 @@ function QtyStepper({ qty, onChange, label }) {
 // routeChecked·onToggleRoute는 경로 그룹을 렌더할 때만 쓰인다(관리자 묶음 편집은 그 그룹을 뺀다).
 const EMPTY_SET = new Set()
 
-function OrderChecklist({ items, checks, onToggle, onDose, onFreeText, onQty, routeChecked = EMPTY_SET, onToggleRoute }) {
+function OrderChecklist({ items, checks, onToggle, onDose, onFreeText, onDoseText, onQty, routeChecked = EMPTY_SET, onToggleRoute }) {
   // 그룹 순서는 GROUP_ORDER를 따르되, 거기 없는 group_key가 DB에 생기면 뒤에 붙인다 —
   // 관리자가 새 그룹을 만들었을 때 화면에서 조용히 사라지면 안 된다.
   const byGroup = new Map()
@@ -1876,12 +1902,36 @@ function OrderChecklist({ items, checks, onToggle, onDose, onFreeText, onQty, ro
                         />
                         <span className="order-item__label">{item.label}</span>
                       </label>
+                      {/* 용량·수량은 한 덩어리로 묶는다 — 좁은 칸에서 줄이 넘어갈 때
+                          둘이 갈라지면 수량만 라벨 밑에 홀로 남아 어느 줄 것인지 흐려진다. */}
                       {plainKey in checks && (
-                        <QtyStepper
-                          qty={checks[plainKey].qty}
-                          onChange={(v) => onQty(plainKey, v)}
-                          label={item.label}
-                        />
+                        <span className="order-item__checked-tail">
+                          {/* 용량 직접입력(페라미플루) — 체크한 뒤에만 뜬다. 비워 둬도 체크는 유지된다:
+                              성인처럼 한 병 통째로 다는 처방은 용량을 안 적고 개수로만 센다.
+                              해제는 체크박스로만 — 칸을 비웠다고 약이 빠지면 오조작이 된다. */}
+                          {item.free_dose && (
+                            <span className="order-item__dose-free">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="order-item__free-input"
+                                value={checks[plainKey].dose ?? ''}
+                                onChange={(e) => onDoseText(item.code, e.target.value)}
+                                /* 칸을 벗어나는 순간 단위를 붙여 화면에도 보여 준다 —
+                                   '고른 처방' 칸·기록지와 같은 값을 눈으로 확인할 수 있게.
+                                   저장 직전에도 한 번 더 붙인다(칸을 안 벗어나고 저장하는 경우). */
+                                onBlur={(e) => onDoseText(item.code, withDoseUnit(e.target.value))}
+                                aria-label={`${item.label} 용량 mL`}
+                              />
+                              <span className="order-item__unit">mL</span>
+                            </span>
+                          )}
+                          <QtyStepper
+                            qty={checks[plainKey].qty}
+                            onChange={(v) => onQty(plainKey, v)}
+                            label={item.label}
+                          />
+                        </span>
                       )}
                     </div>
                   )}
@@ -1905,10 +1955,10 @@ function OrderItemManageSection({ offline }) {
 
   const [showAdd, setShowAdd] = useState(false)
   // 새 항목의 기본 그룹은 '기본' — GROUP_ORDER[0]은 투여경로(고정 3개)라 기본값이면 안 된다.
-  const [form, setForm] = useState({ label: '', group: '기본', doses: '', freeText: false })
+  const [form, setForm] = useState({ label: '', group: '기본', doses: '', freeText: false, freeDose: false })
 
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ label: '', group: '', doses: '', freeText: false })
+  const [editForm, setEditForm] = useState({ label: '', group: '', doses: '', freeText: false, freeDose: false })
 
   function reload() {
     listOrderItemsAdmin()
@@ -1930,9 +1980,10 @@ function OrderItemManageSection({ offline }) {
         group_key: form.group.trim(),
         dose_options: form.doses.trim() ? form.doses.split(',') : null,
         free_text: form.freeText,
+        free_dose: form.freeDose,
         sort_order: items.filter((i) => i.group_key === form.group.trim()).length,
       })
-      setForm({ label: '', group: '기본', doses: '', freeText: false })
+      setForm({ label: '', group: '기본', doses: '', freeText: false, freeDose: false })
       setShowAdd(false)
       reload()
     } catch (err) {
@@ -1947,6 +1998,7 @@ function OrderItemManageSection({ offline }) {
       group: item.group_key,
       doses: item.dose_options ? item.dose_options.join(',') : '',
       freeText: item.free_text,
+      freeDose: item.free_dose,
     })
   }
 
@@ -1959,6 +2011,7 @@ function OrderItemManageSection({ offline }) {
         group_key: editForm.group.trim(),
         dose_options: editForm.doses.trim() ? editForm.doses.split(',') : null,
         free_text: editForm.freeText,
+        free_dose: editForm.freeDose,
       })
       setEditingId(null)
       reload()
@@ -2027,8 +2080,10 @@ function OrderItemManageSection({ offline }) {
 
   function kindLabel(item) {
     if (item.free_text) return '자유입력'
+    // 용량 선택지가 있으면 직접입력 칸은 안 붙는다 — 용량별로 수량 줄이 따로 서기 때문에
+    // 자유 칸이 어느 줄의 용량인지 가리킬 수가 없다. 화면과 같은 규칙으로 적는다.
     if (item.dose_options) return item.dose_options.join(' / ')
-    return '체크'
+    return item.free_dose ? '체크 + 용량직접' : '체크'
   }
 
   return (
@@ -2064,6 +2119,10 @@ function OrderItemManageSection({ offline }) {
             <input type="checkbox" checked={form.freeText} onChange={(e) => setForm({ ...form, freeText: e.target.checked })} />
             <span>자유입력 항목 (증류수처럼 숫자를 직접 적는 칸)</span>
           </label>
+          <label className="order-admin-free">
+            <input type="checkbox" checked={form.freeDose} onChange={(e) => setForm({ ...form, freeDose: e.target.checked })} />
+            <span>용량 직접입력 (페라미플루처럼 체크·수량은 두고 mL 칸을 더 붙임 · 용량 선택지가 없는 항목만)</span>
+          </label>
           <button type="button" className="btn-register" disabled={offline || !form.label.trim() || !form.group.trim()} onClick={handleAdd}>
             추가
           </button>
@@ -2095,8 +2154,15 @@ function OrderItemManageSection({ offline }) {
                   </td>
                   <td>
                     {editingId === item.id ? (
-                      <input className="field__input" value={editForm.doses} placeholder="110,180,100"
-                        onChange={(e) => setEditForm({ ...editForm, doses: e.target.value })} />
+                      <>
+                        <input className="field__input" value={editForm.doses} placeholder="110,180,100"
+                          onChange={(e) => setEditForm({ ...editForm, doses: e.target.value })} />
+                        <label className="order-admin-free">
+                          <input type="checkbox" checked={editForm.freeDose}
+                            onChange={(e) => setEditForm({ ...editForm, freeDose: e.target.checked })} />
+                          <span>용량 직접입력(mL)</span>
+                        </label>
+                      </>
                     ) : kindLabel(item)}
                   </td>
                   <td>
@@ -2168,18 +2234,24 @@ function OrderBundleManageSection({ offline }) {
     setName(bundle.name)
     setEmrCode(bundle.emr_code ?? '')
     const next = {}
+    const freeCodes = freeDoseCodeSet(items)
     bundle.items.forEach((it) => {
-      next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+      next[stateKey(it.code, it.dose, freeCodes)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
     })
     setChecks(next)
   }
 
   async function handleSave() {
     setError('')
+    const unitCodes = unitDoseCodeSet(items)
     const payload = {
       name: name.trim(),
       emr_code: emrCode.trim(),
-      items: Object.values(checks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty })),
+      items: Object.values(checks).map((row) => ({
+        code: row.code,
+        dose: unitCodes.has(row.code) ? withDoseUnit(row.dose) : row.dose,
+        qty: row.qty,
+      })),
     }
     try {
       if (editingId === 'new') await createOrderBundle({ ...payload, sort_order: bundles.length })
@@ -2263,6 +2335,10 @@ function OrderBundleManageSection({ offline }) {
               const key = checkKey(code, '')
               if (value.trim() === '') delete next[key]; else next[key] = { code, dose: value, qty: 1 }
               return next
+            })}
+            onDoseText={(code, value) => setChecks((prev) => {
+              const key = checkKey(code, '')
+              return prev[key] ? { ...prev, [key]: { ...prev[key], dose: value } } : prev
             })}
             onQty={(key, value) => setChecks((prev) => (prev[key] ? {
               ...prev,
@@ -5737,9 +5813,10 @@ function App() {
       const saved = await getPrescription(target.sessionId)
       const checks = {}
       const savedRoutes = new Set()
+      const freeCodes = freeDoseCodeSet(orderItems)
       saved.items.forEach((it) => {
         if (ROUTE_CODES.includes(it.code)) { savedRoutes.add(it.code); return }
-        checks[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+        checks[stateKey(it.code, it.dose, freeCodes)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
       })
       // 저장된 경로가 자동 계산과 다르면 그 차이만 수동 보정으로 기억한다 — 손으로 켠 IM이
       // 항목을 하나 더 고치는 순간 사라지면 안 된다.
@@ -5801,6 +5878,15 @@ function App() {
     })
   }
 
+  // 용량 직접입력(페라미플루 mL): 체크된 행의 dose만 바꾼다.
+  // 자유입력 항목(setOrderFreeText)과 달리 비워도 행을 지우지 않는다 — 체크는 체크박스가 쥔다.
+  function setOrderDoseText(code, value) {
+    setOrderChecks((prev) => {
+      const key = checkKey(code, '')
+      return prev[key] ? { ...prev, [key]: { ...prev[key], dose: value } } : prev
+    })
+  }
+
   // 수량: 타이핑값도 ▲▼도 여기로 온다. 숫자가 아닌 입력은 버리고 1~99로 묶는다 —
   // 오타로 들어간 값이 기록지에 그대로 인쇄되면 안 된다.
   function setOrderQty(key, value) {
@@ -5833,8 +5919,9 @@ function App() {
         && !window.confirm(`현재 체크를 '${bundle.name}' 묶음으로 바꿀까요?`)) return
     setPickedBundle(bundle)
     const next = {}
+    const freeCodes = freeDoseCodeSet(orderItems)
     bundle.items.forEach((it) => {
-      next[checkKey(it.code, it.dose)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
+      next[stateKey(it.code, it.dose, freeCodes)] = { code: it.code, dose: it.dose ?? '', qty: it.qty ?? 1 }
     })
     setOrderChecks(next)
     // 묶음이 항목을 통째로 정의하므로 경로도 자동 계산으로 되돌린다.
@@ -5870,7 +5957,14 @@ function App() {
     if (!prescriptionBed?.sessionId) return
     setActionError('')
     // 경로 박스도 order_items 행이라 함께 저장한다(기록지·CSV가 이 행을 읽는다).
-    const items = Object.values(orderChecks).map((row) => ({ code: row.code, dose: row.dose, qty: row.qty }))
+    // 직접 적은 용량은 저장 직전에 단위를 붙인다(withDoseUnit) — 타이핑 중에 붙이면
+    // 커서가 숫자 뒤로 못 간다. 화면 값은 그대로 두고 나가는 값만 손본다.
+    const unitCodes = unitDoseCodeSet(orderItems)
+    const items = Object.values(orderChecks).map((row) => ({
+      code: row.code,
+      dose: unitCodes.has(row.code) ? withDoseUnit(row.dose) : row.dose,
+      qty: row.qty,
+    }))
     effectiveRouteCodes().forEach((code) => items.push({ code, dose: '', qty: 1 }))
     try {
       await savePrescription(prescriptionBed.sessionId, {
@@ -7513,6 +7607,7 @@ function App() {
                   onToggle={toggleOrderItem}
                   onDose={selectOrderDose}
                   onFreeText={setOrderFreeText}
+                  onDoseText={setOrderDoseText}
                   onQty={setOrderQty}
                   routeChecked={new Set(effectiveRouteCodes())}
                   onToggleRoute={toggleRouteItem}

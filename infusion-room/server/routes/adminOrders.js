@@ -37,6 +37,7 @@ function itemPayload(row) {
     group_key: row.group_key,
     dose_options: row.dose_options ? row.dose_options.split(',') : null,
     free_text: row.free_text === 1,
+    free_dose: row.free_dose === 1,
     sort_order: row.sort_order,
     is_active: row.is_active === 1,
     route: row.route ?? null,
@@ -63,7 +64,7 @@ function normalizeRoute(value, res) {
 }
 
 router.post('/order-items', (req, res) => {
-  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder, route } = req.body ?? {}
+  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, free_dose: freeDose, sort_order: sortOrder, route } = req.body ?? {}
   if (!String(label ?? '').trim()) return res.status(400).json({ error: '라벨이 필요합니다' })
   if (!String(groupKey ?? '').trim()) return res.status(400).json({ error: '그룹이 필요합니다' })
   // route를 안 받으면 관리자가 새로 만든 항목은 영원히 자동 체크에 안 걸린다.
@@ -71,13 +72,14 @@ router.post('/order-items', (req, res) => {
   if (normalizedRoute === undefined) return
 
   const info = db.prepare(
-    'INSERT INTO order_items (code, label, group_key, dose_options, free_text, sort_order, route) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO order_items (code, label, group_key, dose_options, free_text, free_dose, sort_order, route) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(
     generateCode(label),
     String(label).trim(),
     String(groupKey).trim(),
     normalizeDoseOptions(doseOptions),
     freeText ? 1 : 0,
+    freeDose ? 1 : 0,
     Number.isInteger(sortOrder) ? sortOrder : 0,
     normalizedRoute,
   )
@@ -89,7 +91,7 @@ router.patch('/order-items/:id', (req, res) => {
   const item = db.prepare('SELECT * FROM order_items WHERE id = ?').get(req.params.id)
   if (!item) return res.status(404).json({ error: '존재하지 않는 항목입니다' })
 
-  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, sort_order: sortOrder, is_active: isActive, route } = req.body ?? {}
+  const { label, group_key: groupKey, dose_options: doseOptions, free_text: freeText, free_dose: freeDose, sort_order: sortOrder, is_active: isActive, route } = req.body ?? {}
   const fields = []
   const params = []
   if (route !== undefined) {
@@ -107,6 +109,7 @@ router.patch('/order-items/:id', (req, res) => {
   }
   if (doseOptions !== undefined) { fields.push('dose_options = ?'); params.push(normalizeDoseOptions(doseOptions)) }
   if (freeText !== undefined) { fields.push('free_text = ?'); params.push(freeText ? 1 : 0) }
+  if (freeDose !== undefined) { fields.push('free_dose = ?'); params.push(freeDose ? 1 : 0) }
   if (sortOrder !== undefined) { fields.push('sort_order = ?'); params.push(Number(sortOrder) || 0) }
   if (isActive !== undefined) { fields.push('is_active = ?'); params.push(isActive ? 1 : 0) }
   if (fields.length === 0) return res.status(400).json({ error: '변경할 값이 없습니다' })

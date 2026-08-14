@@ -267,6 +267,9 @@ CREATE TABLE IF NOT EXISTS order_items (
   group_key    TEXT    NOT NULL,          -- '기본'|'치료제'|'IM,SC'|'독감'|'증류수'
   dose_options TEXT,                      -- 용량 선택지 쉼표구분('110,180,100'), 없으면 NULL
   free_text    INTEGER NOT NULL DEFAULT 0,-- 1이면 체크박스 대신 자유입력(증류수 mL)
+  -- 1이면 체크박스·수량은 그대로 두고 용량 칸이 하나 더 붙는다(페라미플루: 체중따라 24mL 식).
+  -- free_text와 다르다 — free_text는 칸이 곧 체크라 개수를 못 세고, 이건 개수와 mL을 같이 적는다.
+  free_dose    INTEGER NOT NULL DEFAULT 0,
   sort_order   INTEGER NOT NULL DEFAULT 0,
   is_active    INTEGER NOT NULL DEFAULT 1,
   -- 투여경로 'IV'|'IM'|'SC'. 체크된 항목들의 route를 OR 해서 IV/IM/SC 박스를 자동 체크한다.
