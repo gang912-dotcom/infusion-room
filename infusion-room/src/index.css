@@ -71,7 +71,8 @@
   --page-bg: #121212;
 }
 :root[data-theme='light'] {
-  --page-bg: #f2f2f7;
+  /* 아이보리 바탕 — App.css의 --surface-bg와 같은 값이어야 한다(두 곳이 같은 면이다). */
+  --page-bg: #f2eee4;
 }
 
 body {
