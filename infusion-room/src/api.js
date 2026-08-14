@@ -440,6 +440,15 @@ export async function purgeSessions(ids) {
   return apiFetch('/admin/sessions/purge', { method: 'POST', body: JSON.stringify({ ids }) })
 }
 
+// 종료시각 사후 수정 — 제때 못 눌러 늦게 종료된 기록을 고친다.
+// 서버가 기록지 공식본까지 다시 굳힌다(표와 기록지가 어긋나지 않게).
+export async function updateSessionEndedAt(sessionId, endedAt) {
+  return apiFetch(`/sessions/${sessionId}/ended-at`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ended_at: endedAt }),
+  })
+}
+
 // ─── 취소된 배정 (마스터 전용) ───────────────────────────────────────
 // 취소는 삭제가 아니라 표시라 되살릴 수 있다. 종료를 누르려다 등록 취소를 누른 경우.
 export async function listCancelledSessions(days = 7) {

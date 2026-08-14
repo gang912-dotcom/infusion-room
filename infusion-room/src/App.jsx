@@ -28,7 +28,7 @@ import {
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   getSessionRecord, saveDayMemo, purgeSessions,
-  listCancelledSessions, uncancelSession,
+  listCancelledSessions, uncancelSession, updateSessionEndedAt,
   listChatDates, listChatByDate, setChatDeleted,
   listSettings, updateSetting,
   getPatientFootprint, deletePatient,
@@ -4030,22 +4030,26 @@ function toTimeInput(ms) {
   const d = new Date(ms)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+// 칸을 고치는 중에는 브라우저가 빈 값('')을 준다 — 그때 손대면 안 된다.
+// Number.isNaN이 아니라 isFinite로 본다: ''.split(':')은 [''] 하나뿐이라 분이 undefined가
+// 되는데, Number.isNaN(undefined)는 false다(전역 isNaN과 다르다). 그대로 통과시키면
+// setHours(0, undefined)가 되어 시각 전체가 NaN이 되고 두 칸이 같이 비어 버린다.
 function mergeDateInput(ms, value) {
   const [y, m, day] = value.split('-').map(Number)
-  if (!y || !m || !day) return ms
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(day) || !y) return ms
   const d = new Date(ms)
   d.setFullYear(y, m - 1, day)
   return d.getTime()
 }
 function mergeTimeInput(ms, value) {
   const [h, min] = value.split(':').map(Number)
-  if (Number.isNaN(h) || Number.isNaN(min)) return ms
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return ms
   const d = new Date(ms)
   d.setHours(h, min, 0, 0)
   return d.getTime()
 }
 
-function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore, onEditPrescription }) {
+function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore, onEditPrescription, onEditEndTime }) {
   // 환자명·차트번호를 한 칸에서 받는다. 둘을 나눠 두면 어느 칸에 넣을지부터 고르게 되는데,
   // 이름은 한글이고 차트번호는 K+숫자라 섞일 일이 없어 나눌 이유가 없었다.
   const [searchText, setSearchText] = useState('')
@@ -4053,6 +4057,11 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   const [searchDateFrom, setSearchDateFrom] = useState('')
   const [searchDateTo, setSearchDateTo] = useState('')
   const [page, setPage] = useState(1)
+  // 종료시각 고치는 줄. { id, ms } — 한 번에 한 줄만 연다(두 줄이 열려 있으면 어느 쪽을
+  // 저장하는지 헷갈린다). 저장은 서버가 기록지 공식본까지 다시 굳힌다.
+  const [timeDraft, setTimeDraft] = useState(null)
+  const [timeError, setTimeError] = useState('')
+  const [savingTime, setSavingTime] = useState(false)
 
   const filtered = history.filter((entry) => {
     const q = searchText.trim()
@@ -4212,7 +4221,8 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
             </thead>
             <tbody>
               {pageRows.map((entry) => (
-                <tr key={entry.id}>
+                <Fragment key={entry.id}>
+                <tr>
                   <td>{entry.date}</td>
                   <td>{entry.examRoom ? `${entry.examRoom}진료실` : '—'}</td>
                   <td>{entry.room}</td>
@@ -4245,6 +4255,20 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
                           처방 수정
                         </button>
                       )}
+                      {/* 바빠서 제때 못 누른 종료. 이용시간이 그대로 통계에 들어가므로 고칠 수 있어야 한다.
+                          날짜·시각을 함께 받는다 — 자정을 넘겨 종료된 건을 오늘 날짜로 보내면 안 된다. */}
+                      {entry.sessionId && onEditEndTime && (
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() => {
+                            setTimeError('')
+                            setTimeDraft(timeDraft?.id === entry.id ? null : { id: entry.id, ms: entry.endedAt })
+                          }}
+                        >
+                          종료시간
+                        </button>
+                      )}
                       {/* 실수로 종료한 것 되돌리기. 베드가 이미 찼으면 서버가 막는다. */}
                       {entry.sessionId && onRestore && (
                         <button
@@ -4258,6 +4282,58 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
                     </div>
                   </td>
                 </tr>
+                {timeDraft?.id === entry.id && (
+                  <tr className="history-edit-row">
+                    <td colSpan={10}>
+                      <div className="history-edit">
+                        <span className="field__label">종료 시각</span>
+                        <input
+                          type="date"
+                          className="occurred-at__input"
+                          value={toDateInput(timeDraft.ms)}
+                          onChange={(e) => setTimeDraft({ ...timeDraft, ms: mergeDateInput(timeDraft.ms, e.target.value) })}
+                          aria-label="종료 날짜"
+                        />
+                        <input
+                          type="time"
+                          className="occurred-at__input"
+                          value={toTimeInput(timeDraft.ms)}
+                          onChange={(e) => setTimeDraft({ ...timeDraft, ms: mergeTimeInput(timeDraft.ms, e.target.value) })}
+                          aria-label="종료 시각"
+                        />
+                        {/* 저장 전에 결과 이용시간을 보여준다 — 숫자로 확인해야 오타를 잡는다. */}
+                        <span className="history-edit__used">
+                          이용시간 {formatDuration(Math.round((timeDraft.ms - entry.startedAt) / 60000))}
+                        </span>
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          disabled={savingTime}
+                          onClick={async () => {
+                            setTimeError('')
+                            setSavingTime(true)
+                            try {
+                              await onEditEndTime(entry, timeDraft.ms)
+                              setTimeDraft(null)
+                            } catch (err) {
+                              setTimeError(err.message)
+                            } finally {
+                              setSavingTime(false)
+                            }
+                          }}
+                        >
+                          저장
+                        </button>
+                        <button type="button" className="dm-note-btn" onClick={() => setTimeDraft(null)}>취소</button>
+                      </div>
+                      {timeError && <p role="alert" className="field__error">{timeError}</p>}
+                      <p className="history-edit__note">
+                        저장하면 이용시간과 수액간호기록지 공식본이 함께 바뀝니다.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -6173,6 +6249,13 @@ function App() {
     })
   }
 
+  // 종료시각 고치기 — 바빠서 제때 못 누른 종료를 실제 시각으로 되돌린다.
+  // 오류 문구는 표 안의 그 줄에 띄워야 해서(어느 건인지 알아야 한다) 여기서 잡지 않고 던진다.
+  async function handleEditEndTime(entry, endedAtMs) {
+    await updateSessionEndedAt(entry.sessionId, endedAtMs)
+    await Promise.all([refreshRecords(), refreshBoard()])
+  }
+
   // 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 되돌린다.
   // 이용기록 화면에서 부르므로 setActionError(베드 상세용)가 안 보인다 — alert로 알린다.
   async function handleRestoreSession(entry) {
@@ -6841,6 +6924,7 @@ function App() {
               vitals={vitals}
               onRestore={canEdit(account?.role) ? handleRestoreSession : undefined}
               onEditPrescription={canEdit(account?.role) ? handleEditHistoryPrescription : undefined}
+              onEditEndTime={canEdit(account?.role) ? handleEditEndTime : undefined}
             />
           )}
         </>

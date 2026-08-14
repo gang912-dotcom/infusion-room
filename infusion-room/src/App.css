@@ -2346,6 +2346,33 @@
   border-color: var(--text-secondary);
 }
 
+/* ── 이용기록 안에서 펼쳐지는 편집 줄 (종료시각) ── */
+.history-edit-row td { background: var(--number-bg); }
+
+.history-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 날짜·시각 칸은 내용만큼만 — flex가 늘리면 표 폭을 혼자 다 먹는다. */
+.history-edit .occurred-at__input { flex: 0 0 auto; width: auto; }
+
+/* 고친 값으로 이용시간이 얼마가 되는지 — 저장 전에 숫자로 확인시킨다. */
+.history-edit__used {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-edit__note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ── 취소된 배정 ── */
 .cancelled-view__bar {
   display: flex;

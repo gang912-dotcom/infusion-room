@@ -3,6 +3,7 @@ import db from '../db.js'
 import { bumpRevision } from '../lib/revision.js'
 import { assertInRange, isUniqueConstraintError, normalizeChartNo, normalizeGender } from '../lib/validation.js'
 import { buildSessionRecord, attachSignatures, ROUTE_GROUP } from '../lib/record.js'
+import { logAccess, ACTIONS } from '../lib/accessLog.js'
 
 const router = Router()
 
@@ -447,6 +448,48 @@ router.post('/sessions/:id/restore', (req, res) => {
     SET ended_at = NULL, ended_by = NULL, end_staff_id = NULL, record_snapshot = NULL
     WHERE id = ?
   `).run(session.id)
+  bumpRevision(db)
+  res.json({ ok: true })
+})
+
+// ─── 종료시각 사후 수정 ─────────────────────────────────────────────
+// 바쁠 때 제때 못 눌러 실제보다 늦게 종료되는 일이 있다. 이용시간이 그대로 통계에
+// 들어가므로 고칠 수 있어야 한다.
+//
+// 기록지 공식본(record_snapshot)에도 종료시각·이용시간이 굳어 있다 — 처방 사후 수정과
+// 같은 이유로 여기서 다시 굳힌다. 안 그러면 이용기록 표(계산값)와 기록지가 다른 말을 한다.
+router.patch('/sessions/:id/ended-at', (req, res) => {
+  const session = getSessionOr404(req.params.id, res)
+  if (!session) return
+  if (session.ended_at === null) {
+    return res.status(400).json({ error: '아직 종료되지 않은 세션입니다' })
+  }
+  if (session.deleted) {
+    return res.status(400).json({ error: '삭제된 기록은 수정할 수 없습니다' })
+  }
+
+  const endedAt = Number(req.body?.ended_at)
+  if (!Number.isFinite(endedAt)) {
+    return res.status(400).json({ error: '종료 시각이 올바르지 않습니다' })
+  }
+  // 시작보다 빠르거나 미래인 값은 막는다 — 이용시간이 음수가 되거나 아직 오지 않은
+  // 시각이 기록지에 인쇄된다.
+  try {
+    assertInRange(endedAt, session.started_at, Date.now(), '종료 시각')
+  } catch (err) {
+    return res.status(err.status).json({ error: err.message })
+  }
+
+  db.transaction(() => {
+    db.prepare('UPDATE sessions SET ended_at = ? WHERE id = ?').run(endedAt, session.id)
+    // 스냅샷이 없던 옛 종료분은 그대로 둔다(조회 때마다 즉석 조립이라 이미 새 값이다).
+    if (session.record_snapshot) {
+      db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?')
+        .run(JSON.stringify(buildSessionRecord(session.id)), session.id)
+    }
+  })()
+
+  logAccess(req, ACTIONS.RECORD_EDIT, { targetType: 'session', targetId: session.id })
   bumpRevision(db)
   res.json({ ok: true })
 })
