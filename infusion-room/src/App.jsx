@@ -3832,7 +3832,7 @@ function pageWindow(current, total) {
   return out
 }
 
-function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore }) {
+function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore, onEditPrescription }) {
   // 환자명·차트번호를 한 칸에서 받는다. 둘을 나눠 두면 어느 칸에 넣을지부터 고르게 되는데,
   // 이름은 한글이고 차트번호는 K+숫자라 섞일 일이 없어 나눌 이유가 없었다.
   const [searchText, setSearchText] = useState('')
@@ -4019,6 +4019,17 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
                           onClick={() => openRecordFor(entry.sessionId)}
                         >
                           수액간호기록지
+                        </button>
+                      )}
+                      {/* 종료 뒤에 발견한 처방 오기를 고친다. 저장하면 기록지 공식본도 다시 굳는다
+                          (서버가 record_snapshot을 다시 만든다) — 표·CSV와 기록지가 어긋나지 않게. */}
+                      {entry.sessionId && onEditPrescription && (
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          onClick={() => onEditPrescription(entry)}
+                        >
+                          처방 수정
                         </button>
                       )}
                       {/* 실수로 종료한 것 되돌리기. 베드가 이미 찼으면 서버가 막는다. */}
@@ -5934,6 +5945,19 @@ function App() {
     }
   }
 
+  // 이용기록에서 처방 고치기 — 종료 뒤에야 오기를 발견하는 경우가 있다.
+  // 베드 상세와 같은 모달을 그대로 쓴다(항목·묶음·용량 규칙이 한 곳에만 있어야 한다).
+  // 여기서 넘기는 값은 진짜 베드가 아니라 모달 머리말·저장 대상용 최소 정보다.
+  function handleEditHistoryPrescription(entry) {
+    if (!entry?.sessionId) return
+    openPrescriptionModal({
+      sessionId: entry.sessionId,
+      number: entry.bedNumber,
+      patientName: entry.patientName,
+      endedRecord: true, // 저장할 때 기록지 공식본까지 바뀐다는 걸 모달이 알려야 한다
+    })
+  }
+
   // 종료 복귀 — 실수로 종료한 세션을 다시 이용 중으로 되돌린다.
   // 이용기록 화면에서 부르므로 setActionError(베드 상세용)가 안 보인다 — alert로 알린다.
   async function handleRestoreSession(entry) {
@@ -5955,6 +5979,9 @@ function App() {
 
   async function handleSavePrescription() {
     if (!prescriptionBed?.sessionId) return
+    // 종료된 기록은 이미 인쇄돼 나갔을 수 있다. 바꾸는 순간 공식본까지 바뀌므로 한 번 세운다.
+    if (prescriptionBed.endedRecord
+        && !window.confirm('종료된 기록입니다.\n저장하면 수액간호기록지 공식본도 함께 바뀝니다.\n계속할까요?')) return
     setActionError('')
     // 경로 박스도 order_items 행이라 함께 저장한다(기록지·CSV가 이 행을 읽는다).
     // 직접 적은 용량은 저장 직전에 단위를 붙인다(withDoseUnit) — 타이핑 중에 붙이면
@@ -5970,7 +5997,9 @@ function App() {
       await savePrescription(prescriptionBed.sessionId, {
         items, visitSymptom, bundleId: pickedBundle?.id ?? null,
       })
-      await refreshBoard()
+      // 종료 기록을 고쳤으면 이용기록 표도 다시 받아야 한다 — 보드에는 그 세션이 없다.
+      if (prescriptionBed.endedRecord) await Promise.all([refreshRecords(), refreshBoard()])
+      else await refreshBoard()
       closePrescriptionModal()
     } catch (err) {
       setActionError(err.message)
@@ -6567,6 +6596,7 @@ function App() {
           rounds={rounds}
           vitals={vitals}
           onRestore={canEdit(account?.role) ? handleRestoreSession : undefined}
+          onEditPrescription={canEdit(account?.role) ? handleEditHistoryPrescription : undefined}
         />
       ) : activeTab === 'patient' ? (
         <PatientView
@@ -7564,7 +7594,7 @@ function App() {
           <div className="modal modal--prescription" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__header-title">
-                <h2>처방 작성</h2>
+                <h2>{prescriptionBed.endedRecord ? '처방 수정' : '처방 작성'}</h2>
                 <span className="modal__header-sub">
                   베드 {prescriptionBed.number} · {prescriptionBed.patientName}
                 </span>
@@ -7575,6 +7605,14 @@ function App() {
             </div>
 
             <div className="modal__body">
+              {/* 종료 기록을 고치는 중이라는 표시. 이 줄이 없으면 진행 중 처방과 화면이 똑같아
+                  이미 나간 기록을 바꾸고 있다는 걸 모른 채 저장하게 된다. */}
+              {prescriptionBed.endedRecord && (
+                <p className="prescription-notice">
+                  <Icon name="alert" /> 종료된 기록입니다 — 저장하면 수액간호기록지 공식본도 함께 바뀝니다.
+                </p>
+              )}
+
               {/* 내원당시증상 — 오더를 고르기 전에 읽는 값이라 맨 위다. placeholder·예시 없음.
                   bp-charting: 읽고 쓰는 본문이라 다른 입력칸(15px)보다 크게 둔다. */}
               <label className="field">

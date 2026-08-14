@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
+import { logAccess, ACTIONS } from '../lib/accessLog.js'
+import { buildSessionRecord } from '../lib/record.js'
 import { bumpRevision } from '../lib/revision.js'
 import { DOSE_MAX_LENGTH, QTY_MAX, roundQty } from '../lib/validation.js'
 
@@ -131,6 +133,13 @@ router.put('/sessions/:id/prescription', (req, res) => {
   const updateSymptom = db.prepare('UPDATE sessions SET visit_symptom = ? WHERE id = ?')
   const updateBundle = db.prepare('UPDATE sessions SET order_bundle_id = ? WHERE id = ?')
 
+  // 종료된 세션은 기록지가 record_snapshot으로 얼어 있다. 처방만 고치면 기록지에는 옛
+  // 처방이 그대로 인쇄되고, 살아있는 처방을 읽는 이용기록 표·CSV와 서로 다른 말을 한다.
+  // 그래서 사후 수정이면 공식본도 같은 트랜잭션에서 다시 굳힌다.
+  // 스냅샷이 없던 옛 종료분은 손대지 않는다 — 그쪽은 조회 때마다 즉석 조립이라 이미 새 값이다.
+  const refreezeRecord = session.ended_at !== null && !!session.record_snapshot
+  const setSnapshot = db.prepare('UPDATE sessions SET record_snapshot = ? WHERE id = ?')
+
   db.transaction(() => {
     del.run(session.id)
     for (const row of parsed) ins.run(session.id, row.code, row.dose, row.qty)
@@ -138,7 +147,13 @@ router.put('/sessions/:id/prescription', (req, res) => {
     // 항목과 같은 트랜잭션에 둔다 — 처방만 바뀌고 기준이 옛 묶음으로 남으면
     // 다시 열었을 때 엉뚱한 변경 브리핑이 뜬다.
     if (bundleId !== undefined) updateBundle.run(bundleId, session.id)
+    if (refreezeRecord) setSnapshot.run(JSON.stringify(buildSessionRecord(session.id)), session.id)
   })()
+
+  // 종료 기록을 사후에 고친 것만 남긴다. 진행 중 저장은 일상 작업이라 기록하지 않는다.
+  if (session.ended_at !== null) {
+    logAccess(req, ACTIONS.RECORD_EDIT, { targetType: 'session', targetId: session.id })
+  }
 
   // 내원당시증상은 상세에 바로 보여야 하므로 다른 단말도 폴링으로 받게 한다.
   bumpRevision(db)

@@ -4927,6 +4927,26 @@
 
 .order-item__unit { font-size: 12px; color: var(--text-muted); }
 
+/* 종료 기록 수정 중이라는 알림 줄 — 처방 모달 맨 위.
+   앰버는 '주의'지 '오류'가 아니다(빨강은 완료·삭제가 쓴다). 틴트 배경 위 글자라
+   라이트에서 --status-warning(#c77400)이 3점대로 떨어진다 — 카드 주의문과 같은 값으로 내린다. */
+.prescription-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--status-warning);
+  background: var(--status-warning-bg);
+  border-radius: 10px;
+}
+
+.prescription-notice svg { flex: none; width: 18px; height: 18px; }
+
+:root[data-theme='light'] .app .prescription-notice { color: #915400; }
+
 /* 용량 직접입력(페라미플루 mL) — 체크한 줄 안에서 수량 바로 왼쪽에 선다.
    라벨과 수량 사이에 두는 이유: '무엇을 · 얼마나 · 몇 개' 읽는 순서와 같다. */
 .order-item__dose-free {
