@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import db from '../db.js'
-import { isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
+import { assertInRange, isUniqueConstraintError, normalizeChartNo } from '../lib/validation.js'
 import { logAccess, ACTIONS } from '../lib/accessLog.js'
 import { getPatientFootprint, deletePatientByChartNo } from '../lib/deletePatient.js'
 import { bumpRevision } from '../lib/revision.js'
@@ -284,6 +284,91 @@ router.post('/sessions/purge', (req, res) => {
   // 되돌릴 수 없는 삭제다 — 건수를 감사 기록에 남긴다(id는 이미 사라져 참조가 무의미).
   logAccess(req, ACTIONS.SESSION_PURGE, { targetType: `count:${purged.length}` })
   res.json({ purged: purged.length, skipped: skipped.length })
+})
+
+// ─── 취소된 배정 ────────────────────────────────────────────────────
+// 취소는 삭제가 아니라 sessions.cancelled = 1 표시다. 종료를 누르려다 등록 취소를
+// 누르는 실수가 실제로 있었고, 그때까지는 서버 PC에서 tools/restore-cancelled.mjs를
+// 돌리는 수밖에 없었다. 같은 일을 화면에서 하게 한다.
+//
+// 마스터(admin) 전용이다 — 없던 이용을 되살리는 일이라 통계·기록지가 함께 움직인다.
+// (이 라우터는 index.js에서 requireAdmin 뒤에 붙는다.)
+const CANCELLED_MAX_DAYS = 90
+
+router.get('/cancelled', (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), CANCELLED_MAX_DAYS)
+  const since = Date.now() - days * 24 * 60 * 60 * 1000
+  const rows = db.prepare(`
+    SELECT s.id, s.assigned_at, s.started_at, s.cancel_reason, s.duration_minutes,
+           b.room, b.number AS bed_number,
+           p.name AS patient_name, p.chart_no,
+           ls.name AS line_staff_name,
+           (SELECT COUNT(*) FROM session_orders o WHERE o.session_id = s.id) AS order_count,
+           (SELECT COUNT(*) FROM rounds r WHERE r.session_id = s.id) AS round_count,
+           (SELECT COUNT(*) FROM vitals v WHERE v.session_id = s.id) AS vital_count,
+           -- 같은 베드에 살아있는 세션이 있으면 카드로는 되돌릴 자리가 없다.
+           -- 화면이 미리 알아야 버튼 문구를 '되살리기'/'종료 처리'로 가를 수 있다.
+           EXISTS (SELECT 1 FROM sessions x
+                   WHERE x.bed_id = s.bed_id AND x.ended_at IS NULL AND x.cancelled = 0) AS bed_busy
+    FROM sessions s
+    JOIN beds b ON b.id = s.bed_id
+    JOIN patients p ON p.id = s.patient_id
+    LEFT JOIN staff ls ON ls.id = s.line_staff_id
+    WHERE s.cancelled = 1 AND s.assigned_at >= ?
+    ORDER BY s.assigned_at DESC
+  `).all(since)
+  res.json({ days, sessions: rows })
+})
+
+// 되살리기. ended_at을 주면 카드로 돌리지 않고 곧장 이용기록으로 보낸다
+// (그 사이 베드에 다른 환자가 들어와 자리가 없을 때).
+router.post('/sessions/:id/uncancel', (req, res) => {
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id)
+  if (!session) return res.status(404).json({ error: '존재하지 않는 세션입니다' })
+  if (!session.cancelled) return res.status(400).json({ error: '취소된 배정이 아닙니다' })
+  if (session.deleted) return res.status(400).json({ error: '삭제된 기록은 되살릴 수 없습니다' })
+
+  const raw = req.body?.ended_at
+  let endedAt = null
+  if (raw !== undefined && raw !== null && raw !== '') {
+    endedAt = Number(raw)
+    if (!Number.isFinite(endedAt)) return res.status(400).json({ error: '종료 시각이 올바르지 않습니다' })
+    if (session.started_at === null) {
+      return res.status(400).json({ error: '투여를 시작한 적 없는 배정은 종료 처리할 수 없습니다' })
+    }
+    try {
+      assertInRange(endedAt, session.started_at, Date.now(), '종료 시각')
+    } catch (err) {
+      return res.status(err.status).json({ error: err.message })
+    }
+  }
+
+  // 자리를 확인한다. idx_sessions_one_active가 막아주긴 하지만 UNIQUE 오류만 던지면
+  // 근무자가 무슨 일인지 알 수 없다 — 종료 시각을 받아 다시 부르라고 알려준다.
+  if (endedAt === null) {
+    const busy = db.prepare(
+      'SELECT id FROM sessions WHERE bed_id = ? AND ended_at IS NULL AND cancelled = 0 LIMIT 1',
+    ).get(session.bed_id)
+    if (busy) {
+      return res.status(409).json({
+        error: '그 베드에 다른 환자가 있습니다. 종료 시각을 정해 이용기록으로 보낼 수 있습니다.',
+        bed_busy: true,
+      })
+    }
+  }
+
+  db.prepare(`
+    UPDATE sessions
+    SET cancelled = 0, cancel_reason = NULL, ended_at = COALESCE(?, ended_at)
+    WHERE id = ?
+  `).run(endedAt, session.id)
+
+  // 기록지 공식본은 일부러 안 만든다 — 카드로 돌아간 세션은 화면에서 정상 종료할 때
+  // 굳는다. 종료 시각만 넣어 보낸 쪽은 스냅샷 없이 즉석 조립본으로 나온다(라인 제거
+  // 담당자가 없으므로, 있지도 않은 담당자를 굳혀 놓는 것보다 낫다).
+  logAccess(req, ACTIONS.SESSION_UNCANCEL, { targetType: 'session', targetId: session.id })
+  bumpRevision(db)
+  res.json({ ok: true, ended: endedAt !== null })
 })
 
 // ─── 환자 수동 삭제 ─────────────────────────────────────────────────

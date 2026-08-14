@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
 import BundlePicker from './BundlePicker'
@@ -28,6 +28,7 @@ import {
   listAccounts, createAccount, updateAccount,
   listStaffAdmin, createStaffMember, updateStaffMember, getStaffSignature, setStaffSignature,
   getSessionRecord, saveDayMemo, purgeSessions,
+  listCancelledSessions, uncancelSession,
   listChatDates, listChatByDate, setChatDeleted,
   listSettings, updateSetting,
   getPatientFootprint, deletePatient,
@@ -3832,6 +3833,218 @@ function pageWindow(current, total) {
   return out
 }
 
+// ─── 취소된 배정 (마스터 전용) ───────────────────────────────────────
+// 종료를 누르려다 등록 취소를 누르는 실수가 있었다. 취소는 삭제가 아니라 표시라
+// 처방·라운딩·바이탈이 그대로 남아 있고, 되살리면 그 방문이 통째로 돌아온다.
+// 서버 PC의 tools/restore-cancelled.mjs가 하던 일을 그대로 화면에 옮긴 것이다.
+const CANCELLED_RANGES = [
+  { days: 1, label: '오늘' },
+  { days: 7, label: '7일' },
+  { days: 30, label: '30일' },
+]
+
+// 되살릴 자리가 없을 때(그 베드에 다른 환자) 넣을 종료 시각의 첫 값.
+// 시작 + 예정 소요시간이 가장 그럴듯한 추정이다. 미래로는 못 가므로 지금으로 자른다.
+function guessEndAt(row) {
+  const base = (row.started_at ?? row.assigned_at) + (row.duration_minutes ?? 120) * 60000
+  return Math.min(base, Date.now())
+}
+
+function CancelledView({ offline, onRestored }) {
+  const [days, setDays] = useState(7)
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
+  // 종료 시각을 받는 줄. { id, ms } — 자리가 없어 카드로 못 돌리는 건에만 쓴다.
+  const [endDraft, setEndDraft] = useState(null)
+
+  // 다시 불러오기는 이 값을 올려서 시킨다 — 효과 안에서 동기로 setState를 하면
+  // 렌더가 연쇄로 돈다(react-hooks/set-state-in-effect). 로딩 표시는 누른 순간(이벤트)에 켠다.
+  const [reloadTick, setReloadTick] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    listCancelledSessions(days)
+      .then((r) => { if (!cancelled) { setRows(r.sessions ?? []); setError('') } })
+      .catch((err) => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [days, offline, reloadTick])
+
+  async function restore(row, endedAt = null) {
+    setBusyId(row.id)
+    setError('')
+    try {
+      const r = await uncancelSession(row.id, endedAt)
+      setEndDraft(null)
+      setLoading(true)
+      setReloadTick((t) => t + 1)
+      await onRestored?.()
+      window.alert(r.ended
+        ? `${row.patient_name} 환자를 이용기록으로 보냈습니다.`
+        : `${row.patient_name} 환자가 ${row.bed_number}번 베드로 돌아왔습니다.\n화면에서 [수액 종료]를 눌러 마무리하세요.`)
+    } catch (err) {
+      // 서버가 409로 '자리 없음'을 알려주면 시각 입력 줄을 대신 연다.
+      if (err.data?.bed_busy) setEndDraft({ id: row.id, ms: guessEndAt(row) })
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const fmtDateTime = (ms) => (ms == null ? '—' : new Date(ms).toLocaleString('ko-KR', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }))
+
+  return (
+    <div className="cancelled-view">
+      <div className="cancelled-view__bar">
+        <div className="sv-seg-group sv-seg-group--sm" role="group" aria-label="기간">
+          {CANCELLED_RANGES.map((r) => (
+            <button
+              key={r.days}
+              type="button"
+              className={`sv-seg${days === r.days ? ' sv-seg--on' : ''}`}
+              onClick={() => { setLoading(true); setDays(r.days) }}
+              aria-pressed={days === r.days}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+        <span className="cancelled-view__count">{loading ? '불러오는 중…' : `${rows.length}건`}</span>
+      </div>
+
+      <p className="cancelled-view__hint">
+        등록 취소는 삭제가 아닙니다 — 처방·라운딩·바이탈이 그대로 남아 있어 되살릴 수 있습니다.
+      </p>
+
+      {error && <p role="alert" className="field__error">{error}</p>}
+
+      {!loading && rows.length === 0 ? (
+        <div className="history-empty"><p>이 기간에 취소된 배정이 없습니다.</p></div>
+      ) : (
+        <div className="history-wrapper">
+          <table className="history-table">
+            <thead>
+              <tr>
+                <th>배정</th>
+                <th>수액실</th>
+                <th>베드</th>
+                <th>환자명</th>
+                <th>차트번호</th>
+                <th>투여시작</th>
+                <th>남은 기록</th>
+                <th>취소사유</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <Fragment key={row.id}>
+                  <tr>
+                    <td>{fmtDateTime(row.assigned_at)}</td>
+                    <td>{ROOM_LABELS[row.room] ?? row.room}</td>
+                    <td>{row.bed_number}</td>
+                    <td>{row.patient_name}</td>
+                    <td>{row.chart_no}</td>
+                    {/* 투여를 시작한 적 없는 배정은 되살려도 남는 게 없다 — 그 사실을 그대로 보여준다. */}
+                    <td>{row.started_at ? fmtDateTime(row.started_at) : '시작 안 함'}</td>
+                    <td>처방 {row.order_count} · 라운딩 {row.round_count} · 바이탈 {row.vital_count}</td>
+                    <td>{row.cancel_reason ?? '—'}</td>
+                    <td className="dm-note-manage__action">
+                      <div className="dm-admin-edit-actions__buttons">
+                        <button
+                          type="button"
+                          className="dm-note-btn"
+                          disabled={offline || busyId === row.id}
+                          onClick={() => {
+                            if (row.bed_busy) {
+                              setEndDraft({ id: row.id, ms: guessEndAt(row) })
+                              return
+                            }
+                            if (window.confirm(`${row.patient_name} 환자의 취소를 되살릴까요?\n${row.bed_number}번 베드 카드로 돌아옵니다.`)) {
+                              restore(row)
+                            }
+                          }}
+                        >
+                          {row.bed_busy ? '종료 처리' : '되살리기'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {endDraft?.id === row.id && (
+                    <tr className="cancelled-view__end-row">
+                      <td colSpan={9}>
+                        <div className="cancelled-view__end">
+                          <span className="field__label">
+                            {row.bed_number}번 베드에 다른 환자가 있습니다 — 종료 시각을 정해 이용기록으로 보냅니다
+                          </span>
+                          <input
+                            type="date"
+                            className="occurred-at__input"
+                            value={toDateInput(endDraft.ms)}
+                            onChange={(e) => setEndDraft({ ...endDraft, ms: mergeDateInput(endDraft.ms, e.target.value) })}
+                            aria-label="종료 날짜"
+                          />
+                          <input
+                            type="time"
+                            className="occurred-at__input"
+                            value={toTimeInput(endDraft.ms)}
+                            onChange={(e) => setEndDraft({ ...endDraft, ms: mergeTimeInput(endDraft.ms, e.target.value) })}
+                            aria-label="종료 시각"
+                          />
+                          <button
+                            type="button"
+                            className="dm-note-btn"
+                            disabled={offline || busyId === row.id}
+                            onClick={() => restore(row, endDraft.ms)}
+                          >
+                            이용기록으로 보내기
+                          </button>
+                          <button type="button" className="dm-note-btn" onClick={() => setEndDraft(null)}>취소</button>
+                        </div>
+                        <p className="cancelled-view__end-note">
+                          이 경로는 기록지에 라인 제거 담당자가 비어 있습니다 — 자리가 나면 되살려서 정상 종료하는 쪽이 낫습니다.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 날짜·시각 입력칸과 ms를 오간다. 두 칸으로 나눈 이유: 어제 취소된 건을 오늘 시각으로
+// 잘못 보내는 일을 막으려면 날짜가 눈에 보여야 한다.
+function toDateInput(ms) {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function toTimeInput(ms) {
+  const d = new Date(ms)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+function mergeDateInput(ms, value) {
+  const [y, m, day] = value.split('-').map(Number)
+  if (!y || !m || !day) return ms
+  const d = new Date(ms)
+  d.setFullYear(y, m - 1, day)
+  return d.getTime()
+}
+function mergeTimeInput(ms, value) {
+  const [h, min] = value.split(':').map(Number)
+  if (Number.isNaN(h) || Number.isNaN(min)) return ms
+  const d = new Date(ms)
+  d.setHours(h, min, 0, 0)
+  return d.getTime()
+}
+
 function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onRestore, onEditPrescription }) {
   // 환자명·차트번호를 한 칸에서 받는다. 둘을 나눠 두면 어느 칸에 넣을지부터 고르게 되는데,
   // 이름은 한글이고 차트번호는 K+숫자라 섞일 일이 없어 나눌 이유가 없었다.
@@ -4646,6 +4859,8 @@ function App() {
   const [orderItems, setOrderItems] = useState([])
   const [orderBundles, setOrderBundles] = useState([])
   const [prescriptionBed, setPrescriptionBed] = useState(null)
+  // 이용기록 탭 안에서 '종료된 것'과 '취소된 것' 중 무엇을 보는지. 취소 쪽은 마스터만.
+  const [historyMode, setHistoryMode] = useState('ended')
   // { [code]: dose } — 키가 있으면 체크된 것. 단순 항목은 dose가 ''.
   // { [`${code}|${dose}`]: { code, dose, qty } } — 같은 항목을 용량만 달리해 두 번 담을 수 있다.
   const [orderChecks, setOrderChecks] = useState({})
@@ -6590,14 +6805,45 @@ function App() {
 
       <div className="tab-view" ref={tabViewRef}>
       {activeTab === 'history' ? (
-        <HistoryView
-          history={activeHistory}
-          sessionNotes={sessionNotes}
-          rounds={rounds}
-          vitals={vitals}
-          onRestore={canEdit(account?.role) ? handleRestoreSession : undefined}
-          onEditPrescription={canEdit(account?.role) ? handleEditHistoryPrescription : undefined}
-        />
+        <>
+          {/* 취소된 배정은 마스터만 본다 — 되살리면 없던 이용이 통계·기록지에 다시 잡힌다.
+              마스터가 아니면 줄 자체를 안 그린다(있는데 안 눌리는 버튼은 물음만 남긴다). */}
+          {canManage(account?.role) && (
+            <div className="history-mode" role="group" aria-label="이용기록 보기">
+              <button
+                type="button"
+                className={`history-mode__btn${historyMode === 'ended' ? ' history-mode__btn--on' : ''}`}
+                onClick={() => setHistoryMode('ended')}
+                aria-pressed={historyMode === 'ended'}
+              >
+                이용기록
+              </button>
+              <button
+                type="button"
+                className={`history-mode__btn${historyMode === 'cancelled' ? ' history-mode__btn--on' : ''}`}
+                onClick={() => setHistoryMode('cancelled')}
+                aria-pressed={historyMode === 'cancelled'}
+              >
+                취소된 배정
+              </button>
+            </div>
+          )}
+          {historyMode === 'cancelled' && canManage(account?.role) ? (
+            <CancelledView
+              offline={offline}
+              onRestored={() => Promise.all([refreshBoard(), refreshRecords()])}
+            />
+          ) : (
+            <HistoryView
+              history={activeHistory}
+              sessionNotes={sessionNotes}
+              rounds={rounds}
+              vitals={vitals}
+              onRestore={canEdit(account?.role) ? handleRestoreSession : undefined}
+              onEditPrescription={canEdit(account?.role) ? handleEditHistoryPrescription : undefined}
+            />
+          )}
+        </>
       ) : activeTab === 'patient' ? (
         <PatientView
           history={activeHistory}

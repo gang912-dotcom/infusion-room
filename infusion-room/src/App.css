@@ -2320,6 +2320,67 @@
   font-weight: 400;
 }
 
+/* ── 이용기록 / 취소된 배정 전환 (마스터만 보인다) ──
+   페이지 번호와 같은 중성 강조를 쓴다 — 색은 의미(베드 상태)에만 쓰는 규칙 그대로다. */
+.history-mode {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.history-mode__btn {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--card-bg, transparent);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.history-mode__btn--on {
+  color: var(--page-bg);
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+}
+
+/* ── 취소된 배정 ── */
+.cancelled-view__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.cancelled-view__count { font-size: 13px; color: var(--text-muted); }
+
+.cancelled-view__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 종료 시각 입력 줄 — 표 안에 펼쳐지는 한 칸이라 표 배경과 구분되게 살짝 눌러 둔다. */
+.cancelled-view__end-row td { background: var(--number-bg); }
+
+.cancelled-view__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 날짜·시각 칸은 내용만큼만 — flex가 늘리면 표 폭을 혼자 다 먹는다. */
+.cancelled-view__end .occurred-at__input { flex: 0 0 auto; width: auto; }
+
+.cancelled-view__end-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .history-empty {
   display: flex;
   align-items: center;

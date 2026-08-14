@@ -11,6 +11,8 @@ export const ACTIONS = {
   MESSAGE_DELETE: 'message_delete',
   // 휴지통 완전삭제. 되돌릴 수 없으니 누가 언제 몇 건을 지웠는지는 반드시 남는다.
   SESSION_PURGE: 'session_purge',
+  // 취소된 배정을 되살린 것. 없던 이용이 되살아나 통계·기록지에 다시 잡히므로 남긴다.
+  SESSION_UNCANCEL: 'session_uncancel',
   // 종료된 세션의 처방을 사후에 고친 것. 공식본(record_snapshot)까지 다시 굳히는 행위라
   // 남긴다. 진행 중인 세션의 처방 저장은 일상 작업이라 기록하지 않는다(폴링과 같은 이유).
   RECORD_EDIT: 'record_edit',

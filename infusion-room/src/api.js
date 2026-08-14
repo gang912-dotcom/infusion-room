@@ -440,6 +440,21 @@ export async function purgeSessions(ids) {
   return apiFetch('/admin/sessions/purge', { method: 'POST', body: JSON.stringify({ ids }) })
 }
 
+// ─── 취소된 배정 (마스터 전용) ───────────────────────────────────────
+// 취소는 삭제가 아니라 표시라 되살릴 수 있다. 종료를 누르려다 등록 취소를 누른 경우.
+export async function listCancelledSessions(days = 7) {
+  return apiFetch(`/admin/cancelled?days=${days}`)
+}
+
+// endedAt(ms)을 주면 카드로 돌리지 않고 곧장 이용기록으로 보낸다 — 그 베드에 이미
+// 다른 환자가 있어 자리가 없을 때. 자리가 있으면 안 주는 쪽이 낫다(정상 종료 절차를 탄다).
+export async function uncancelSession(sessionId, endedAt = null) {
+  return apiFetch(`/admin/sessions/${sessionId}/uncancel`, {
+    method: 'POST',
+    body: JSON.stringify(endedAt == null ? {} : { ended_at: endedAt }),
+  })
+}
+
 // ─── rounds ─────────────────────────────────────────────────────────
 function mapRoundRow(row) {
   return {
