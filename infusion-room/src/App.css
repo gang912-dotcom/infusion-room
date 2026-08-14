@@ -167,9 +167,11 @@
   width: 100%;
   max-width: 360px;
   padding: 32px 28px;
-  background: var(--panel-bg);
+  /* 로그인 카드는 도구 띠가 아니라 내용이다 — 세 층 중 가장 밝은 카드 면을 쓴다.
+     그림자도 토큰으로. 검은 그림자(rgba(0,0,0,.3))는 아이보리 위에서 면을 탁하게 만든다. */
+  background: var(--card-bg);
   border-radius: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--card-shadow-hover);
 }
 
 .login-card__title {
@@ -1567,7 +1569,10 @@
   font-size: 15px;
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--card-bg);
+  /* 입력칸은 제 면보다 한 단 눌러 앉는다. 예전엔 카드도 입력칸도 순백이라 차이가 없어
+     드러나지 않았는데, 세 층으로 나눈 뒤로는 입력칸이 카드보다 밝아 뒤집혀 보였다.
+     (모달 안에서는 아래쪽 .app .modal 규칙이 같은 값을 이미 쓰고 있었다) */
+  background: var(--input-bg);
   border: 1px solid var(--card-border);
   border-radius: 8px;
   transition: border-color 0.2s;
