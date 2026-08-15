@@ -174,13 +174,22 @@
   box-shadow: var(--card-shadow-hover);
 }
 
-/* 부제를 걷어냈으므로 제목이 직접 폼과의 간격을 잡는다(예전엔 부제의 아래 여백이 맡았다). */
 .login-card__title {
-  margin: 0 0 24px;
+  margin: 0;
   font-size: 22px;
   font-weight: 800;
   text-align: center;
   color: var(--text-primary);
+}
+
+/* 부제는 로그인 화면에만 남는다. 제목 아래 줄로 내린다 — 가운데 정렬이라 옆에 붙이면
+   이름의 중심이 밀려 보인다. 폼과의 간격(24px)도 여기서 받는다. */
+.login-card__tagline {
+  margin: 6px 0 24px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-secondary);
 }
 
 .login-form {

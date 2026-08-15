@@ -4410,6 +4410,9 @@ function LoginScreen({ onLoginSuccess }) {
         <h1 className="login-card__title">
           IV-story<span className="header__alt">(아이보리)</span>
         </h1>
+        {/* 부제는 로그인 화면에만 둔다 — 여기는 한 번 보고 지나가는 표지라
+            문구가 자리를 차지해도 좋지만, 헤더는 종일 떠 있는 크롬이다. */}
+        <p className="login-card__tagline">수액실의 모든 순간</p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="field">
             <span className="field__label">아이디</span>
