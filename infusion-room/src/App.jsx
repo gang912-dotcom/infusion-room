@@ -5,8 +5,6 @@ import BundlePicker from './BundlePicker'
 import OrderSummary from './OrderSummary'
 import { VITD_CODE } from './bundleDiff'
 import Stats from './Stats.jsx'
-import logoIcon from './assets/logo-icon-white.png'
-import logoIconColor from './assets/logo-icon.png'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
@@ -6728,7 +6726,10 @@ function App() {
               title="새로고침"
               aria-label="새로고침"
             >
-              <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
+              {/* 마크는 CSS 마스크로 칠한다(App.css .header__logo) — 테마별 파일 대신
+                  잉크 토큰 하나로 라이트·다크를 모두 덮는다. 버튼이 이미 '새로고침'으로
+                  라벨돼 있으므로 여기서는 장식이다. */}
+              <span className="header__logo" aria-hidden="true" />
             </button>
             <div className="header__text">
               <h1 className="header__title">

@@ -6,6 +6,8 @@ import '@fontsource/ibm-plex-sans-kr/400.css'
 import '@fontsource/ibm-plex-sans-kr/500.css'
 import '@fontsource/ibm-plex-sans-kr/600.css'
 import '@fontsource/ibm-plex-sans-kr/700.css'
+// 이름(IV-story)에만 쓰는 글꼴. wght 축만 있는 가변 파일이라 굵기를 따로 부를 필요가 없다.
+import '@fontsource-variable/fraunces/wght.css'
 import './index.css'
 import App from './App.jsx'
 
