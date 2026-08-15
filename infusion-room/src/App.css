@@ -174,22 +174,13 @@
   box-shadow: var(--card-shadow-hover);
 }
 
+/* 부제를 걷어냈으므로 제목이 직접 폼과의 간격을 잡는다(예전엔 부제의 아래 여백이 맡았다). */
 .login-card__title {
-  margin: 0;
+  margin: 0 0 24px;
   font-size: 22px;
   font-weight: 800;
   text-align: center;
   color: var(--text-primary);
-}
-
-/* 로그인 화면에서는 부제를 제목 아래 줄로 내린다 — 가운데 정렬이라 옆에 붙이면
-   이름의 중심이 밀려 보인다. 여기 여백은 위 제목의 margin-bottom을 대신 받는다. */
-.login-card__tagline {
-  margin: 6px 0 24px;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-  color: var(--text-secondary);
 }
 
 .login-form {
@@ -270,37 +261,18 @@
   gap: 2px;
 }
 
-.header__clinic {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* 부제 — 이름 옆에 붙는 꼬리다. 제목과 같은 줄에 두되 무게·크기를 확실히 낮춰
-   '아이보리'가 이름이고 이쪽은 설명이라는 게 한눈에 보이게 한다. */
-/* 이름의 영문 짝 — 이름의 일부라 바짝 붙는다(6px). 회색 채도를 낮춰 한글 이름 뒤로
-   물러나게 하고, 자간을 벌려 코드가 아니라 로고타이프로 읽히게 한다. */
-.header__en {
+/* 이름의 한글 짝 — 이름의 일부라 바짝 붙는다(6px). 회색 채도를 낮춰 영문 이름 뒤로
+   물러나게 한다. 자간은 벌리지 않는다 — 한글은 넓힐수록 흩어져 읽힌다. */
+.header__alt {
   margin-left: 6px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-}
-
-.header__tagline {
-  margin-left: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
   letter-spacing: 0;
+  color: var(--text-muted);
 }
 
 /* 폭이 모자라면 브라우저는 한글을 '글자 단위'로 끊는다. 폰에서 제목이 세로 5줄로
    쪼개졌던 원인이다. 이 라벨들은 줄바꿈 대신 줄어들거나 넘치게 둔다. */
-.header__clinic,
 .header__title,
 .header-account__name,
 .header-account__logout,

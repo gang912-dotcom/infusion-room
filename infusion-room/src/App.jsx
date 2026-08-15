@@ -4408,9 +4408,8 @@ function LoginScreen({ onLoginSuccess }) {
     <div className="app login-screen">
       <div className="login-card">
         <h1 className="login-card__title">
-          아이보리<span className="header__en">IV_STORY</span>
+          IV-story<span className="header__alt">(아이보리)</span>
         </h1>
-        <p className="login-card__tagline">수액실의 모든 순간</p>
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="field">
             <span className="field__label">아이디</span>
@@ -6729,15 +6728,11 @@ function App() {
               <img src={theme === 'light' ? logoIconColor : logoIcon} alt="벗이비인후과 로고" className="header__logo" />
             </button>
             <div className="header__text">
-              <span className="header__clinic">벗이비인후과</span>
-              {/* 이름(아이보리 = IV + STORY)과 부제를 한 줄에 둔다. 부제는 제목의 꼬리라
-                  줄을 따로 잡지 않는다 — 헤더가 세로로 길어지면 보드가 그만큼 밀린다. */}
               <h1 className="header__title">
-                아이보리
-                {/* 이름의 영문 짝(IV + STORY). 이름의 일부라 바짝 붙이고, 크기·채도를 낮춰
-                    한글 이름이 먼저 읽히게 둔다. 부제는 그 뒤로 한 칸 더 떨어뜨린다. */}
-                <span className="header__en">IV_STORY</span>
-                <span className="header__tagline">수액실의 모든 순간</span>
+                IV-story
+                {/* 이름의 한글 짝. 이름의 일부라 바짝 붙이고, 크기·채도를 낮춰
+                    영문 이름이 먼저 읽히게 둔다. */}
+                <span className="header__alt">(아이보리)</span>
               </h1>
             </div>
           </header>
