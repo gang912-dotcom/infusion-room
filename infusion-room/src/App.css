@@ -61,6 +61,10 @@
      다크에서 밝은 본문색이 얹혀 글자가 사라진다. 테마별로 갈라 둔다. */
   --record-btn-bg: rgba(120, 190, 235, 0.16);
   --record-btn-border: rgba(120, 190, 235, 0.45);
+  /* 드래그 선택 — 여태 브라우저 기본값(파랑)이 남아 있던 자리다. 우리가 그리지 않은
+     면도 화면의 일부다. 다크에서는 이름과 같은 아이보리를 옅게 깐다. */
+  --selection-bg: rgba(232, 224, 207, 0.26);
+  --selection-ink: #f1f5f9;
   /* iOS 세그먼트 컨트롤(탭) */
   --seg-track: rgba(255, 255, 255, 0.06);
   --seg-active: #3a3a40;
@@ -128,9 +132,12 @@
   --input-bg: #f6f2e9;
   --number-bg: #efeae0;
   --hover-tint: rgba(90, 72, 30, 0.05);
-  /* 기록지 버튼의 파란 틴트 — 브랜드 파랑 계열은 유지하되 채도를 눌러 아이보리와 붙인다. */
-  --record-btn-bg: #eef2f8;
-  --record-btn-border: #c6d6e6;
+  /* 기록지 버튼·채팅 공지의 틴트. 액센트(--brand)의 옅은 면이다 — 예전엔 파란 틴트라
+     아이보리 위에서 이 두 자리만 차갑게 떴다. 그 위 글자는 본문 먹색이고 대비 14.09. */
+  --record-btn-bg: #efe8db;
+  --record-btn-border: #dbcfba;
+  --selection-bg: #e3d8c3;
+  --selection-ink: #1e1b16;
   --seg-track: #ebe6db;
   --seg-active: #fffdf9;
   --seg-shadow: 0 1px 3px rgba(80, 68, 40, 0.16);
@@ -257,6 +264,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.app::selection,
+.app ::selection {
+  background: var(--selection-bg);
+  color: var(--selection-ink);
 }
 
 .header {
@@ -4026,11 +4039,15 @@
   --card-shadow-hover:0 2px 4px rgba(0,0,0,.45), 0 18px 44px rgba(0,0,0,.40);
 }
 :root[data-theme='light'] .app{
-  /* 라이트에서는 한 단계 진한 파랑 — 흰 면 위 대비를 맞춘 값이다. */
-  --brand:#2a78d6;
-  /* 밝은 면 위 15px 글자에서 브랜드 파랑은 4.41로 4.5에 못 미친다(실측).
-     한 단 짙은 남색으로 간다 — 카드 면 6.63 / 페이지 면 5.94. */
-  --accent-strong:#1c5cab;
+  /* 라이트의 액센트는 파랑이 아니라 '에스프레소 먹'이다.
+     상태색 넷(초록·주황·빨강·보라)이 이미 뜻을 갖고 있어 액센트가 설 수 있는 색상환
+     자리는 파랑–청록 계열과 따뜻한 무채뿐인데, 그중 아이보리 바탕과 같은 계열을 골랐다.
+     예전의 웹 파랑(#2a78d6)은 아이보리 위 대비 3.81로 화면에서 유일하게 차가운 음이었다.
+     새 값은 바탕 위 9.38 / 카드 위 10.69, 흰 글자를 얹어도 10.87.
+     맞바꾼 것: 액센트가 본문 먹색과 1.58밖에 차이나지 않아 '색으로 강조'는 사라진다.
+     강조는 크기·굵기가 진다(시작시각은 이미 15px/700로 한 단 크다). */
+  --brand:#4a3a2c;
+  --accent-strong:#4a3a2c;
   --hair:rgba(255,255,255,.9);
   /* 그림자도 따뜻한 쪽으로. 푸른 회색 그림자(rgba(20,20,40,…))를 아이보리 위에 두면
      면이 탁해 보인다 — 층을 가르는 게 그림자라서 여기 색이 곧 경계의 인상이 된다. */
