@@ -6123,10 +6123,19 @@
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-/* hover는 파란 후광(drop-shadow)이었다 — 컬러 로고 시절의 잔재다. 단색 마크에 색 후광을
-   얹으면 방금 뺀 채도가 되돌아온다. 대신 잉크를 본문색까지 한 단 올린다:
-   라이트에서는 진해지고 다크에서는 밝아져, 양쪽 다 '눌리는 것'으로 읽힌다. */
-.header__logo-btn:hover .header__logo { background: var(--text-primary); }
+/* 커서를 올리면 원래 벗 로고 색(파랑·남색)이 드러난다. 평소에는 단색이라 크롬으로 물러나
+   있다가, 손이 닿는 순간에만 제 색을 보인다 — 두 테마 모두 같다.
+   마스크를 끄고 컬러 이미지를 그 자리에 깐다. 컬러 원본은 좌우에 여백이 있어 그대로 쓰면
+   hover할 때 마크가 살짝 커지며 흔들린다 — 알파 경계로 잘라 흰색 마스크와 같은 기하로
+   맞춘 파일이라(둘 다 세로:가로 = 1:0.948) 자리가 어긋나지 않는다.
+   원본 915KB는 여전히 안 쓴다. 표시 크기의 네 배(220px)로 줄인 18KB짜리고, 배경 이미지라
+   처음 hover할 때까지 받아오지도 않는다. 키보드로 짚었을 때도 같은 것을 보여준다. */
+.header__logo-btn:hover .header__logo,
+.header__logo-btn:focus-visible .header__logo {
+  background: url('./assets/logo-icon-color.png') center / contain no-repeat;
+  -webkit-mask: none;
+  mask: none;
+}
 .header__logo-btn:active { transform: scale(0.94); }
 /* --focus-ring은 어디에도 정의된 적이 없어 늘 하드코딩 청록(#3d8fa8)으로 떨어지고 있었다.
    포커스 링은 앱 전체가 --brand 한 곳을 쓴다(App.css 브랜드 토큰 주석). 여기만 예외일 이유가 없다. */
