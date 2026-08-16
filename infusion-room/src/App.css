@@ -6140,3 +6140,89 @@
 /* --focus-ring은 어디에도 정의된 적이 없어 늘 하드코딩 청록(#3d8fa8)으로 떨어지고 있었다.
    포커스 링은 앱 전체가 --brand 한 곳을 쓴다(App.css 브랜드 토큰 주석). 여기만 예외일 이유가 없다. */
 .header__logo-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   벗 마크 (BeotDrip) — 방울이 떨어지는 로고
+   ══════════════════════════════════════════════════════════════════
+   평소: --mark-ink(하늘이) + --mark-ink-2(남색이·방울·파문) 두 톤.
+   호버: 브랜드 색이 드러나고 살짝 커진다. 이 마크는 새로고침 버튼 안이라
+        멈추고 커지는 것이 "누를 수 있다"는 신호다.
+
+   주기 7.0초 = 방울 세 번(1초 간격, 마지막 파문이 3.6초에 끝남) + 약 3.4초 쉼.
+   아래 퍼센트는 모두 이 주기에 묶여 있다 — 주기를 바꾸면 전부 다시 환산해야 한다.
+
+   --mark-ink-2 가 --mark-ink 보다 **어둡되 배경보다는 밝아야** 한다.
+   어두운 테마에서 더 진하게 갈수록 배경(#16171d)에 가까워져 오히려 안 보인다 —
+   실제로 #6b6456 부터 52px 에서 남색이가 먹히기 시작했다. */
+.app { --mark-ink-2: #a89e88; }
+:root[data-theme="light"] .app { --mark-ink-2: #5f5a4e; }
+
+.bd { display: block; width: 100%; height: 100%; transition: transform 180ms ease-out; }
+.bd-sky  { fill: var(--mark-ink);   transition: fill 220ms ease-out; }
+.bd-navy { fill: var(--mark-ink-2); transition: fill 220ms ease-out; }
+.bd-drip { fill: var(--mark-ink-2); }
+.bd-ring { stroke: var(--mark-ink-2); }
+
+/* ── 상시: 세 방울 떨어지고 쉼 ──────────────────────────────────── */
+.bd-drip {
+  transform-box: view-box; transform-origin: 0 0; opacity: 0;
+  animation: bd-fall 7.0s cubic-bezier(.55, 0, .85, .35) infinite;
+}
+.bd-d1 { animation-delay: 1s; }
+.bd-d2 { animation-delay: 2s; }
+/* 방울은 로고에 **닿기 직전에** 사라진다. 단색일 때 같은 색끼리 붙으면
+   물방울이 아니라 머리에 뿔이 난 것처럼 보인다. 착지는 파문이 대신 말해 준다. */
+@keyframes bd-fall {
+  0%              { opacity: 0; transform: translateY(-38px); }
+  1.82%   { opacity: 1; transform: translateY(-18px); }
+  7.89%   { opacity: 1; transform: translateY(16px); }
+  10.20%, 100% { opacity: 0; transform: translateY(40px); }
+}
+
+.bd-ring {
+  transform-box: view-box; transform-origin: 403px 276px; opacity: 0;
+  animation: bd-ripple 7.0s ease-out infinite;
+}
+.bd-r1 { animation-delay: 1s; }
+.bd-r2 { animation-delay: 2s; }
+@keyframes bd-ripple {
+  0%, 9.71%     { opacity: 0;   transform: scale(.25); }
+  11.54%       { opacity: .85; transform: scale(.55); }
+  23.07%, 100%  { opacity: 0;   transform: scale(8); }
+}
+
+/* 맥박은 한 요소에 세 번을 넣는다. 위치·축소는 안쪽 <g> 의 속성 transform 이 맡고
+   여기서는 scale 만 준다 — 같은 요소에 둘을 겹치면 속성 쪽이 통째로 덮인다. */
+.bd-body {
+  transform-box: view-box; transform-origin: 403px 610px;
+  animation: bd-thump 7.0s ease-out infinite;
+}
+@keyframes bd-thump { 0% { transform: scale(1); } 9.43%{transform:scale(1)} 10.71%{transform:scale(1.05)} 14.00%{transform:scale(1)} 23.71%{transform:scale(1)} 25.00%{transform:scale(1.05)} 28.29%{transform:scale(1)} 38.00%{transform:scale(1)} 39.29%{transform:scale(1.05)} 42.57%{transform:scale(1)} 100% { transform: scale(1); } }
+
+/* ── 호버·포커스: 멈추고 커지며 제 색 ───────────────────────────── */
+.header__logo-btn:hover .bd,
+.header__logo-btn:focus-visible .bd { transform: scale(1.08); }
+.header__logo-btn:hover .bd-navy,
+.header__logo-btn:focus-visible .bd-navy { fill: #1b3665; }
+.header__logo-btn:hover .bd-sky,
+.header__logo-btn:focus-visible .bd-sky { fill: #3b90c4; }
+.header__logo-btn:hover .bd-drip, .header__logo-btn:hover .bd-ring,
+.header__logo-btn:hover .bd-body,
+.header__logo-btn:focus-visible .bd-drip, .header__logo-btn:focus-visible .bd-ring,
+.header__logo-btn:focus-visible .bd-body { animation: none; }
+.header__logo-btn:hover .bd-drip, .header__logo-btn:hover .bd-ring,
+.header__logo-btn:focus-visible .bd-drip, .header__logo-btn:focus-visible .bd-ring { opacity: 0; }
+
+/* 로그인 화면의 마크. 워드마크(.login-card__title)와 같은 아이보리라 토큰이 그대로 맞는다. */
+.login-card__mark { width: 76px; height: 76px; margin: 0 auto 10px; }
+
+/* SVG 마크의 자리. 옛 .header__logo 는 PNG 마스크 전용이라 재사용하면
+   background·mask 가 SVG 위에 그대로 얹혀 깨진다. 그래서 크기만 주는 새 클래스를 쓴다. */
+.header__mark { display: block; width: 52px; height: 52px; flex-shrink: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-drip, .bd-ring, .bd-body { animation: none; }
+  .bd-ring, .bd-d1, .bd-d2 { opacity: 0; }
+  .bd-d0 { opacity: 1; }
+}

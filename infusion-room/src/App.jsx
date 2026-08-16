@@ -5,6 +5,7 @@ import BundlePicker from './BundlePicker'
 import OrderSummary from './OrderSummary'
 import { VITD_CODE } from './bundleDiff'
 import Stats from './Stats.jsx'
+import { BeotDrip } from './BeotDrip.jsx'
 import headerPortrait from './assets/header-portrait-cutout.png'
 import {
   login, logout, getCurrentAccount,
@@ -4405,6 +4406,9 @@ function LoginScreen({ onLoginSuccess }) {
   return (
     <div className="app login-screen">
       <div className="login-card">
+        {/* 로그인 화면의 마크. 워드마크와 같은 아이보리 잉크를 쓰므로 토큰이 그대로 맞는다.
+            여기는 버튼이 아니라 표지라 호버 전환 없이 방울만 떨어진다. */}
+        <BeotDrip className="login-card__mark" />
         <h1 className="login-card__title">
           IV-story<span className="header__alt">(아이보리)</span>
         </h1>
@@ -6726,10 +6730,10 @@ function App() {
               title="새로고침"
               aria-label="새로고침"
             >
-              {/* 마크는 CSS 마스크로 칠한다(App.css .header__logo) — 테마별 파일 대신
-                  잉크 토큰 하나로 라이트·다크를 모두 덮는다. 버튼이 이미 '새로고침'으로
-                  라벨돼 있으므로 여기서는 장식이다. */}
-              <span className="header__logo" aria-hidden="true" />
+              {/* 마크는 인라인 SVG 다(BeotDrip) — 방울·파문을 따로 움직여야 해서
+                  PNG 마스크로는 안 된다. 색은 잉크 토큰이 주므로 테마별 파일은 여전히 없다.
+                  버튼이 이미 '새로고침'으로 라벨돼 있어 마크 자체는 장식이다. */}
+              <BeotDrip className="header__mark" />
             </button>
             <div className="header__text">
               <h1 className="header__title">
