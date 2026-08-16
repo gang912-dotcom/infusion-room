@@ -280,23 +280,6 @@
   z-index: 1;
 }
 
-/* 로고는 이미지가 아니라 '칠해진 도형'이다. 흰색 PNG의 알파를 마스크로 쓰고 색은
-   --mark-ink가 준다 — 그래서 테마마다 다른 파일을 넣을 필요가 없고(컬러 원본 915KB가
-   빌드에서 빠졌다), 로고와 이름이 늘 같은 잉크로 움직인다.
-   그림자(파란 drop-shadow)도 뺐다. 단색 도형에 색 그림자는 다시 채도를 들인다. */
-.header__logo {
-  /* display를 빼면 로고가 사라진다(실제로 그랬다). 이 span은 새로고침 버튼 안에 들어가는데,
-     인라인 상자에는 width/height가 먹지 않는다 — 버튼의 line-height:0까지 겹쳐 높이 0이 된다.
-     <img>였을 때는 대체 요소라 인라인이어도 크기를 가졌던 것뿐이다. */
-  display: block;
-  height: 52px;
-  width: 52px;
-  flex-shrink: 0;
-  background: var(--mark-ink);
-  -webkit-mask: url('./assets/logo-icon-white.png') center / contain no-repeat;
-  mask: url('./assets/logo-icon-white.png') center / contain no-repeat;
-}
-
 .header__text {
   display: flex;
   flex-direction: column;
@@ -1954,7 +1937,9 @@
 
   .tab { flex: none; }
 
-  .header__logo {
+  /* 마크가 SVG로 바뀌면서 클래스가 .header__logo → .header__mark 가 됐다.
+     이 규칙만 옛 이름에 남아 있어서 폰에서 마크가 52px 그대로였다. */
+  .header__mark {
     height: 40px;
     width: 40px;
   }
@@ -6123,19 +6108,8 @@
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-/* 커서를 올리면 원래 벗 로고 색(파랑·남색)이 드러난다. 평소에는 단색이라 크롬으로 물러나
-   있다가, 손이 닿는 순간에만 제 색을 보인다 — 두 테마 모두 같다.
-   마스크를 끄고 컬러 이미지를 그 자리에 깐다. 컬러 원본은 좌우에 여백이 있어 그대로 쓰면
-   hover할 때 마크가 살짝 커지며 흔들린다 — 알파 경계로 잘라 흰색 마스크와 같은 기하로
-   맞춘 파일이라(둘 다 세로:가로 = 1:0.948) 자리가 어긋나지 않는다.
-   원본 915KB는 여전히 안 쓴다. 표시 크기의 네 배(220px)로 줄인 18KB짜리고, 배경 이미지라
-   처음 hover할 때까지 받아오지도 않는다. 키보드로 짚었을 때도 같은 것을 보여준다. */
-.header__logo-btn:hover .header__logo,
-.header__logo-btn:focus-visible .header__logo {
-  background: url('./assets/logo-icon-color.png') center / contain no-repeat;
-  -webkit-mask: none;
-  mask: none;
-}
+/* 호버할 때 벗 로고 색을 드러내는 규칙은 아래 .bd-* 쪽으로 옮겨갔다(SVG라 도형별로 칠한다).
+   여기 있던 PNG 마스크 규칙은 지웠다 — 가리키던 .header__logo 가 더는 마크업에 없다. */
 .header__logo-btn:active { transform: scale(0.94); }
 /* --focus-ring은 어디에도 정의된 적이 없어 늘 하드코딩 청록(#3d8fa8)으로 떨어지고 있었다.
    포커스 링은 앱 전체가 --brand 한 곳을 쓴다(App.css 브랜드 토큰 주석). 여기만 예외일 이유가 없다. */
@@ -6158,9 +6132,16 @@
 .app { --mark-ink-2: #a89e88; }
 :root[data-theme="light"] .app { --mark-ink-2: #5f5a4e; }
 
+/* 호버할 때 브랜드 색 뒤에 깔리는 바탕. 다크에서만 필요하다 —
+   라이트는 헤더면(#faf7f0)이 이미 그 역할을 하고 있어 투명으로 둔다.
+   원본 로고의 흰 선이 '빈 곳'이라, 바탕이 없으면 그 자리에 검은 배경이 비친다. */
+.app { --mark-plate: #f0ece2; }
+:root[data-theme="light"] .app { --mark-plate: transparent; }
+
 .bd { display: block; width: 100%; height: 100%; transition: transform 180ms ease-out; }
 .bd-sky  { fill: var(--mark-ink);   transition: fill 220ms ease-out; }
 .bd-navy { fill: var(--mark-ink-2); transition: fill 220ms ease-out; }
+.bd-plate { fill: none; transition: fill 220ms ease-out; }
 .bd-drip { fill: var(--mark-ink-2); }
 .bd-ring { stroke: var(--mark-ink-2); }
 
@@ -6207,6 +6188,8 @@
 .header__logo-btn:focus-visible .bd-navy { fill: #1b3665; }
 .header__logo-btn:hover .bd-sky,
 .header__logo-btn:focus-visible .bd-sky { fill: #3b90c4; }
+.header__logo-btn:hover .bd-plate,
+.header__logo-btn:focus-visible .bd-plate { fill: var(--mark-plate); }
 .header__logo-btn:hover .bd-drip, .header__logo-btn:hover .bd-ring,
 .header__logo-btn:hover .bd-body,
 .header__logo-btn:focus-visible .bd-drip, .header__logo-btn:focus-visible .bd-ring,
