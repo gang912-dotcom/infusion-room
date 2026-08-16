@@ -6202,7 +6202,18 @@
 
 /* SVG 마크의 자리. 옛 .header__logo 는 PNG 마스크 전용이라 재사용하면
    background·mask 가 SVG 위에 그대로 얹혀 깨진다. 그래서 크기만 주는 새 클래스를 쓴다. */
-.header__mark { display: block; width: 52px; height: 52px; flex-shrink: 0; }
+/* 헤더는 가운데 정렬이라 그냥 두면 '방울까지 합친 상자'의 중심이 이름과 맞고,
+   정작 눈에 보이는 동그란 로고는 그만큼 아래로 처진다. 로고 원이 이름과 나란히 서도록
+   상자를 끌어올린다 — 원 중심은 viewBox 610/1010 자리라 상자 중심(505)보다 10.4% 아래다.
+   transform 이 아니라 translate 속성을 쓴다: 호버의 scale(1.08)과 서로 덮지 않고 겹쳐진다.
+   퍼센트는 제 높이 기준이라 아래 40px 규칙에서도 따로 고칠 것이 없다. */
+.header__mark {
+  display: block;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  translate: 0 -10.4%;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .bd-drip, .bd-ring, .bd-body { animation: none; }
