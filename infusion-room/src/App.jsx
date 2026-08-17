@@ -4700,10 +4700,11 @@ function ComposeMessageModal({ onClose, closing }) {
 // 이미 다 친 사람은 그냥 누르면 되고, 그때는 기다림 없이 바로 나간다.
 //
 // 글자를 칠 때마다 그 자리에서 보낸다 — 기다리는 느낌이 없어야 한다. 원내 LAN 의
-// SQLite 조회라 한 번이 몇 ms 다. 대신 두 글자부터 — 한 글자면 거의 전부가 걸려
-// 목록이 쓸모없다. 늦게 온 응답은 요청 번호로 걸러낸다(빨리 치면 순서대로 안 온다).
+// SQLite 조회라 한 번이 몇 ms 다. 한 글자부터 띄운다: '김'만 쳐도 수십 명이 걸리지만,
+// 목록은 스크롤되고 어차피 다음 글자를 치면 좁혀진다 — 뜨다 마는 것보다 낫다.
+// 늦게 온 응답은 요청 번호로 걸러낸다(빨리 치면 순서대로 안 온다).
 // 결과는 떠 있는 목록이라 보드를 밀어내지 않는다.
-const SUGGEST_MIN = 2
+const SUGGEST_MIN = 1
 
 function PatientSearchBar({ onPick, disabled }) {
   const [query, setQuery] = useState('')
