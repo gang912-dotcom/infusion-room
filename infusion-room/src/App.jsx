@@ -4699,12 +4699,11 @@ function ComposeMessageModal({ onClose, closing }) {
 // 치는 동안 목록이 따라 뜬다(환자 조회 탭과 같은 화법). 버튼과 Enter도 그대로 둔다 —
 // 이미 다 친 사람은 그냥 누르면 되고, 그때는 기다림 없이 바로 나간다.
 //
-// 타이핑마다 서버를 때리지 않도록 두 가지를 건다.
-//  - 두 글자부터. 한 글자면 거의 전부가 걸려 목록이 쓸모없다.
-//  - 250ms 쉬었다가 보낸다. 이름 세 글자를 이어서 치면 요청은 한 번이다.
+// 글자를 칠 때마다 그 자리에서 보낸다 — 기다리는 느낌이 없어야 한다. 원내 LAN 의
+// SQLite 조회라 한 번이 몇 ms 다. 대신 두 글자부터 — 한 글자면 거의 전부가 걸려
+// 목록이 쓸모없다. 늦게 온 응답은 요청 번호로 걸러낸다(빨리 치면 순서대로 안 온다).
 // 결과는 떠 있는 목록이라 보드를 밀어내지 않는다.
 const SUGGEST_MIN = 2
-const SUGGEST_DELAY = 250
 
 function PatientSearchBar({ onPick, disabled }) {
   const [query, setQuery] = useState('')
@@ -4745,23 +4744,18 @@ function PatientSearchBar({ onPick, disabled }) {
     }
   }, [])
 
-  // 치는 중 자동 검색. 이 이펙트는 '기다렸다 보내기'만 한다 —
-  // 목록을 닫는 일은 아래 onType(이벤트)에서 한다. 이펙트 안에서 상태를 바로 바꾸면
-  // 렌더가 연쇄로 돈다(린트도 이걸 잡는다).
-  useEffect(() => {
-    const q = query.trim()
-    if (q.length < SUGGEST_MIN) return undefined
-    const t = setTimeout(() => search(q, { quiet: true }), SUGGEST_DELAY)
-    return () => clearTimeout(t)
-  }, [query, search])
-
+  // 치는 순간 바로 보낸다. 이펙트를 거치지 않는 이유는 두 가지다 —
+  // 한 박자 늦게 도는 것을 없애려는 것이고, 이펙트 안에서 상태를 바로 바꾸면
+  // 렌더가 연쇄로 돌기 때문이다(린트도 이걸 잡는다). 타이핑은 이벤트다.
   function onType(value) {
     setQuery(value)
     if (value.trim().length < SUGGEST_MIN) {
       reqRef.current++      // 날아오고 있던 응답을 무효로 만든다
       setResults(null)
       setError('')
+      return
     }
+    search(value, { quiet: true })
   }
 
   function run() { search(query) }
