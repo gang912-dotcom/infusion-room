@@ -84,6 +84,21 @@ $sc.Save()
 # 없거나 실패해도 상관없다 — 바로가기는 이미 만들어졌다.
 try { Start-Process -FilePath 'ie4uinit.exe' -ArgumentList '-show' -WindowStyle Hidden -ErrorAction Stop } catch {}
 
+# ── 4. 바로가기 화살표 감추기 ───────────────────────────────────────────
+# 아이콘 좌하단의 화살표는 윈도가 겹쳐 그리는 표시라 아이콘 파일로는 못 없앤다.
+# 여기서 같이 처리한다. 그쪽 스크립트가 알아서 관리자 권한을 물어보고(레지스트리를
+# 건드려야 한다), 이미 적용된 PC 에서는 아무것도 안 하고 넘어간다.
+#
+# 바로가기를 다 만든 **뒤에** 부르는 것이 중요하다. 관리자로 올라가면 다른 계정으로
+# 도는 수가 있는데, 그 전에 올라가 버리면 바탕화면 경로가 그 계정 것이 되어
+# 바로가기가 엉뚱한 자리에 생긴다.
+$arrow = Join-Path $PSScriptRoot 'shortcut-arrow.ps1'
+if (Test-Path $arrow) {
+  Write-Host ''
+  Write-Host '바로가기 화살표를 감춥니다(권한 창이 뜨면 [예]).' -ForegroundColor Yellow
+  try { & $arrow -Quiet } catch { Write-Host '화살표는 못 감췄습니다. 바로가기는 정상입니다.' -ForegroundColor Yellow }
+}
+
 Write-Host ''
 Write-Host "만들었습니다: $lnk" -ForegroundColor Green
 Write-Host ''

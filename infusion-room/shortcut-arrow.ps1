@@ -15,15 +15,34 @@
 #
 # 쓰는 법: hide-shortcut-arrow.bat  (감추기) / restore-shortcut-arrow.bat (되돌리기)
 
-param([switch]$Restore)
+param([switch]$Restore, [switch]$Quiet)
 
 $Url      = 'http://192.168.0.86:4000'
 $IconDir  = Join-Path $env:LOCALAPPDATA 'infusion-room'
 $Blank    = Join-Path $IconDir 'blank.ico'
 $RegPath  = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Icons'
 
+# ── 이미 그 상태면 아무것도 안 한다 ─────────────────────────────────────
+# setup-pc-app 이 매번 이걸 부르므로, 이미 적용된 PC 에서 탐색기를 또 다시 시작하면
+# 열어 둔 창만 애꿎게 닫힌다. 값이 있고 그 파일이 실제로 있으면 끝난 것으로 본다.
+$current = (Get-ItemProperty -Path $RegPath -Name '29' -ErrorAction SilentlyContinue).'29'
+$applied = $current -and (Test-Path ($current -replace ',0$',''))
+if ((-not $Restore) -and $applied) {
+  if (-not $Quiet) { Write-Host '이미 적용돼 있습니다. 그대로 둡니다.' -ForegroundColor Green; Read-Host '엔터를 누르면 닫힙니다' }
+  exit 0
+}
+if ($Restore -and -not $current) {
+  if (-not $Quiet) { Write-Host '이미 윈도 기본값입니다.' -ForegroundColor Green; Read-Host '엔터를 누르면 닫힙니다' }
+  exit 0
+}
+
 # ── 관리자 권한으로 올라가기 ────────────────────────────────────────────
 # HKLM 은 관리자만 쓸 수 있다. 권한이 없으면 자기 자신을 관리자로 다시 띄운다.
+#
+# 바로가기 만들기(setup-pc-app.ps1)를 여기에 합치지 않는 이유가 이것이다 — 관리자로
+# 올라가면 다른 계정으로 도는 수가 있고, 그러면 바탕화면 경로가 그 계정 것이 되어
+# 바로가기가 엉뚱한 자리에 생긴다. 바로가기는 원래 계정에서 만들고, 권한이 필요한
+# 이 부분만 따로 올라간다.
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
   [Security.Principal.WindowsIdentity]::GetCurrent()
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -32,6 +51,7 @@ if (-not $isAdmin) {
   Write-Host '관리자 권한이 필요합니다. 창이 하나 더 뜨면 [예]를 눌러 주세요.' -ForegroundColor Yellow
   $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
   if ($Restore) { $args += '-Restore' }
+  if ($Quiet)   { $args += '-Quiet' }
   Start-Process powershell -Verb RunAs -ArgumentList $args
   exit
 }
@@ -54,12 +74,12 @@ if ($Restore) {
   } catch {
     Write-Host '빈 아이콘을 못 받았습니다 (서버가 꺼져 있거나 주소가 다름).' -ForegroundColor Red
     Write-Host '아무것도 바꾸지 않았습니다.'
-    Read-Host '엔터를 누르면 닫힙니다'
+    if (-not $Quiet) { Read-Host '엔터를 누르면 닫힙니다' }
     exit 1
   }
   if (-not (Test-Path $Blank) -or (Get-Item $Blank).Length -eq 0) {
     Write-Host '받은 파일이 비어 있습니다. 아무것도 바꾸지 않았습니다.' -ForegroundColor Red
-    Read-Host '엔터를 누르면 닫힙니다'
+    if (-not $Quiet) { Read-Host '엔터를 누르면 닫힙니다' }
     exit 1
   }
 
@@ -81,5 +101,4 @@ Write-Host '끝났습니다.' -ForegroundColor Green
 if (-not $Restore) {
   Write-Host '되돌리려면 restore-shortcut-arrow.bat 을 실행하세요.'
 }
-Write-Host ''
-Read-Host '엔터를 누르면 닫힙니다'
+if (-not $Quiet) { Read-Host '엔터를 누르면 닫힙니다' }
