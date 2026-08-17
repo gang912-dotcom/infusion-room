@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import ChatPanel from './ChatPanel'
 import BundlePicker from './BundlePicker'
@@ -565,6 +565,7 @@ function DurationControls({ minutes, onAdjust, remainingMs, readOnly = false }) 
 const DURATION_PRESETS = [
   { minutes: 30, label: '30분' },
   { minutes: 60, label: '1시간' },
+  { minutes: 90, label: '1시간 30분' },
   { minutes: 120, label: '2시간' },
 ]
 
@@ -4695,15 +4696,24 @@ function ComposeMessageModal({ onClose, closing }) {
 // 이름·차트번호로 찾아 환자를 고르면 배정 대기 모드로 넘긴다(App의 pendingPatient).
 // 기존 등록 경로(빈 베드 → 모달 → 차트번호 입력)를 대체하지 않고 하나 더하는 것이다.
 //
-// 검색은 버튼이나 Enter로만 한다 — 타이핑마다 서버를 때릴 이유가 없고, 이름 두 글자에
-// 걸리는 환자가 수십 명이라 자동 검색은 오히려 방해가 된다.
+// 치는 동안 목록이 따라 뜬다(환자 조회 탭과 같은 화법). 버튼과 Enter도 그대로 둔다 —
+// 이미 다 친 사람은 그냥 누르면 되고, 그때는 기다림 없이 바로 나간다.
+//
+// 타이핑마다 서버를 때리지 않도록 두 가지를 건다.
+//  - 두 글자부터. 한 글자면 거의 전부가 걸려 목록이 쓸모없다.
+//  - 250ms 쉬었다가 보낸다. 이름 세 글자를 이어서 치면 요청은 한 번이다.
 // 결과는 떠 있는 목록이라 보드를 밀어내지 않는다.
+const SUGGEST_MIN = 2
+const SUGGEST_DELAY = 250
+
 function PatientSearchBar({ onPick, disabled }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null) // null = 아직 검색하지 않음(빈 배열과 다르다)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const boxRef = useRef(null)
+  // 늦게 온 응답이 최신 결과를 덮어쓰지 않게 한다. 빨리 치면 요청이 순서대로 안 돌아온다.
+  const reqRef = useRef(0)
 
   // 바깥을 누르면 결과를 닫는다. 결과가 떠 있을 때만 듣는다.
   useEffect(() => {
@@ -4715,21 +4725,46 @@ function PatientSearchBar({ onPick, disabled }) {
     return () => document.removeEventListener('pointerdown', onDown)
   }, [results])
 
-  async function run() {
-    const q = query.trim()
+  const search = useCallback(async (raw, { quiet = false } = {}) => {
+    const q = raw.trim()
     if (!q) return
-    setBusy(true)
+    const id = ++reqRef.current
+    if (!quiet) setBusy(true)
     setError('')
     try {
-      setResults(await searchPatients(q))
+      const hits = await searchPatients(q)
+      if (id !== reqRef.current) return  // 그 사이 더 친 글자가 있다 — 이 응답은 버린다
+      setResults(hits)
     } catch (err) {
+      if (id !== reqRef.current) return
       // 참조 데이터와 달리 재시도하지 않는다 — 사용자가 다시 누르면 되는 일회성 요청이다.
-      setError(err.message)
-      setResults(null)
+      // 치는 중(quiet)에 난 오류는 조용히 넘긴다. 글자마다 빨간 줄이 떴다 사라지면 시끄럽다.
+      if (!quiet) { setError(err.message); setResults(null) }
     } finally {
-      setBusy(false)
+      if (!quiet && id === reqRef.current) setBusy(false)
+    }
+  }, [])
+
+  // 치는 중 자동 검색. 이 이펙트는 '기다렸다 보내기'만 한다 —
+  // 목록을 닫는 일은 아래 onType(이벤트)에서 한다. 이펙트 안에서 상태를 바로 바꾸면
+  // 렌더가 연쇄로 돈다(린트도 이걸 잡는다).
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < SUGGEST_MIN) return undefined
+    const t = setTimeout(() => search(q, { quiet: true }), SUGGEST_DELAY)
+    return () => clearTimeout(t)
+  }, [query, search])
+
+  function onType(value) {
+    setQuery(value)
+    if (value.trim().length < SUGGEST_MIN) {
+      reqRef.current++      // 날아오고 있던 응답을 무효로 만든다
+      setResults(null)
+      setError('')
     }
   }
+
+  function run() { search(query) }
 
   // 한글 조합 중 Enter는 무시한다 — 조합이 끝나기 전에 보내면 마지막 글자가 잘린다(채팅과 같은 함정).
   function onKeyDown(e) {
@@ -4753,7 +4788,7 @@ function PatientSearchBar({ onPick, disabled }) {
           type="text"
           className="psearch__input"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onType(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="환자 검색 — 이름 또는 차트번호"
           aria-label="환자 검색"

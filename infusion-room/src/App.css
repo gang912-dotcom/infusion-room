@@ -783,21 +783,29 @@
 
 /* ─── 카드 첫 줄: 베드 번호 + 상태 칩 ─────────────────────────── */
 /* 칩을 절대배치로 띄우면 번호가 길어질 때 겹친다. 한 줄 안에서 양끝으로 민다. */
+/* 번호와 상태칩이 한 줄에 선다. 둘 다 줄일 수 없는 값이라(번호는 자리 이름이고
+   칩은 상태라 말줄임이 안 된다) 자리가 모자라면 칩이 카드 밖으로 밀려났다 —
+   '2F-1' 처럼 이름이 긴 베드에서 '배정됨 · 미도착'이 5.9px 넘쳤다(실측).
+   여백을 조여 175px 카드 안에 들어가게 하고, 그래도 모자라면(더 좁은 화면) 아랫줄로
+   내린다. 여백만으로 해결되므로 평소에는 줄 높이가 39px 그대로다. */
 .bed-card__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   min-width: 0;
 }
 
 /* 표시 전용 칩 — 누르는 것(바이탈·라운딩)은 44px, 이건 26px로 갈라 둔다. */
 .bed-card__chip {
   flex: none;
+  /* 아랫줄로 내려가도 오른쪽에 붙어 있게 한다(윗줄일 때와 같은 자리). */
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   height: 26px;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 13px;
   font-weight: 600;
   border-radius: 999px;
@@ -838,7 +846,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 11px;
+  /* 좌우 11 → 9px. '2F-1'처럼 이름이 긴 베드에서 옆 상태칩이 카드를 넘던 것을
+     여백에서 되찾는다. 글자 크기는 그대로다 — 멀리서 읽는 값이라 못 줄인다. */
+  padding: 4px 9px;
   height: 30px;
   width: auto;
   white-space: nowrap;
@@ -5728,16 +5738,20 @@
 }
 
 /* 소요시간 3택 — 고른 값이 곧 총 시간이라 따로 시계를 두지 않는다. */
+/* 네 칸이 한 줄에 들어가야 한다. '1시간 30분'이 제일 길어서 이 칸이 폭을 정한다 —
+   좌우 여백과 칸 사이를 줄이고, 줄바꿈을 막아 '1시간'과 '30분'이 두 줄로 갈라지지 않게 한다.
+   글자는 한 단 줄인다(15 → 14px). 최소 높이 48px 은 그대로다 — 장갑 낀 손으로 누르는 칸이다. */
 .duration-presets {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .duration-preset {
   min-height: 48px;
-  padding: 10px 6px;
-  font-size: 15px;
+  padding: 10px 2px;
+  white-space: nowrap;
+  font-size: 14px;
   font-family: inherit;
   font-weight: 600;
   color: var(--text-secondary);
