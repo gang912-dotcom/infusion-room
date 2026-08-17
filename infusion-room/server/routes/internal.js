@@ -87,7 +87,7 @@ router.get('/patients/names', (req, res) => {
 })
 
 // ─── 환자 카드 — 태그를 눌렀을 때 뜨는 것 ─────────────────────────────
-// 한 번에 다 실어 보낸다(현재 이용 + 최근 이용 + 그 처방). 카드를 열 때마다 왕복을 세 번
+// 한 번에 다 실어 보낸다(현재 이용 + 최근 이용 + 그 처방과 바이탈). 카드를 열 때마다 왕복을 세 번
 // 하면 수액실이 조금만 느려도 카드가 조각조각 뜬다.
 //
 // GET 이지만 열람 로그를 남긴다 — 환자 상세를 여는 행위 자체가 기록 대상이다.
@@ -150,7 +150,33 @@ router.get('/patients/:chartNo', (req, res) => {
     }
   }
 
-  const withOrders = (s) => ({ ...s, orders: ordersBySession.get(s.id) ?? [] })
+  // 바이탈도 세션에 매여 있다(체온·혈압·맥박). 처방과 같은 이유로 한 번에 받아 묶는다.
+  // 지운 것은 뺀다 — 화면에서 지운 기록이 프렌즈에서만 되살아나면 안 된다.
+  const vitalsBySession = new Map()
+  if (ids.length) {
+    const rows = db.prepare(`
+      SELECT session_id, occurred_at, temperature, bp_systolic, bp_diastolic, pulse
+      FROM vitals
+      WHERE deleted = 0 AND session_id IN (${ids.map(() => '?').join(',')})
+      ORDER BY occurred_at
+    `).all(...ids)
+    for (const v of rows) {
+      if (!vitalsBySession.has(v.session_id)) vitalsBySession.set(v.session_id, [])
+      vitalsBySession.get(v.session_id).push({
+        occurred_at: v.occurred_at,
+        temperature: v.temperature,
+        bp_systolic: v.bp_systolic,
+        bp_diastolic: v.bp_diastolic,
+        pulse: v.pulse,
+      })
+    }
+  }
+
+  const withOrders = (s) => ({
+    ...s,
+    orders: ordersBySession.get(s.id) ?? [],
+    vitals: vitalsBySession.get(s.id) ?? [],
+  })
 
   logAccess(req, ACTIONS.PATIENT_VIEW, { targetType: 'patient', targetId: patient.id })
 
