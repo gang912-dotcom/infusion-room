@@ -6178,6 +6178,20 @@
   10.20%, 100% { opacity: 0; transform: translateY(40px); }
 }
 
+/* 눈 감기 — 세 방울을 다 떨구고 쉬는 동안만. 셋째 파문이 3.6초에 끝나므로
+   그 뒤에 감고, 다음 주기가 시작되기 전(6.8초)에 뜬다. 7초 주기 기준 퍼센트다.
+   opacity 만 건드린다 — 눈은 몸 위에 얹힌 도형이라 켜고 끄는 것으로 충분하다. */
+.bd-eye,          /* 눈구멍을 메우는 덮개 */
+.bd-smile {       /* 마스크에서 웃는 곡선을 파내는 도형 */
+  opacity: 0;
+  animation: bd-smile 7.0s ease-in-out infinite;
+}
+@keyframes bd-smile {
+  0%, 51.4%      { opacity: 0; }   /* 0 ~ 3.60초 — 방울 떨어지는 동안은 뜨고 있다 */
+  55.7%, 92.9%   { opacity: 1; }   /* 3.90 ~ 6.50초 — 쉬는 동안 웃는 눈 */
+  97.1%, 100%    { opacity: 0; }   /* 6.80초 — 다음 방울 전에 다시 뜬다 */
+}
+
 .bd-ring {
   transform-box: view-box; transform-origin: 403px 276px; opacity: 0;
   animation: bd-ripple 7.0s ease-out infinite;
@@ -6208,9 +6222,9 @@
 .header__logo-btn:hover .bd-plate,
 .header__logo-btn:focus-visible .bd-plate { fill: var(--mark-plate); }
 .header__logo-btn:hover .bd-drip, .header__logo-btn:hover .bd-ring,
-.header__logo-btn:hover .bd-body,
+.header__logo-btn:hover .bd-body, .header__logo-btn:hover .bd-eye, .header__logo-btn:hover .bd-smile,
 .header__logo-btn:focus-visible .bd-drip, .header__logo-btn:focus-visible .bd-ring,
-.header__logo-btn:focus-visible .bd-body { animation: none; }
+.header__logo-btn:focus-visible .bd-body, .header__logo-btn:focus-visible .bd-eye, .header__logo-btn:focus-visible .bd-smile { animation: none; }
 .header__logo-btn:hover .bd-drip, .header__logo-btn:hover .bd-ring,
 .header__logo-btn:focus-visible .bd-drip, .header__logo-btn:focus-visible .bd-ring { opacity: 0; }
 
@@ -6245,7 +6259,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bd-drip, .bd-ring, .bd-body { animation: none; }
+  .bd-drip, .bd-ring, .bd-body, .bd-eye, .bd-smile { animation: none; }
   .bd-ring, .bd-d1, .bd-d2 { opacity: 0; }
   .bd-d0 { opacity: 1; }
 }
