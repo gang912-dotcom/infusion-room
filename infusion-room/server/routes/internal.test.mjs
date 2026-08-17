@@ -90,6 +90,32 @@ assert.ok(!('baseline_note' in byName[0]), '검색 결과에 baseline_note 가 �
 // LIKE 와일드카드는 글자 그대로 찾는다(안 막으면 '%' 하나로 전 환자가 쏟아진다).
 assert.deepEqual(await (await get('/internal/patients/search?q=%25')).json(), [])
 
+// ─── 3-b. 이름만 받아 오기 (대화의 `#차트번호` 에 이름을 입힌다) ──────
+const names = await (await get('/internal/patients/names?chartNos=204118,99,999999')).json()
+assert.deepEqual(
+  names.sort((a, b) => a.chart_no.localeCompare(b.chart_no)),
+  [{ chart_no: '204118', name: '김서연' }, { chart_no: '99', name: '이백프로' }].sort((a, b) =>
+    a.chart_no.localeCompare(b.chart_no),
+  ),
+  '없는 번호는 404 가 아니라 그냥 빠진다 — 대화의 #12 가 차트번호가 아닐 수도 있다',
+)
+
+// **이름 말고는 아무것도 주지 않는다.** 기저질환이 딸려 나가면 '로그 없는 조회 통로'가 되어
+// 이 경로를 로그에서 뺀 판단의 전제가 무너진다.
+assert.deepEqual(Object.keys(names[0]).sort(), ['chart_no', 'name'])
+
+// 이 경로는 열람 기록을 남기지 않는다 — 대화를 스크롤할 때마다 부르는 자리다.
+const beforeNames = db.prepare('SELECT COUNT(*) c FROM access_logs').get().c
+await get('/internal/patients/names?chartNos=204118')
+assert.equal(db.prepare('SELECT COUNT(*) c FROM access_logs').get().c, beforeNames)
+
+assert.deepEqual(await (await get('/internal/patients/names')).json(), [], '빈 요청은 빈 답')
+assert.deepEqual(
+  await (await get('/internal/patients/names?chartNos=abc,,204118')).json(),
+  [{ chart_no: '204118', name: '김서연' }],
+  '숫자가 아닌 것은 조용히 버린다(대화에는 별 글자가 다 들어온다)',
+)
+
 // ─── 4. 카드는 한 번에 다 실어 온다 ───────────────────────────────────
 const card = await (await get('/internal/patients/204118')).json()
 assert.equal(card.name, '김서연')
