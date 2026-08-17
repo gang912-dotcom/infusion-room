@@ -21,8 +21,8 @@ export const ACTIONS = {
 }
 
 const insertStmt = db.prepare(
-  `INSERT INTO access_logs (account_id, action, target_type, target_id, created_at, ip)
-   VALUES (?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO access_logs (account_id, action, target_type, target_id, created_at, ip, actor)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`,
 )
 
 function clientIp(req) {
@@ -32,7 +32,15 @@ function clientIp(req) {
 }
 
 // accountId를 따로 받는 이유: 로그인은 requireAuth를 안 거쳐서 req.account가 아직 없다.
-export function logAccess(req, action, { targetType = null, targetId = null, accountId } = {}) {
+//
+// actor는 이 앱 계정이 아닌 사람이 봤을 때만 채운다(프렌즈에서 넘어온 열람 — '김철수#42').
+// 그때 accountId는 프렌즈 서비스 계정이라 '어느 앱에서 왔나'까지만 답한다. 둘을 한 줄에
+// 같이 남겨야 "프렌즈로 들어와서 김철수가 봤다"가 된다.
+export function logAccess(
+  req,
+  action,
+  { targetType = null, targetId = null, accountId, actor = null } = {},
+) {
   try {
     insertStmt.run(
       accountId ?? req?.account?.id ?? null,
@@ -41,6 +49,7 @@ export function logAccess(req, action, { targetType = null, targetId = null, acc
       targetId != null ? Number(targetId) : null,
       Date.now(),
       clientIp(req),
+      actor ?? req?.internal?.actor ?? null,
     )
   } catch (err) {
     // 로그를 못 남긴다고 본 요청까지 실패시키지 않는다.

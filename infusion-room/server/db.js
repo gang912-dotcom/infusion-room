@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
@@ -83,6 +84,15 @@ if (!patientColumns.includes('gender')) {
   db.exec('ALTER TABLE patients ADD COLUMN gender TEXT')
 }
 
+// ─── 열람 로그의 '누가' (2026-08-17) ──────────────────────────────────
+// 프렌즈(사내 메신저)에서 환자 태그를 눌러 이 서버를 부르면 보는 사람이 이 앱 계정이 아니다.
+// account_id 는 '어느 앱에서 왔나'(아래 프렌즈 서비스 계정)만 답할 수 있으므로 '누가'를 적을
+// 칸을 따로 둔다. 앱에서 직접 본 것은 계속 account_id 하나로 남고 actor 는 NULL 이다.
+const accessLogColumns = db.prepare('PRAGMA table_info(access_logs)').all().map((c) => c.name)
+if (!accessLogColumns.includes('actor')) {
+  db.exec('ALTER TABLE access_logs ADD COLUMN actor TEXT')
+}
+
 // ─── 권한 4단계 확장 (2026-08) ────────────────────────────────────────
 // role을 viewer/staff/manager/admin 4단계로. 기존 CHECK(role IN ('staff','admin'))가
 // viewer/manager 삽입을 막으므로 accounts 테이블을 새 CHECK로 1회 재작성한다
@@ -114,6 +124,30 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'accounts_role_4tier_260812'
   })()
   db.pragma('foreign_keys = ON')
   console.log('[db] 권한 4단계 확장 — accounts에 viewer/manager 역할 허용')
+}
+
+// ─── 프렌즈 서비스 계정 (2026-08-17) ──────────────────────────────────
+// 프렌즈에서 넘어온 열람을 access_logs 에 남기려면 account_id 에 넣을 줄이 하나 있어야 한다
+// (그 컬럼이 accounts 를 참조한다). 사람 계정이 아니라 '어느 앱에서 왔나'를 가리키는 표식이고,
+// '누가'는 같은 줄의 actor 가 답한다.
+//
+// 로그인할 수 없는 계정이다 — is_active = 0 이라 requireAuth 가 거부하고, 비밀번호는 아무도
+// 모르는 무작위 값으로 굳혀 둔다(관리자가 실수로 살려도 뚫리지 않게). 이 계정으로 들어오는
+// 통로는 /api/internal 의 토큰뿐이고 그 라우터는 requireAuth 를 지나지 않는다.
+export const FRIEND_HZ_USERNAME = 'friend_hz'
+if (!db.prepare('SELECT 1 FROM accounts WHERE username = ?').get(FRIEND_HZ_USERNAME)) {
+  const now = Date.now()
+  db.prepare(`
+    INSERT INTO accounts (username, display_name, password_hash, role, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, 'viewer', 0, ?, ?)
+  `).run(
+    FRIEND_HZ_USERNAME,
+    '프렌즈(사내 메신저)',
+    bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10),
+    now,
+    now,
+  )
+  console.log('[db] 프렌즈 서비스 계정 생성 — 로그인 불가, 열람 로그 표식 전용')
 }
 
 // 구 환자 메모는 성격상 기저질환 정본에 가깝다(차트별 영구) → 1회 이관한다.

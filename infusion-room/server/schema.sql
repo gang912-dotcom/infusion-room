@@ -204,7 +204,11 @@ CREATE TABLE IF NOT EXISTS access_logs (
   target_type TEXT,
   target_id   INTEGER,
   created_at  INTEGER NOT NULL,
-  ip          TEXT
+  ip          TEXT,
+  -- 이 앱 계정이 아닌 사람이 본 경우 그 사람을 적는다 (예: 프렌즈에서 환자 태그를 눌렀을 때
+  -- '김철수#42'). account_id 는 '어느 앱에서 왔나'(프렌즈 서비스 계정), actor 는 '누가'다.
+  -- 앱에서 직접 본 것은 account_id 하나로 충분하므로 NULL 이다.
+  actor       TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_created ON access_logs(created_at DESC);

@@ -18,7 +18,9 @@ import adminRouter from './routes/admin.js'
 import adminOrdersRouter from './routes/adminOrders.js'
 import chatRouter, { adminChatRouter } from './routes/chat.js'
 import { statsRouter, statsAdminRouter } from './routes/statsLock.js'
+import internalRouter from './routes/internal.js'
 import { requireAuth, requireAdmin, blockViewerWrites } from './middleware/requireAuth.js'
+import { requireInternal } from './middleware/requireInternal.js'
 import { scheduleLogPruning } from './lib/accessLog.js'
 
 const app = express()
@@ -29,6 +31,11 @@ app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
 app.use('/api', authRouter)
+
+// 서버 간 통로(프렌즈 = 사내 메신저) — 사람 로그인 쿠키가 아니라 토큰으로 들어오므로
+// requireAuth '앞'에 붙는다. 대신 requireInternal 을 지나고 읽기 라우트만 있다.
+// requireAuth 자체를 토큰으로 뚫지 않은 이유: 그러면 토큰 하나로 배정·처방·계정까지 손댈 수 있다.
+app.use('/api/internal', requireInternal, internalRouter)
 
 app.use('/api', requireAuth)
 // 열람 전용(viewer)의 쓰기(POST/PATCH/DELETE)를 여기서 일괄 차단한다 — 라우터마다 막지 않고
