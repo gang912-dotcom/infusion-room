@@ -101,6 +101,16 @@ const canEdit = (role) => role !== 'viewer'                        // 편집·�
 const canSeeStats = (role) => role === 'manager' || role === 'admin' // 통계 탭(암호 폐지, 역할로)
 const canManage = (role) => role === 'admin'                        // 관리자 설정(마스터)
 // 탭 접근: viewer는 통계·데이터관리 없음, staff는 통계 없음. 나머지(상황판·이용기록·환자조회·방탭)는 전원.
+/**
+ * 주소로 들어온 "이 환자를 열어라". 프렌즈(사내 메신저)의 환자 카드가 `?chart=4518` 로 연다.
+ * 숫자가 아니면 무시한다 — 주소는 누구나 손으로 고칠 수 있다.
+ */
+const chartFromUrl = () => {
+  if (typeof window === 'undefined') return null
+  const chart = new URLSearchParams(window.location.search).get('chart')
+  return chart && /^\d+$/.test(chart) ? chart : null
+}
+
 const canSeeTab = (role, tabId) => {
   if (tabId === 'stats') return canSeeStats(role)
   if (tabId === 'datamanage') return role !== 'viewer'
@@ -5000,7 +5010,9 @@ function App() {
   const [vitals, setVitals] = useState([])
   // 직전 방문 증상(읽기전용 상기용). 진행중 상세를 열 때만 채운다.
   const [prevVisitSymptoms, setPrevVisitSymptoms] = useState([])
-  const [activeTab, setActiveTab] = useState('all')
+  // 주소로 환자를 지목해 들어왔으면 환자 조회 탭에서 시작한다(이펙트에서 탭을 바꾸면
+  // 첫 화면이 한 번 깜빡이고, 렌더가 연쇄로 돈다 — 린트도 그걸 잡는다).
+  const [activeTab, setActiveTab] = useState(() => (chartFromUrl() ? 'patient' : 'all'))
   function changeTab(id) {
     setActiveTab(id)
   }
@@ -5155,8 +5167,30 @@ function App() {
   // 이미지가 실제로 있을 때만 켠다. 미리 받아두는 효과도 있어 첫 등장에 빈 칸이 안 보인다.
   const [devilReady, setDevilReady] = useState(false)
   const bossTimerRef = useRef(null)
-  const [patientViewSeed, setPatientViewSeed] = useState(null)
+  /**
+   * 다른 화면에서 넘어온 "이 환자를 열어라". 프렌즈(사내 메신저)가 주소로도 넣는다 —
+   * `?chart=4518` 로 들어오면 환자 조회 탭이 그 환자로 열린다.
+   *
+   * **한 번 쓰고 주소에서 지운다.** 남겨 두면 새로고침할 때마다 탭이 그 환자로 되돌아가
+   * 다른 것을 보려던 사람의 손을 계속 되돌린다. 로그인 전에 들어와도 값은 여기 남아 있어
+   * 로그인한 뒤에 그대로 열린다(로그인 화면도 이 컴포넌트가 그린다).
+   */
+  /**
+   * 다른 화면에서 넘어온 "이 환자를 열어라". 앱 안에서 넘길 때도 쓰고, 프렌즈가 주소로도 넣는다.
+   * 로그인 전에 들어와도 값이 남아 있어 로그인한 뒤 그대로 열린다(로그인 화면도 이 컴포넌트다).
+   */
+  const [patientViewSeed, setPatientViewSeed] = useState(chartFromUrl)
   const [collapsedRooms, setCollapsedRooms] = useState(() => new Set())
+
+  /*
+   * 주소에서 `?chart=` 를 지운다. **남겨 두면 새로고침할 때마다 그 환자로 되돌아가** 다른 것을
+   * 보려던 사람의 손을 계속 되돌린다. 값은 이미 위 useState 가 집어 갔으므로 지워도 된다.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('chart')) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   // 오프라인 폴백 — 서버 폴링이 연속 실패하면 읽기 전용으로 전환하고 마지막 화면을 유지한다.
   // lastSyncAt은 "지금 보이는 정보가 언제 기준인지"(배너의 N분 전). 캐시에서 복구할 수도 있어
