@@ -10,8 +10,7 @@ $Name = '수액실 관리'
 
 # 아이콘은 바로가기가 계속 참조하므로 지워지지 않을 곳에 둔다.
 # C:\iv-app은 서버 PC에만 있어서 못 쓴다. 사용자 폴더는 항상 쓰기가 되고 안 지워진다.
-$IconDir  = Join-Path $env:LOCALAPPDATA 'infusion-room'
-$IconPath = Join-Path $IconDir 'app-icon.ico'
+$IconDir = Join-Path $env:LOCALAPPDATA 'infusion-room'
 
 Write-Host ''
 Write-Host "=== $Name 앱 바로가기 만들기 ===" -ForegroundColor Cyan
@@ -38,11 +37,31 @@ Write-Host ("브라우저: {0}" -f (Split-Path $browser -Leaf))
 
 # ── 2. 아이콘 받기 ──────────────────────────────────────────────────
 # 실패해도 계속 간다 — 아이콘이 없다고 바로가기를 못 만들 이유는 없다.
+#
+# 파일 이름에 내용 지문(해시 8자리)을 붙인다. 예전에는 늘 같은 이름(app-icon.ico)에
+# 덮어썼는데, 윈도는 바로가기 아이콘을 '경로' 기준으로 캐시해서 내용만 바뀌면
+# 옛 그림이 계속 떴다. 실제로 아이콘을 바꾸고도 바탕화면이 안 바뀌었다.
+# 이름이 달라지면 캐시에 없는 경로라 그 자리에서 새 그림이 나온다.
+# 같은 아이콘을 다시 받으면 이름도 같아서 파일이 쌓이지도 않는다.
 New-Item -ItemType Directory -Force -Path $IconDir | Out-Null
 $haveIcon = $false
+$IconPath = $null
 try {
-  Invoke-WebRequest -Uri "$Url/app-icon.ico" -OutFile $IconPath -UseBasicParsing -TimeoutSec 10
-  $haveIcon = (Test-Path $IconPath) -and ((Get-Item $IconPath).Length -gt 0)
+  $tmp = Join-Path $IconDir 'app-icon.download'
+  # 주소 뒤에 시각을 붙여 받는다. 안 붙이면 PC에 남은 옛 응답이 그대로 와서,
+  # 서버 아이콘을 바꿔도 받는 파일이 안 바뀌는 일이 생긴다.
+  $bust = [DateTime]::UtcNow.Ticks
+  Invoke-WebRequest -Uri "$Url/app-icon.ico?v=$bust" -OutFile $tmp -UseBasicParsing -TimeoutSec 10
+  if ((Test-Path $tmp) -and ((Get-Item $tmp).Length -gt 0)) {
+    $hash = (Get-FileHash -Path $tmp -Algorithm SHA1).Hash.Substring(0, 8).ToLower()
+    $IconPath = Join-Path $IconDir "app-icon-$hash.ico"
+    Move-Item -Path $tmp -Destination $IconPath -Force
+    $haveIcon = $true
+    # 지난 판 아이콘은 치운다. 지금 쓰는 것과 .download 찌꺼기는 남긴다.
+    Get-ChildItem -Path $IconDir -Filter 'app-icon*.ico' -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -ne $IconPath } |
+      Remove-Item -Force -ErrorAction SilentlyContinue
+  }
 } catch {
   Write-Host '아이콘을 못 받았습니다 (서버가 꺼져 있거나 주소가 다름).' -ForegroundColor Yellow
   Write-Host '바로가기는 그대로 만듭니다 — 아이콘만 크롬 기본으로 뜹니다.'
@@ -60,6 +79,10 @@ $sc.Description  = $Name
 $sc.WorkingDirectory = Split-Path $browser
 if ($haveIcon) { $sc.IconLocation = "$IconPath,0" }
 $sc.Save()
+
+# 이름을 바꿔도 탐색기가 옛 그림을 들고 있는 경우가 있다. 아이콘 캐시를 한 번 흔들어 준다.
+# 없거나 실패해도 상관없다 — 바로가기는 이미 만들어졌다.
+try { Start-Process -FilePath 'ie4uinit.exe' -ArgumentList '-show' -WindowStyle Hidden -ErrorAction Stop } catch {}
 
 Write-Host ''
 Write-Host "만들었습니다: $lnk" -ForegroundColor Green
