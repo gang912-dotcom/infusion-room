@@ -43,8 +43,8 @@ export function BeotDrip({ className = '' }) {
         <mask id={`${id}-smile`} maskUnits="userSpaceOnUse" x="-100" y="-100" width="1100" height="1300">
           <rect x="-100" y="-100" width="1100" height="1300" fill="#fff" />
           <g transform="translate(80.6,254.8) scale(0.8)">
-            <path className="bd-smile" fill="#000" d="M115 452 Q149.7 416 184.4 452 L184.4 470 Q149.7 434 115 470 Z" />
-            <path className="bd-smile" fill="#000" d="M470 341 Q511.6 299 553.2 341 L553.2 361 Q511.6 319 470 361 Z" />
+            <path className="bd-smile" fill="#000" d="M110 456 Q149.7 410 189.4 456 L189.4 484 Q149.7 438 110 484 Z" />
+            <path className="bd-smile" fill="#000" d="M464 346 Q511.6 292 559.2 346 L559.2 378 Q511.6 324 464 378 Z" />
           </g>
         </mask>
       </defs>
