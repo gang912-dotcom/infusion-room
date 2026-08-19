@@ -1489,10 +1489,19 @@ function PatientView({
   initialChartNumber,
   onInitialChartConsumed,
 }) {
-  const [query, setQuery] = useState(() => {
-    if (!initialChartNumber) return ''
-    return history.find((h) => h.chartNumber === initialChartNumber)?.patientName ?? ''
-  })
+  /*
+   * 프렌즈(사내 메신저)의 환자 카드에서 `?chart=4518` 로 넘어온 경우 검색어를 미리 채운다.
+   *
+   * **차트번호를 그대로 넣는다.** 예전에는 history 에서 이름을 찾아 넣었는데, history 는
+   * 비동기로 받아 오는 값이라(refreshRecords) 이 화면이 처음 붙는 순간에는 아직 비어 있다.
+   * 그래서 검색어가 빈 채로 열리고 "환자명 또는 차트번호를 입력하면…" 만 떴다 —
+   * 개발용 맥은 종료 세션이 세 건뿐이라 먼저 도착해 우연히 맞았고, 운영은 수천 건이라
+   * 늦게 도착해 못 맞았다(2026-08-19에 현장에서 나온 증상이 이것이다).
+   *
+   * 넘어온 순간 우리가 확실히 아는 값은 **차트번호뿐**이다. 그걸로 찾으면 앞자리 일치라
+   * 정확히 그 환자가 걸리고, history 가 늦게 와도 도착하는 대로 결과가 채워진다.
+   */
+  const [query, setQuery] = useState(initialChartNumber ?? '')
   const [selectedKey, setSelectedKey] = useState(initialChartNumber ?? null) // "chartNumber"
 
   useEffect(() => {
@@ -1641,7 +1650,12 @@ function PatientView({
         <>
           {searchResults.length === 0 ? (
             <div className="patient-empty">
-              <p>"{trimmed}"에 해당하는 환자가 없습니다.</p>
+              {/*
+                이 화면은 **종료된 세션(이용 기록)** 만 뒤진다. 환자 명부에는 있어도 수액실을
+                한 번도 이용하지 않았으면 여기서는 안 나온다 — "환자가 없습니다" 라고만 하면
+                차트번호를 잘못 넣은 것처럼 읽혀서, 프렌즈에서 넘어온 사람이 특히 헷갈린다.
+              */}
+              <p>"{trimmed}"에 해당하는 이용 기록이 없습니다.</p>
             </div>
           ) : (
             <ul className="patient-list">
