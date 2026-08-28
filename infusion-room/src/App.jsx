@@ -4082,6 +4082,14 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   const [searchExamRoom, setSearchExamRoom] = useState('')
   const [searchDateFrom, setSearchDateFrom] = useState('')
   const [searchDateTo, setSearchDateTo] = useState('')
+  // 처방을 안 쓴 채로 완료된 것만 추린다. 바쁠 때 처방 작성을 건너뛰고 종료를 눌러 버리는
+  // 일이 있는데(3주에 열여섯 건, 대부분 점심시간), 표에 처방 칸이 없어 훑어서는 찾을 수가
+  // 없었다 — 한 줄씩 기록지를 열어 봐야 알았다.
+  //
+  // 표식(뱃지)을 줄에 붙이지 않는다. 처방이 없는 게 늘 잘못은 아니라서(수액 없이 상담만
+  // 하고 갔을 수도 있다) 화면이 미리 "누락"이라고 판단하면 안 된다. 여기서는 찾을 수만
+  // 있게 하고, 잘못인지 아닌지는 사람이 열어 보고 정한다. 그래서 말도 '없음'이지 '누락'이 아니다.
+  const [onlyNoOrder, setOnlyNoOrder] = useState(false)
   const [page, setPage] = useState(1)
   // 종료시각 고치는 줄. { id, ms } — 한 번에 한 줄만 연다(두 줄이 열려 있으면 어느 쪽을
   // 저장하는지 헷갈린다). 저장은 서버가 기록지 공식본까지 다시 굳힌다.
@@ -4098,6 +4106,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
         (entry.chartNumber ?? '').toLowerCase().includes(q.toLowerCase())
       if (!hit) return false
     }
+    if (onlyNoOrder && entry.orders.length > 0) return false
     if (searchExamRoom && String(entry.examRoom ?? '') !== searchExamRoom) return false
     if (searchDateFrom) {
       const entryDate = parseDateStr(entry.date)
@@ -4115,13 +4124,14 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   })
 
   const hasFilter =
-    searchText.trim() || searchExamRoom || searchDateFrom || searchDateTo
+    searchText.trim() || searchExamRoom || searchDateFrom || searchDateTo || onlyNoOrder
 
   function handleReset() {
     setSearchText('')
     setSearchExamRoom('')
     setSearchDateFrom('')
     setSearchDateTo('')
+    setOnlyNoOrder(false)
     setPage(1)
   }
 
@@ -4188,6 +4198,19 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
               />
             </div>
           </div>
+          {/* 날짜 다음에 둔다 — 앞의 셋은 "무엇을 찾을지"이고 이것은 "그중 덜 된 것만"이라
+              성격이 한 칸 다르다. 체크칸이라 접혀도 한 줄을 안 잡아먹는다. */}
+          <label className="history-search__field history-search__field--flag">
+            <span className="history-search__label">처방</span>
+            <span className="history-search__check">
+              <input
+                type="checkbox"
+                checked={onlyNoOrder}
+                onChange={(e) => { setOnlyNoOrder(e.target.checked); resetToFirstPage() }}
+              />
+              <span>안 쓴 것만</span>
+            </span>
+          </label>
           {hasFilter && (
             <button
               type="button"
