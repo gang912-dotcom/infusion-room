@@ -4088,7 +4088,7 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
   //
   // 표식(뱃지)을 줄에 붙이지 않는다. 처방이 없는 게 늘 잘못은 아니라서(수액 없이 상담만
   // 하고 갔을 수도 있다) 화면이 미리 "누락"이라고 판단하면 안 된다. 여기서는 찾을 수만
-  // 있게 하고, 잘못인지 아닌지는 사람이 열어 보고 정한다. 그래서 말도 '없음'이지 '누락'이 아니다.
+  // 있게 하고, 잘못인지 아닌지는 사람이 열어 보고 정한다. 그래서 말도 '없는'이지 '누락'이 아니다.
   const [onlyNoOrder, setOnlyNoOrder] = useState(false)
   const [page, setPage] = useState(1)
   // 종료시각 고치는 줄. { id, ms } — 한 번에 한 줄만 연다(두 줄이 열려 있으면 어느 쪽을
@@ -4200,15 +4200,17 @@ function HistoryView({ history, sessionNotes = [], rounds = [], vitals = [], onR
           </div>
           {/* 날짜 다음에 둔다 — 앞의 셋은 "무엇을 찾을지"이고 이것은 "그중 덜 된 것만"이라
               성격이 한 칸 다르다. 체크칸이라 접혀도 한 줄을 안 잡아먹는다. */}
+          {/* 위 칸들과 달리 라벨을 따로 두지 않는다 — 말 자체가 이미 무엇을 거르는지 다 적고
+              있어서, '처방' 머리말을 얹으면 같은 말이 두 번 된다. 줄이 flex-end 라 라벨이
+              없어도 밑선은 옆 칸들과 맞는다. */}
           <label className="history-search__field history-search__field--flag">
-            <span className="history-search__label">처방</span>
             <span className="history-search__check">
               <input
                 type="checkbox"
                 checked={onlyNoOrder}
                 onChange={(e) => { setOnlyNoOrder(e.target.checked); resetToFirstPage() }}
               />
-              <span>안 쓴 것만</span>
+              <span>처방기록 없는 환자만 보기</span>
             </span>
           </label>
           {hasFilter && (
