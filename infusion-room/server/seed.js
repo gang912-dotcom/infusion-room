@@ -78,14 +78,21 @@ db.prepare(
    VALUES ('admin', '관리자', ?, 'admin', 1, ?, ?)`,
 ).run(bcrypt.hashSync(adminPassword, 10), now, now)
 
-// ─── staff — 사용자 제공 8명 (name에 unique 제약이 없어 count로 직접 가드) ──
-if (db.prepare('SELECT COUNT(*) c FROM staff').get().c === 0) {
-  const staffNames = ['이현숙', '박민순', '박소연', '최유진', '신현지', '최지우', '신예슬', '김지윤']
-  const insertStaff = db.prepare(
-    'INSERT INTO staff (name, is_active, sort_order, created_at) VALUES (?, 1, ?, ?)',
-  )
-  staffNames.forEach((name, i) => insertStaff.run(name, i, now))
-}
+// ─── staff — 담당자 선택 목록 ─────────────────────────────────────────
+// name에 unique 제약이 없어 이름별로 직접 가드한다. 표 전체를 count로 가드하면,
+// db.js의 직원 추가 블록이 먼저 도는 새 DB에서 이 8명이 통째로 빠진다.
+const staffNames = [
+  '이현숙', '박민순', '박소연', '최유진', '신현지', '최지우', '신예슬', '김지윤',
+  '윤소영', '조성은',
+]
+const findStaff = db.prepare('SELECT 1 FROM staff WHERE name = ?')
+const insertStaff = db.prepare(
+  'INSERT INTO staff (name, is_active, sort_order, created_at) VALUES (?, 1, ?, ?)',
+)
+let staffOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 m FROM staff').get().m
+staffNames.forEach((name) => {
+  if (!findStaff.get(name)) insertStaff.run(name, staffOrder++, now)
+})
 
 console.log('시드 완료:', {
   beds: db.prepare('SELECT COUNT(*) c FROM beds').get().c,

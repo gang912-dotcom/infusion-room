@@ -904,4 +904,36 @@ if (!db.prepare("SELECT 1 FROM settings WHERE key = 'peramiflu_free_dose'").get(
   })()
 }
 
+// ─── 액팅 직원 4명 추가 (2026-08-31) ──────────────────────────────────
+// 담당자 선택 목록(라인·믹스·라인제거)은 staff 표가 정본이라 코드만 고쳐서는 안 바뀐다.
+// seed.js의 초기 8명은 빈 DB에만 들어가므로, 이미 돌고 있는 서버는 이 블록이 채운다.
+// 이름이 이미 있으면 만들지 않고, 비활성이면 목록에 다시 뜨도록 되살린다.
+// 한 번만 돈다 — 관리자가 나중에 지우거나 숨긴 직원이 재부팅마다 부활하면 안 된다.
+const STAFF_ADD_260831 = ['최지우', '김지윤', '윤소영', '조성은']
+
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'staff_add_260831'").get()) {
+  db.transaction(() => {
+    const find = db.prepare('SELECT id, is_active FROM staff WHERE name = ?')
+    const revive = db.prepare('UPDATE staff SET is_active = 1 WHERE id = ?')
+    const insert = db.prepare(
+      'INSERT INTO staff (name, is_active, sort_order, created_at) VALUES (?, 1, ?, ?)',
+    )
+    let next = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 m FROM staff').get().m
+    const done = []
+    for (const name of STAFF_ADD_260831) {
+      const row = find.get(name)
+      if (!row) {
+        insert.run(name, next++, Date.now())
+        done.push(`${name}(추가)`)
+      } else if (!row.is_active) {
+        revive.run(row.id)
+        done.push(`${name}(활성화)`)
+      }
+    }
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)')
+      .run('staff_add_260831', done.join(' · ') || '이미 있음', Date.now())
+    console.log('[db] 액팅 직원:', done.join(' · ') || '이미 있음')
+  })()
+}
+
 export default db
