@@ -314,6 +314,7 @@ export async function editSessionSpecialNote(sessionId, specialNote) {
 }
 
 // 내원당시증상은 3a단계에서 '처방 확인'(savePrescription)으로 옮겼다 — 여기선 안 보낸다.
+// mixStaffId가 null이면 '추후 지정'이다 — 키는 반드시 보낸다(서버가 빠진 키는 거부한다).
 export async function startSession(sessionId, { mixStaffId, durationMinutes, startedAt }) {
   return apiFetch(`/sessions/${sessionId}/start`, {
     method: 'POST',

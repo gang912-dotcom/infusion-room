@@ -202,9 +202,20 @@ router.post('/sessions/:id/start', (req, res) => {
 
   // 내원당시증상은 3a단계에서 '처방 확인'(PUT /sessions/:id/prescription)으로 옮겼다.
   // 투여 시작은 급할 때 먼저 눌러야 하므로 기록 입력과 엮지 않는다.
+  // 믹스 담당자는 시작 시점에 비워둘 수 있다('추후 지정') — 라인 담당이 등록을 마치는 걸
+  // 믹스할 사람이 정해질 때까지 붙잡아 두지 않으려는 것이다. 상세 모달에서 나중에 넣는다.
+  // null(비움)과 키 누락은 다르게 본다: 키가 아예 없으면 거부한다. 안 그러면 클라이언트가
+  // 필드를 빠뜨렸을 때 조용히 담당자 없는 세션이 생기고, 기록지의 믹스 서명 칸이 빈다.
   const { mix_staff_id, duration_minutes } = req.body ?? {}
-  const mixStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1').get(mix_staff_id)
-  if (!mixStaff) return res.status(400).json({ error: '유효하지 않은 믹스 담당자입니다' })
+  if (mix_staff_id === undefined) {
+    return res.status(400).json({ error: '믹스 담당자 값이 없습니다' })
+  }
+  let mixStaffId = null
+  if (mix_staff_id !== null) {
+    const mixStaff = db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1').get(mix_staff_id)
+    if (!mixStaff) return res.status(400).json({ error: '유효하지 않은 믹스 담당자입니다' })
+    mixStaffId = mixStaff.id
+  }
 
   const minDuration = getSetting('min_duration_min')
   if (typeof duration_minutes !== 'number' || duration_minutes < minDuration) {
@@ -217,7 +228,7 @@ router.post('/sessions/:id/start', (req, res) => {
 
   db.prepare(
     'UPDATE sessions SET started_at = ?, started_by = ?, mix_staff_id = ?, duration_minutes = ? WHERE id = ?',
-  ).run(startedAt, req.account.id, mixStaff.id, duration_minutes, session.id)
+  ).run(startedAt, req.account.id, mixStaffId, duration_minutes, session.id)
   bumpRevision(db)
   res.json({ ok: true })
 })

@@ -37,6 +37,12 @@ import {
   ROOM_LABELS, NON_BED_ROOMS, EXAM_ROOMS,
 } from './api'
 
+// 믹스 담당자 '추후 지정' — 선택칸의 값일 뿐 DB에 저장되는 값이 아니다(저장은 NULL).
+// 빈 값('')과 굳이 가르는 이유: 빈 값은 "아직 안 골랐다"라 투여 시작을 막고,
+// 이 값은 "지금은 모른다, 시작 후에 넣겠다"라 통과시킨다. 둘 다 NULL로 저장되지만
+// 근무자가 건너뛴다는 걸 한 번은 의식하고 지나가야 기록지가 조용히 비지 않는다.
+const MIX_LATER = 'later'
+
 // 요약 숫자 카운트업 (이전값 → 새값으로 부드럽게). 모션 최소화 설정이면 즉시 표시.
 function CountUp({ value, ms = 500 }) {
   const [n, setN] = useState(value)
@@ -886,6 +892,21 @@ function getCardNoteLines(bed) {
     ...(bed.specialNote ? [{ tone: 'danger', icon: 'alert', text: bed.specialNote }] : []),
     ...(bed.dayMemo ? [{ tone: 'caution', icon: 'bell', text: bed.dayMemo }] : []),
   ]
+}
+
+// 믹스 담당자를 '추후 지정'으로 넘긴 카드의 표식. 카드에서 유일하게 '아직 안 한 일'을
+// 가리키는 자리라, 상태색(초록·앰버·빨강·보라)이 아니라 --brand 계열 강조를 쓴다 —
+// 상태색을 빌리면 같은 색이 카드마다 다른 말을 하게 된다(bed-card__meta--start 주석과 같은 이유).
+//
+// 아이콘이 없다. 카드의 다른 표식들과 달리 이건 시작시각과 한 줄을 나눠 쓰는데, 실측해 보니
+// 아이콘까지 넣으면 태블릿(184px 카드) 폭에서 8px밖에 안 남았다 — 시각 표기가 조금만 길어져도
+// 넘친다. 글자만 두면 22px 남는다. 색과 자리만으로도 '지금 비어 있다'는 읽힌다.
+function MixMissingMark() {
+  return (
+    <span className="bed-card__mixneed" title="믹스 담당자가 아직 지정되지 않았습니다">
+      믹스 미지정
+    </span>
+  )
 }
 
 // 한 줄 마퀴. 부모 폭을 넘기면 좌우로 왕복(앞뒤로 잠깐 멈춰 읽을 틈), 안 넘치면 가만히.
@@ -5587,16 +5608,23 @@ function App() {
     </label>
   )
 
-  // 믹스 담당자는 투여 시작 때 정해진다 — 시작 전에는 값 자체가 없어 칸을 띄우지 않는다.
-  const mixStaffField = currentBed?.mixStaffId != null && (
+  // 믹스 담당자는 투여 시작 때 정해지되, '추후 지정'으로 비워둔 채 시작할 수 있다.
+  // 그래서 값이 없어도 칸을 띄운다 — 예전엔 값이 있을 때만 떠서, 비워두고 시작하면
+  // 나중에 넣을 자리가 화면 어디에도 없었다. 비어 있으면 등록 폼의 미입력 칸과 같은
+  // 초록 강조(.field__input--needed)로 "아직 남았다"를 알린다.
+  // 비우기는 여전히 없다 — 한 번 넣은 담당자를 다시 빼는 건 오등록 정정이 아니라 삭제다.
+  const mixStaffMissing = currentBed?.mixStaffId == null
+  const mixStaffField = currentBed && (
     <label className="field">
       <span className="field__label">믹스 담당자</span>
       <select
-        className="field__input"
-        value={String(currentBed.mixStaffId)}
+        className={`field__input${mixStaffMissing ? ' field__input--needed' : ''}`}
+        value={String(currentBed.mixStaffId ?? '')}
         onChange={(e) => handleChangeStaff({ mix_staff_id: Number(e.target.value) })}
         disabled={offline || viewerMode}
       >
+        {/* 고를 수 없는 자리표시다 — 되돌아갈 수 있으면 비우기가 되어 버린다. */}
+        {mixStaffMissing && <option value="" disabled>지정 안 됨 — 선택하세요</option>}
         {staffList.map((st) => (
           <option key={st.id} value={st.id}>{st.name}</option>
         ))}
@@ -6574,7 +6602,8 @@ function App() {
     setActionError('')
     try {
       await startSession(currentBed.sessionId, {
-        mixStaffId: Number(mixStaffId),
+        // '추후 지정'은 NULL로 저장한다 — 그 이름의 직원은 없다.
+        mixStaffId: mixStaffId === MIX_LATER ? null : Number(mixStaffId),
         durationMinutes,
       })
       await refreshBoard()
@@ -6671,6 +6700,8 @@ function App() {
       ? '완료'
       : `${isWarning ? '곧 완료' : '진행중'} ${displayProgress}%`
     const noteLines = getCardNoteLines(bed)
+    // '추후 지정'으로 시작한 카드 — 지나가며 눈에 걸려야 종료 전에 채운다.
+    const mixMissing = bed.mixStaffId == null
 
     // 라운딩 줄 (완료/정리 상태 카드에는 표시 안 함)
     const latestRound = completed ? null : getLatestSessionRound(rounds, bed.sessionId)
@@ -6775,7 +6806,10 @@ function App() {
         )}
         <div className="bed-card__spacer" />
         {completed ? (
-          <p className="bed-card__completed-label">정리 필요</p>
+          <p className="bed-card__completed-label">
+            정리 필요
+            {mixMissing && <MixMissingMark />}
+          </p>
         ) : (
           <div className="bed-card__footer">
             {/* 두 줄이다. 셋을 한 줄에 넣으면 안 들어간다 — 실측으로 '시작 17:37'(56px)
@@ -6783,8 +6817,12 @@ function App() {
                 footer 가용 폭은 208px 카드에서 174px, 태블릿(184px 카드)에서 150px이다.
                 시작시각이 윗줄을 혼자 쓰고, 아랫줄에 경과/총(왼쪽)과 남은 시간(오른쪽)이
                 나란히 선다 — 둘 다 '지금 어디쯤'을 말하는 값이라 같은 줄에 있어야 읽힌다. */}
+            {/* 이 줄은 footer 첫 행을 혼자 쓴다(grid-column 1/-1) — 오른쪽이 비어 있어
+                표식을 여기 얹으면 카드가 세로로 안 늘어난다. 카드 높이는 방 전체가 같아야
+                진행 레일이 한 줄로 서므로, 새 줄을 만드는 건 마지막 수단이다. */}
             <span className="bed-card__meta bed-card__meta--start">
               시작 {formatHour24(bed.startTime)}
+              {mixMissing && <MixMissingMark />}
             </span>
             <span className="bed-card__meta">
               {Math.floor(elapsedMs / 60000)}/{bed.durationMinutes}분
@@ -7371,7 +7409,8 @@ function App() {
                   <p role="alert" className="field__error"><Icon name="alert" /> 환자 미도착 — 확인이 필요합니다</p>
                 )}
 
-                {/* 믹스 담당자는 아직 값이 없어 mixStaffField가 안 뜬다 — 아래 지정 칸이 그 자리다. */}
+                {/* 믹스 담당자 칸은 여기 없다 — 아래 '투여 시작' 위의 지정 칸이 그 자리다.
+                    (시작 전에는 아직 정해진 값이 아니라 지금 고르는 값이다.) */}
                 {reservedEditOpen && (
                   <div className="detail-selects">
                     {examRoomField}
@@ -7391,9 +7430,14 @@ function App() {
                     onChange={(e) => setMixStaffId(e.target.value)}
                   >
                     <option value="">{staffList.length ? '선택하세요' : '직원 목록 불러오는 중...'}</option>
-                    {staffList.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
+                    {/* 사람 목록 밖에 둔다 — 안에 섞으면 '추후 지정'이라는 직원처럼 읽히고
+                        훑어 내리다 잘못 잡힌다. optgroup 머리말이 그 경계선이다. */}
+                    <option value={MIX_LATER}>추후 지정 — 시작 후에 넣기</option>
+                    <optgroup label="담당자">
+                      {staffList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </label>
 
@@ -7571,6 +7615,16 @@ function App() {
                   <div className="detail-selects">
                     {examRoomField}
                     {lineStaffField}
+                    {mixStaffField}
+                  </div>
+                )}
+
+                {/* 완료(정리 대기) 카드에서도 믹스 담당자만은 넣을 수 있어야 한다 — 종료를 누르면
+                    기록지가 record_snapshot으로 얼어 서명 칸이 영영 빈 채로 남는다.
+                    진료실·라인 담당은 여기 두지 않는다. 이미 정해진 값이라 지금 고칠 일이 없고,
+                    정리 직전 화면에 선택칸을 늘어놓으면 실수로 건드리기만 쉽다. */}
+                {!isInProgress && currentBed.status === 'completed' && mixStaffMissing && !viewerMode && (
+                  <div className="detail-selects">
                     {mixStaffField}
                   </div>
                 )}

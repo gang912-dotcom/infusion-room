@@ -1298,6 +1298,19 @@
    안 흔들리는 선택자로 둔다. */
 .bed-card__meta--start {
   grid-column: 1 / -1;
+  /* 이 행은 시작시각 혼자 쓰던 자리다. '믹스 미지정' 표식을 오른쪽 끝에 세워
+     새 줄 없이 얹는다 — 카드 높이가 방마다 같아야 진행 레일이 한 줄로 선다.
+     헤드리스 크롬으로 실측(웹폰트 IBM Plex Sans KR 적용 상태):
+       '시작 17:37' 15px/700 = 72.3px  ·  '믹스 미지정' 11px/700 = 49.6px  ·  간격 6px
+       합 127.9px < 태블릿(184px 카드) footer 가용 150px → 22px 남는다.
+     ※ 위 .bed-card__footer 주석의 '시작시각 56px'은 낡은 값이다(그때 폰트·크기 기준).
+       아이콘을 붙이면 141.9px가 되어 8px밖에 안 남아 뺐다 — 그 이유는 MixMissingMark 주석에.
+     넘치더라도 카드가 세로로 늘면 안 된다(레일 정렬이 깨진다) → 아래 min-width:0·overflow로
+     줄바꿈 대신 잘리게 둔다. */
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
 }
 .bed-card__meta.bed-card__meta--start {
   font-size: 15px;
@@ -6290,6 +6303,34 @@
   .bd-drip, .bd-ring, .bd-body, .bd-eye, .bd-smile { animation: none; }
   .bd-ring, .bd-d1, .bd-d2 { opacity: 0; }
   .bd-d0 { opacity: 1; }
+}
+
+/* '믹스 미지정' 표식 — 시작시각 줄 오른쪽 끝. 카드에서 유일하게 '아직 안 한 일'을
+   가리키는 자리라 상태색을 안 쓴다(초록·앰버·빨강·보라는 베드 상태에 뜻이 예약돼 있다).
+   --brand 계열은 '상태가 아닌 강조' 자리다 — 시작시각 파랑과 같은 계열을 한 단 죽여 쓴다.
+   글자를 11px까지 내리는 건 이 줄이 15px/700 시작시각과 같은 행이기 때문이다. 같은 크기면
+   둘이 서로 다투고, 벽 모니터에서 먼저 읽혀야 하는 건 시작시각이다.
+   min-width:0은 극단적으로 좁은 화면에서 이 표식이 줄바꿈으로 카드를 늘리는 대신
+   잘리게 하려는 것이다 — 높이가 흔들리면 방 전체의 진행 레일이 어긋난다. */
+.bed-card__mixneed {
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  color: var(--accent-strong);
+  opacity: 0.85;
+}
+
+/* 완료 카드는 footer 대신 '정리 필요' 한 줄뿐이라 그 줄에 나란히 붙인다.
+   완료야말로 표식이 제일 급한 상태다 — 종료를 누르는 순간 기록지가 얼어
+   믹스 서명 칸이 영영 빈 채로 남는다. */
+.bed-card__completed-label .bed-card__mixneed {
+  margin-left: 6px;
 }
 
 /* ─── 당일 메모 빠른 입력 칩 ───────────────────────────────────────
