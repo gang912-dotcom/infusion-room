@@ -6291,3 +6291,47 @@
   .bd-ring, .bd-d1, .bd-d2 { opacity: 0; }
   .bd-d0 { opacity: 1; }
 }
+
+/* ─── 당일 메모 빠른 입력 칩 ───────────────────────────────────────
+   자주 쓰는 검사명을 눌러 넣고 뺀다. 켜짐/꺼짐이 한눈에 갈려야 해서 테두리만 바꾸지 않고
+   바탕까지 채운다 — 장갑 낀 손으로 태블릿에서 누르는 버튼이라, 눌렀는지 아닌지를
+   글자 굵기 같은 미세한 차이로 두면 두 번 누르게 된다.
+   높이 32px은 44px 권장보다 낮다. 이 칩은 오입력해도 한 번 더 눌러 되돌리면 그만이고
+   (저장은 아래 '저장' 버튼이 따로 받는다), 여섯 개가 두 줄을 안 넘어야 텍스트 칸이
+   화면 밖으로 안 밀린다. */
+.memo-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.memo-preset {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--input-bg);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.memo-preset:hover {
+  border-color: var(--accent-strong);
+}
+
+/* 켜진 칩 — 당일 메모의 카드 표시색(caution)과 같은 계열로 묶는다.
+   이 버튼이 채우는 값이 카드에서 그 색으로 나오므로, 여기서 다른 색을 쓰면
+   "무슨 색으로 남는지"를 두 번 배워야 한다. */
+.memo-preset--on {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+}
+
+:root[data-theme='light'] .memo-preset--on {
+  color: var(--solid-amber);
+}

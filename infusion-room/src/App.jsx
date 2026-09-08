@@ -4,6 +4,7 @@ import ChatPanel from './ChatPanel'
 import BundlePicker from './BundlePicker'
 import OrderSummary from './OrderSummary'
 import { VITD_CODE } from './bundleDiff'
+import { DAY_MEMO_PRESETS, hasMemoToken, toggleMemoToken } from './dayMemo'
 import Stats from './Stats.jsx'
 import { BeotDrip } from './BeotDrip.jsx'
 import headerPortrait from './assets/header-portrait-cutout.png'
@@ -7692,6 +7693,25 @@ function App() {
                       </div>
                       {dayMemoEditing ? (
                         <div className="special-note__edit">
+                          {/* 자주 쓰는 문구는 눌러서 넣고 뺀다. 칸을 덮지 않고 쉼표 한 토막으로만
+                              오가므로 손으로 적은 말과 섞여도 서로를 안 지운다(dayMemo.js).
+                              저장은 아래 버튼이다 — 여기서 바로 쓰면 취소할 방법이 없어진다. */}
+                          <div className="memo-presets">
+                            {DAY_MEMO_PRESETS.map((preset) => {
+                              const on = hasMemoToken(dayMemoDraft, preset)
+                              return (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  className={`memo-preset${on ? ' memo-preset--on' : ''}`}
+                                  aria-pressed={on}
+                                  onClick={() => setDayMemoDraft((prev) => toggleMemoToken(prev, preset))}
+                                >
+                                  {preset}
+                                </button>
+                              )
+                            })}
+                          </div>
                           <textarea
                             className="field__input special-note__input"
                             value={dayMemoDraft}
