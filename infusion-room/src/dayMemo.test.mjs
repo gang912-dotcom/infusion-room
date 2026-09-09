@@ -47,7 +47,21 @@ assert.equal(toggleMemoToken('cbc+crp,,  A+ ,', 'B+'), 'cbc+crp, A+, B+')
 // 8. 손으로 같은 말을 두 번 적었으면 끌 때 전부 지운다(한 번 더 눌러야 사라지면 안 된다)
 assert.equal(toggleMemoToken('A+, 열남, A+', 'A+'), '열남')
 
-// 9. 목록은 원장님이 준 6개 그대로
-assert.deepEqual(DAY_MEMO_PRESETS, ['cbc+crp', '17종', 'lab검사', 'A+', 'B+', 'C+'])
+// 9. 목록은 원장님이 준 10개 그대로 — 표기(괄호 앞 공백 유무)까지 손대지 않는다
+assert.deepEqual(DAY_MEMO_PRESETS, [
+  'cbc+crp', '17종', 'lab검사',
+  'A+', 'B+', 'C+',
+  '타치온 (-)', '타치온 (+)', '세파(-)', '세파(+)',
+])
+
+// 10. 괄호·공백이 든 문구도 토막 하나로 온전히 오간다.
+//     '타치온 (+)'를 켜도 '타치온 (-)'는 켜진 걸로 안 읽혀야 한다(부분일치 금지).
+assert.equal(toggleMemoToken('', '타치온 (-)'), '타치온 (-)')
+assert.equal(toggleMemoToken('cbc+crp, 세파(+)', '세파(+)'), 'cbc+crp')
+assert.equal(hasMemoToken('타치온 (+)', '타치온 (-)'), false)
+assert.equal(hasMemoToken('타치온 (-)', '타치온 (-)'), true)
+assert.equal(hasMemoToken('세파(+)', '세파(-)'), false)
+// 둘 다 켤 수는 있다 — 지금은 서로를 끄지 않는다(아래 주석 참고)
+assert.equal(toggleMemoToken('타치온 (-)', '타치온 (+)'), '타치온 (-), 타치온 (+)')
 
 console.log('dayMemo 테스트 통과')
