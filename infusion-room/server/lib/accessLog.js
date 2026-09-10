@@ -18,11 +18,19 @@ export const ACTIONS = {
   RECORD_EDIT: 'record_edit',
   // 아직 앱에 내보내기 기능이 없다. 기능이 생기면 그 자리에서 이 값으로 기록하면 된다.
   EXPORT: 'export',
+  // ─── 환자 신원이 바뀐 것 (2026-09-10) ───────────────────────────────
+  // 차트번호 한 자리를 잘못 친 등록이 그 번호 주인의 이름을 조용히 덮어써서,
+  // 네 명의 이름이 뒤바뀐 채 며칠을 갔다. 되돌릴 때 '언제 무엇이 무엇으로'가 없어
+  // 백업 파일과 기록지 스냅샷을 일일이 대조해야 했다 — 그래서 남긴다.
+  // detail 에 바뀐 내용을 사람이 읽을 수 있게 적는다.
+  PATIENT_RENAME: 'patient_rename',      // 같은 차트번호, 이름만 바뀜
+  PATIENT_RENUMBER: 'patient_renumber',  // 그 환자의 차트번호 자체가 바뀜(과거 기록 동반)
+  PATIENT_RELINK: 'patient_relink',      // 이 세션만 다른 환자로 갈아 끼움
 }
 
 const insertStmt = db.prepare(
-  `INSERT INTO access_logs (account_id, action, target_type, target_id, created_at, ip, actor)
-   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO access_logs (account_id, action, target_type, target_id, created_at, ip, actor, detail)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 )
 
 function clientIp(req) {
@@ -39,7 +47,7 @@ function clientIp(req) {
 export function logAccess(
   req,
   action,
-  { targetType = null, targetId = null, accountId, actor = null } = {},
+  { targetType = null, targetId = null, accountId, actor = null, detail = null } = {},
 ) {
   try {
     insertStmt.run(
@@ -50,6 +58,7 @@ export function logAccess(
       Date.now(),
       clientIp(req),
       actor ?? req?.internal?.actor ?? null,
+      detail,
     )
   } catch (err) {
     // 로그를 못 남긴다고 본 요청까지 실패시키지 않는다.

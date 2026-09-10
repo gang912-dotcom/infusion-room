@@ -217,13 +217,17 @@ export function logPatientDetailView(chartNo) {
     .catch((err) => console.error('환자 조회 로그 기록 실패', err))
 }
 
-export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote, examRoom, gender }) {
+// confirmRename: 이 차트번호의 주인 이름이 입력과 다를 때, 화면에서 '이름을 바꾼다'를
+// 확인받은 경우에만 true로 보낸다. 안 보내면 서버가 409(conflict:'name_mismatch')로 거절한다 —
+// 번호 오타 한 번이 남의 이름을 조용히 덮던 길을 막은 자리다(2026-09-10).
+export async function assignBed({ bedCode, chartNo, patientName, lineStaffId, specialNote, examRoom, gender, confirmRename = false }) {
   return apiFetch('/sessions/assign', {
     method: 'POST',
     body: JSON.stringify({
       bed_code: bedCode, chart_no: chartNo, patient_name: patientName, line_staff_id: lineStaffId,
       // 미지정('')은 서버가 null로 본다. null이면 기존 성별을 덮지 않는다.
       special_note: specialNote, exam_room: examRoom, gender,
+      confirm_rename: confirmRename,
     }),
   })
 }
@@ -386,10 +390,17 @@ export async function restoreSession(sessionId) {
 }
 
 // gender를 넘기지 않으면 서버가 성별을 건드리지 않는다. ''를 넘기면 미지정으로 지운다.
-export async function updateSessionPatient(sessionId, { patientName, chartNo, gender }) {
+// 차트번호가 바뀌면 서버가 409(conflict:'chart_changed')로 되묻는다. 두 가지 뜻이 될 수 있고
+// 서버는 어느 쪽인지 알 수 없어서다 — 화면이 결과를 보여주고 받아온 답을 mode로 다시 보낸다.
+//   mode 'relink'   : 이 베드만 다른 환자로. 원래 환자의 과거 기록은 그대로 남는다.
+//   mode 'renumber' : 이 환자의 번호 자체를 고침. 과거 방문이 함께 따라온다.
+// confirmRename은 번호는 그대로 두고 이름만 바꿀 때(개명) 필요하다.
+export async function updateSessionPatient(sessionId, { patientName, chartNo, gender, mode = null, confirmRename = false }) {
   return apiFetch(`/sessions/${sessionId}/patient`, {
     method: 'PATCH',
-    body: JSON.stringify({ patient_name: patientName, chart_no: chartNo, gender }),
+    body: JSON.stringify({
+      patient_name: patientName, chart_no: chartNo, gender, mode, confirm_rename: confirmRename,
+    }),
   })
 }
 

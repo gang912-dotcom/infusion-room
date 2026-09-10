@@ -60,6 +60,8 @@ router.post('/sessions/assign', (req, res) => {
   const {
     bed_code, chart_no, patient_name, line_staff_id,
     special_note: specialNote, exam_room: examRoom, gender: rawGender,
+    // 화면이 '이 번호 주인의 이름을 바꾼다'를 확인받았을 때만 true 로 온다(아래 409 참고).
+    confirm_rename: confirmRename = false,
   } = req.body ?? {}
   // 아는 값이 아니면 null(미지정). 필수가 아니라 400으로 막지 않는다.
   const gender = normalizeGender(rawGender)
@@ -90,8 +92,35 @@ router.post('/sessions/assign', (req, res) => {
   const now = Date.now()
   let patient = db.prepare('SELECT id, name, gender FROM patients WHERE chart_no = ?').get(normalizedChartNo)
   if (patient) {
+    // 이 번호의 주인 이름이 입력과 다르다 — 되묻기 전에는 절대 덮지 않는다.
+    //
+    // 예전엔 여기서 말없이 UPDATE 했다. 그래서 등록할 때 번호를 한 자리 잘못 치면
+    // (71324 → 71334) 그 번호 주인의 이름이 조용히 바뀌었다. 환자 이름은 세션이 아니라
+    // patients 행에 있으므로, 한 번 바뀌면 그 환자의 과거 방문까지 전부 남의 이름으로 보인다.
+    // 2026-09-10 에 네 명이 이렇게 뒤바뀐 채 발견됐다(8/28 백업으로 되돌림).
+    //
+    // 대개는 번호 오타지 개명이 아니다 → 기본은 거절이고, 근무자가 화면에서 '이름을 바꾼다'를
+    // 고른 경우에만 confirm_rename 이 실려 온다.
+    if (patient.name !== patient_name && !confirmRename) {
+      const visits = db.prepare(
+        'SELECT COUNT(*) c FROM sessions WHERE patient_id = ? AND deleted = 0',
+      ).get(patient.id).c
+      return res.status(409).json({
+        error: `차트번호 ${normalizedChartNo}는 ${patient.name} 환자입니다`,
+        conflict: 'name_mismatch',
+        chart_no: normalizedChartNo,
+        registered_name: patient.name,
+        typed_name: patient_name,
+        visit_count: visits,
+      })
+    }
     if (patient.name !== patient_name) {
       db.prepare('UPDATE patients SET name = ?, updated_at = ? WHERE id = ?').run(patient_name, now, patient.id)
+      logAccess(req, ACTIONS.PATIENT_RENAME, {
+        targetType: 'patient',
+        targetId: patient.id,
+        detail: `배정 · ${normalizedChartNo} ${patient.name} → ${patient_name}`,
+      })
     }
     // 성별은 값이 왔을 때만 쓴다. 미지정(null)을 그대로 덮으면 등록 모달이 성별을 못 채운
     // 경로로 저장될 때마다 기존 값이 조용히 지워진다. 바꾸려면 '남' 또는 '녀'를 고르면 된다.
@@ -160,7 +189,7 @@ router.patch('/sessions/:id/patient', (req, res) => {
   }
 
   const body = req.body ?? {}
-  const { patient_name, chart_no } = body
+  const { patient_name, chart_no, mode = null, confirm_rename: confirmRename = false } = body
   if (!patient_name || !chart_no) {
     return res.status(400).json({ error: 'patient_name, chart_no가 필요합니다' })
   }
@@ -175,18 +204,151 @@ router.patch('/sessions/:id/patient', (req, res) => {
     return res.status(400).json({ error: '차트번호는 숫자만 입력할 수 있습니다' })
   }
 
-  const existing = db.prepare('SELECT id FROM patients WHERE chart_no = ?').get(normalizedChartNo)
-  if (existing && existing.id !== session.patient_id) {
-    return res.status(409).json({ error: '이미 다른 환자에게 등록된 차트번호입니다' })
+  const current = db.prepare('SELECT id, chart_no, name FROM patients WHERE id = ?').get(session.patient_id)
+  if (!current) return res.status(404).json({ error: '환자를 찾을 수 없습니다' })
+
+  const chartChanged = current.chart_no !== normalizedChartNo
+  const nameChanged = current.name !== patient_name
+  const now = Date.now()
+
+  // ─── 차트번호가 바뀌었다 — 두 가지 뜻이 될 수 있고, 앱은 어느 쪽인지 알 수 없다 ───
+  //
+  //   relink   : 이 베드에 등록된 환자가 애초에 딴 사람이었다(새로 꼬인 경우).
+  //              → 과거 데이터는 옳으므로 건드리면 안 된다. 세션만 갈아 끼운다.
+  //   renumber : 이 환자의 차트번호 자체가 틀렸다(원래 꼬여 있던 경우).
+  //              → 과거 방문도 다 그 사람 것이므로 번호와 함께 따라가야 한다.
+  //
+  // 어느 쪽인지는 그때 상황을 아는 사람만 안다. 그래서 서버가 고르지 않는다 —
+  // mode 없이 오면 판단 재료(양쪽 방문 건수·상대 환자)를 붙여 409로 되돌려주고,
+  // 화면이 결과를 보여준 뒤 받아온 답을 다시 보낸다.
+  if (chartChanged) {
+    const target = db.prepare('SELECT id, chart_no, name FROM patients WHERE chart_no = ?').get(normalizedChartNo)
+    const countVisits = db.prepare('SELECT COUNT(*) c FROM sessions WHERE patient_id = ? AND deleted = 0')
+
+    if (mode !== 'relink' && mode !== 'renumber') {
+      return res.status(409).json({
+        error: '차트번호가 바뀝니다 — 어느 쪽인지 골라야 합니다',
+        conflict: 'chart_changed',
+        current: {
+          chart_no: current.chart_no,
+          name: current.name,
+          visit_count: countVisits.get(current.id).c,
+        },
+        typed: { chart_no: normalizedChartNo, name: patient_name },
+        // 그 번호를 이미 쓰는 환자가 있으면 relink 는 그 사람에게 붙는다.
+        // 없으면 relink 가 새 환자를 만든다(target: null).
+        target: target
+          ? { chart_no: target.chart_no, name: target.name, visit_count: countVisits.get(target.id).c }
+          : null,
+      })
+    }
+
+    if (mode === 'renumber') {
+      // 번호를 옮기려는데 그 번호를 이미 딴 사람이 쓰고 있으면 옮길 곳이 없다.
+      if (target && target.id !== current.id) {
+        return res.status(409).json({ error: `${normalizedChartNo}는 이미 ${target.name} 환자의 번호입니다` })
+      }
+      if (hasGender) {
+        db.prepare('UPDATE patients SET name = ?, chart_no = ?, gender = ?, updated_at = ? WHERE id = ?')
+          .run(patient_name, normalizedChartNo, gender, now, current.id)
+      } else {
+        db.prepare('UPDATE patients SET name = ?, chart_no = ?, updated_at = ? WHERE id = ?')
+          .run(patient_name, normalizedChartNo, now, current.id)
+      }
+      logAccess(req, ACTIONS.PATIENT_RENUMBER, {
+        targetType: 'patient',
+        targetId: current.id,
+        detail: `${current.chart_no} ${current.name} → ${normalizedChartNo} ${patient_name}`
+          + ` (과거 방문 ${countVisits.get(current.id).c}건 동반)`,
+      })
+      bumpRevision(db)
+      return res.json({ ok: true, mode: 'renumber' })
+    }
+
+    // relink — 그 번호의 환자를 찾거나 새로 만들어 세션만 갈아 끼운다.
+    // 원래 환자 행은 이름도 번호도 건드리지 않는다. 그게 이 갈래의 전부다.
+    let nextPatient = target
+    if (nextPatient && nextPatient.name !== patient_name && !confirmRename) {
+      return res.status(409).json({
+        error: `차트번호 ${normalizedChartNo}는 ${nextPatient.name} 환자입니다`,
+        conflict: 'name_mismatch',
+        chart_no: normalizedChartNo,
+        registered_name: nextPatient.name,
+        typed_name: patient_name,
+        visit_count: countVisits.get(nextPatient.id).c,
+      })
+    }
+    try {
+      db.transaction(() => {
+        if (!nextPatient) {
+          const info = db.prepare(
+            'INSERT INTO patients (chart_no, name, gender, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          ).run(normalizedChartNo, patient_name, hasGender ? gender : null, now, now)
+          nextPatient = { id: info.lastInsertRowid, chart_no: normalizedChartNo, name: patient_name }
+        } else {
+          if (nextPatient.name !== patient_name) {
+            db.prepare('UPDATE patients SET name = ?, updated_at = ? WHERE id = ?')
+              .run(patient_name, now, nextPatient.id)
+            logAccess(req, ACTIONS.PATIENT_RENAME, {
+              targetType: 'patient',
+              targetId: nextPatient.id,
+              detail: `환자정보수정 · ${normalizedChartNo} ${nextPatient.name} → ${patient_name}`,
+            })
+          }
+          if (hasGender) {
+            db.prepare('UPDATE patients SET gender = ?, updated_at = ? WHERE id = ?')
+              .run(gender, now, nextPatient.id)
+          }
+        }
+        db.prepare('UPDATE sessions SET patient_id = ? WHERE id = ?').run(nextPatient.id, session.id)
+      })()
+    } catch (err) {
+      // 한 환자가 두 베드를 차지할 수 없다(db.js 의 부분 유니크 인덱스). 배정 라우트와
+      // 같은 상황이므로 같은 말로 돌려준다 — 여기서만 SQLITE_CONSTRAINT 가 새면 안 된다.
+      if (String(err?.code ?? '').startsWith('SQLITE_CONSTRAINT')) {
+        return res.status(409).json({ error: `${patient_name} 환자는 이미 다른 베드에 배정돼 있습니다` })
+      }
+      throw err
+    }
+    logAccess(req, ACTIONS.PATIENT_RELINK, {
+      targetType: 'session',
+      targetId: session.id,
+      detail: `세션 ${session.id}: ${current.chart_no} ${current.name} → ${normalizedChartNo} ${patient_name}`
+        + ` (원래 환자의 과거 방문 ${countVisits.get(current.id).c}건은 그대로)`,
+    })
+    bumpRevision(db)
+    return res.json({ ok: true, mode: 'relink' })
   }
 
-  const now = Date.now()
+  // ─── 번호는 그대로, 이름만 바뀐다 → 개명이다. 되묻고 남긴다 ───
+  // 이 환자의 과거 방문까지 전부 새 이름으로 보이게 되므로 조용히 지나가면 안 된다.
+  if (nameChanged && !confirmRename) {
+    const visits = db.prepare(
+      'SELECT COUNT(*) c FROM sessions WHERE patient_id = ? AND deleted = 0',
+    ).get(current.id).c
+    return res.status(409).json({
+      error: `${current.chart_no} 환자의 이름을 바꿉니다`,
+      conflict: 'rename',
+      chart_no: current.chart_no,
+      registered_name: current.name,
+      typed_name: patient_name,
+      visit_count: visits,
+    })
+  }
+
   if (hasGender) {
-    db.prepare('UPDATE patients SET name = ?, chart_no = ?, gender = ?, updated_at = ? WHERE id = ?')
-      .run(patient_name, normalizedChartNo, gender, now, session.patient_id)
-  } else {
-    db.prepare('UPDATE patients SET name = ?, chart_no = ?, updated_at = ? WHERE id = ?')
-      .run(patient_name, normalizedChartNo, now, session.patient_id)
+    db.prepare('UPDATE patients SET name = ?, gender = ?, updated_at = ? WHERE id = ?')
+      .run(patient_name, gender, now, current.id)
+  } else if (nameChanged) {
+    db.prepare('UPDATE patients SET name = ?, updated_at = ? WHERE id = ?')
+      .run(patient_name, now, current.id)
+  }
+  if (nameChanged) {
+    logAccess(req, ACTIONS.PATIENT_RENAME, {
+      targetType: 'patient',
+      targetId: current.id,
+      detail: `환자정보수정 · ${current.chart_no} ${current.name} → ${patient_name}`,
+    })
   }
   // 카드에 이름·차트번호·성별이 실려 있어 다른 단말도 다시 받아야 한다.
   bumpRevision(db)

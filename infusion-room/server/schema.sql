@@ -208,7 +208,11 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- 이 앱 계정이 아닌 사람이 본 경우 그 사람을 적는다 (예: 프렌즈에서 환자 태그를 눌렀을 때
   -- '김철수#42'). account_id 는 '어느 앱에서 왔나'(프렌즈 서비스 계정), actor 는 '누가'다.
   -- 앱에서 직접 본 것은 account_id 하나로 충분하므로 NULL 이다.
-  actor       TEXT
+  actor       TEXT,
+  -- 무엇이 어떻게 바뀌었나(예: '71334 차연정 → 황인근'). 환자 이름·차트번호가 바뀌는 일은
+  -- 되돌리려면 '무엇이었는지'를 알아야 하는데, target_id 만으로는 그걸 못 적는다.
+  -- 자유 텍스트다 — 읽는 건 사람이고, 기계가 파싱할 일이 없다.
+  detail      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_created ON access_logs(created_at DESC);

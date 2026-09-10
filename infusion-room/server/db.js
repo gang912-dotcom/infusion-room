@@ -93,6 +93,13 @@ if (!accessLogColumns.includes('actor')) {
   db.exec('ALTER TABLE access_logs ADD COLUMN actor TEXT')
 }
 
+// ─── 열람 로그의 '무엇이' (2026-09-10) ────────────────────────────────
+// 환자 이름·차트번호가 바뀐 기록을 남기기 시작했는데, 바뀐 내용을 적을 칸이 없었다.
+// target_id 는 '누구를'까지만 답한다 — 되돌리려면 '무엇이었는지'가 있어야 한다.
+if (!accessLogColumns.includes('detail')) {
+  db.exec('ALTER TABLE access_logs ADD COLUMN detail TEXT')
+}
+
 // ─── 권한 4단계 확장 (2026-08) ────────────────────────────────────────
 // role을 viewer/staff/manager/admin 4단계로. 기존 CHECK(role IN ('staff','admin'))가
 // viewer/manager 삽입을 막으므로 accounts 테이블을 새 CHECK로 1회 재작성한다

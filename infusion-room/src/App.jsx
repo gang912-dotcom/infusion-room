@@ -5063,6 +5063,10 @@ function App() {
   const [visitSymptom, setVisitSymptom] = useState('')
   const [mixStaffId, setMixStaffId] = useState('')
   const [lookupInfo, setLookupInfo] = useState(null)
+  // 환자 신원(이름·차트번호)이 바뀌는 저장을 서버가 409로 되물어 왔을 때의 화면 상태.
+  // { kind, data, onChoose } — onChoose(선택)을 부르면 그 답으로 원래 저장을 다시 시도한다.
+  // 서버가 판단 재료(양쪽 방문 건수·상대 환자)를 함께 보내므로 여기서 다시 조회하지 않는다.
+  const [identityPrompt, setIdentityPrompt] = useState(null)
   const [actionError, setActionError] = useState('')
   const [history, setHistory] = useState([])
   const [sessionNotes, setSessionNotes] = useState([])
@@ -5540,6 +5544,12 @@ function App() {
         : !examRoom ? 'examRoom' : null
   // 지금 입력 중인(포커스된) 필수 칸이 있으면 강조를 거기 붙잡는다 — 한 글자만 쳐도 강조가
   // 다음 칸으로 튀던 것 방지. 칸을 떠나면(포커스 없음) 위에서부터 아직 안 채운 첫 칸을 강조.
+  // 조회된 번호의 주인 이름과 입력한 이름이 어긋난 상태. 대개는 번호 오타다.
+  // 서버도 같은 조건으로 배정을 거절하지만(409), 근무자는 저장을 누르기 전에 알아야 한다.
+  const nameMismatch = !!lookupInfo?.found
+    && !!patientName.trim()
+    && lookupInfo.name !== patientName.trim()
+
   const REQUIRED_ASSIGN_FIELDS = ['patientName', 'chartNumber', 'lineStaffId', 'examRoom']
   const assignHighlight = REQUIRED_ASSIGN_FIELDS.includes(assignFocus) ? assignFocus : assignNeeds
   const neededClass = (field) => `field__input${assignHighlight === field ? ' field__input--needed' : ''}`
@@ -6158,16 +6168,47 @@ function App() {
     setEditPatientModal(false)
   }
 
-  async function handleSavePatientEdit() {
+  async function handleSavePatientEdit({ mode = null, confirmRename = false } = {}) {
     if (!editPatientName.trim() || !editChartNumber.trim() || !selectedBed) return
     try {
       await updateSessionPatient(selectedBed.sessionId, {
         patientName: editPatientName.trim(),
         chartNo: editChartNumber.trim(),
         gender: editGender,
+        mode,
+        confirmRename,
       })
       await refreshBoard()
     } catch (err) {
+      // 차트번호가 바뀐다 — '이 베드가 딴 사람이었나'와 '이 환자의 번호가 틀렸나'는
+      // 저장하는 사람만 안다. 서버가 양쪽 결과를 재료로 붙여 되물어 온 것이다.
+      if (err.data?.conflict === 'chart_changed') {
+        setIdentityPrompt({
+          kind: 'chart_changed',
+          data: err.data,
+          onChoose: (choice) => {
+            setIdentityPrompt(null)
+            if (choice === 'relink' || choice === 'renumber') {
+              handleSavePatientEdit({ mode: choice })
+            }
+          },
+        })
+        return
+      }
+      // 개명(번호 그대로 이름만), 또는 relink 로 붙으려는 환자의 이름이 다른 경우.
+      if (err.data?.conflict === 'rename' || err.data?.conflict === 'name_mismatch') {
+        setIdentityPrompt({
+          kind: err.data.conflict,
+          data: err.data,
+          onChoose: (choice) => {
+            setIdentityPrompt(null)
+            // 앞 단계에서 고른 mode 를 그대로 들고 다시 간다 — 여기서 잃으면
+            // relink 로 가던 저장이 renumber 되묻기로 되돌아간다.
+            if (choice === 'rename') handleSavePatientEdit({ mode, confirmRename: true })
+          },
+        })
+        return
+      }
       setActionError(err.message)
       return
     }
@@ -6569,7 +6610,7 @@ function App() {
     }
   }
 
-  async function handleRegister() {
+  async function handleRegister(confirmRename = false) {
     // 버튼의 disabled·칸 강조와 같은 값을 본다 — 셋이 따로 놀면 강조는 없는데 버튼만 회색이거나,
     // 여기서만 막혀 아무 반응이 없는 칸이 생긴다. 실제로 이 가드엔 진료실이 빠져 있었다.
     if (assignNeeds || !selectedBed) return
@@ -6583,6 +6624,7 @@ function App() {
         specialNote: specialNote.trim(),
         examRoom,
         gender,
+        confirmRename,
       })
       stopLockAndRelease(selectedBed.id) // 배정 완료 — 등록 잠금 해제
       await refreshBoard()
@@ -6592,6 +6634,19 @@ function App() {
       // 다음 단계(믹스 담당자·투여 시작)는 사용자가 카드를 다시 눌러서 진행한다.
       closeModal()
     } catch (err) {
+      // 이 번호의 주인 이름이 입력과 다르다 — 서버가 덮지 않고 되물어 온 것이다.
+      // 대개는 번호 오타라, 되돌아가 번호를 고치는 쪽이 기본이다.
+      if (err.data?.conflict === 'name_mismatch') {
+        setIdentityPrompt({
+          kind: 'name_mismatch',
+          data: err.data,
+          onChoose: (choice) => {
+            setIdentityPrompt(null)
+            if (choice === 'rename') handleRegister(true)
+          },
+        })
+        return
+      }
       setActionError(err.message)
     }
   }
@@ -7290,10 +7345,22 @@ function App() {
                   />
                 </label>
 
+                {/* 이름이 어긋나면 초록으로 '등록된 환자입니다 (차연정)'라고 알려 주던 자리다.
+                    불일치를 보여주면서 안심시키는 모양이라 그대로 지나갔다 — 2026-09-10에
+                    이 화면을 지나 네 명의 이름이 뒤바뀌었다. 어긋날 때는 초록을 안 쓴다. */}
                 {lookupInfo && (
-                  <p className={`field__hint ${lookupInfo.found ? 'field__hint--ok' : 'field__hint--new'}`}>
-                    {lookupInfo.found ? `등록된 환자입니다 (${lookupInfo.name})` : '신규 환자입니다'}
-                  </p>
+                  nameMismatch ? (
+                    <p role="alert" className="field__hint field__hint--mismatch">
+                      <Icon name="alert" />
+                      {` 차트번호 ${lookupInfo.chart_no ?? chartNumber.trim()}는 `}
+                      <b>{lookupInfo.name}</b>
+                      {` 환자입니다 — 입력한 이름(${patientName.trim()})과 다릅니다`}
+                    </p>
+                  ) : (
+                    <p className={`field__hint ${lookupInfo.found ? 'field__hint--ok' : 'field__hint--new'}`}>
+                      {lookupInfo.found ? `등록된 환자입니다 (${lookupInfo.name})` : '신규 환자입니다'}
+                    </p>
+                  )
                 )}
 
                 {/* 성별 — 라인담당·진료실과 달리 필수가 아니다. 미지정으로 두면 카드에
@@ -7367,7 +7434,7 @@ function App() {
                 <button
                   type="button"
                   className="btn-register"
-                  onClick={handleRegister}
+                  onClick={() => handleRegister()}
                   disabled={offline || assignNeeds !== null}
                 >
                   배정
@@ -7888,6 +7955,99 @@ function App() {
           </div>
         </div>
       )}
+      {/* ─── 환자 신원 확인 ───────────────────────────────────────────────
+          이름이나 차트번호가 바뀌는 저장을 서버가 409로 되물어 왔을 때 뜬다.
+          여기서 지키려는 것: 근무자가 '무엇이 어떻게 되는지' 읽고 고르게 하는 것.
+          앱이 대신 고르면 안 된다 — 새로 꼬인 건지 원래 꼬여 있던 건지는
+          patients 행만 봐서는 구분이 안 되고, 그때 상황을 아는 사람만 안다. */}
+      {identityPrompt && (
+        <div className="modal-overlay modal-overlay--top">
+          <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal__body modal__body--confirm">
+              {identityPrompt.kind === 'chart_changed' ? (
+                <>
+                  <p className="confirm__message">
+                    차트번호가 바뀝니다
+                    <br />
+                    <span className="confirm__sub">
+                      {identityPrompt.data.current.chart_no} {identityPrompt.data.current.name}
+                      {' → '}
+                      {identityPrompt.data.typed.chart_no} {identityPrompt.data.typed.name}
+                    </span>
+                  </p>
+                  <div className="identity-choices">
+                    {/* 새로 꼬인 경우 — 과거 데이터는 옳다 */}
+                    <button
+                      type="button"
+                      className="identity-choice"
+                      onClick={() => identityPrompt.onChoose('relink')}
+                      disabled={offline}
+                    >
+                      <b className="identity-choice__title">이 베드만 다른 환자로</b>
+                      <span className="identity-choice__desc">
+                        {identityPrompt.data.target
+                          ? `${identityPrompt.data.typed.chart_no} ${identityPrompt.data.target.name} 환자에게 이 자리를 옮깁니다.`
+                          : `${identityPrompt.data.typed.chart_no} ${identityPrompt.data.typed.name} 환자를 새로 만들어 이 자리를 옮깁니다.`}
+                        {` ${identityPrompt.data.current.name} 환자의 지난 기록 `}
+                        <b>{identityPrompt.data.current.visit_count}건</b>
+                        은 그대로 둡니다.
+                      </span>
+                    </button>
+                    {/* 원래 꼬여 있던 경우 — 그 환자의 번호 자체가 틀렸다 */}
+                    <button
+                      type="button"
+                      className="identity-choice identity-choice--heavy"
+                      onClick={() => identityPrompt.onChoose('renumber')}
+                      disabled={offline}
+                    >
+                      <b className="identity-choice__title">이 환자의 번호가 원래 틀렸다</b>
+                      <span className="identity-choice__desc">
+                        {`${identityPrompt.data.current.name} 환자의 번호를 고칩니다. 지난 기록 `}
+                        <b>{identityPrompt.data.current.visit_count}건</b>
+                        도 함께 새 번호로 따라갑니다.
+                      </span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="confirm__message">
+                    {`차트번호 ${identityPrompt.data.chart_no}는 `}
+                    <strong className="confirm__sub-strong">{identityPrompt.data.registered_name}</strong>
+                    {' 환자입니다'}
+                    <br />
+                    <span className="confirm__sub">
+                      {`입력한 이름은 ${identityPrompt.data.typed_name}입니다. 번호를 잘못 입력하신 게 아닌가요?`}
+                    </span>
+                  </p>
+                  <p className="confirm__patient-info">
+                    {`이름을 바꾸면 ${identityPrompt.data.registered_name} 환자의 지난 기록 ${identityPrompt.data.visit_count}건도 모두 새 이름으로 보입니다`}
+                  </p>
+                </>
+              )}
+              <div className="confirm__actions">
+                <button
+                  type="button"
+                  className="btn-confirm btn-confirm--no"
+                  onClick={() => identityPrompt.onChoose('cancel')}
+                >
+                  {identityPrompt.kind === 'chart_changed' ? '취소' : '번호 다시 입력'}
+                </button>
+                {identityPrompt.kind !== 'chart_changed' && (
+                  <button
+                    type="button"
+                    className="btn-confirm btn-confirm--yes btn-confirm--danger"
+                    onClick={() => identityPrompt.onChoose('rename')}
+                    disabled={offline}
+                  >
+                    {`${identityPrompt.data.typed_name}(으)로 이름 변경`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {removeConfirmHeld && currentBed && (
         <div className={`modal-overlay modal-overlay--top${removeConfirmClosing ? ' modal-overlay--closing' : ''}`}>
           <div className="modal modal--confirm" onClick={(e) => e.stopPropagation()}>
@@ -7979,7 +8139,7 @@ function App() {
               <button
                 type="button"
                 className="btn-register"
-                onClick={handleSavePatientEdit}
+                onClick={() => handleSavePatientEdit()}
                 disabled={offline || !editPatientName.trim() || !editChartNumber.trim()}
               >
                 저장
