@@ -145,6 +145,11 @@
 .sv-vcard__toggle:hover { color: var(--text-primary); background: var(--number-bg); }
 .sv-stats__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
 
+/* 처방 구역 — 제목 줄에 진료실 칩과 요약 한 줄. 카드 안 제목(.sv-vcard__title)보다 한 단 크다. */
+.sv-rx { display: grid; gap: 12px; }
+.sv-rx__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sv-rx__title { margin: 0; font-size: 16px; font-weight: 700; }
+
 /* ─── 추이 ─────────────────────────────────────────────────────────── */
 .sv-plot { position: relative; }
 .sv-svg { display: block; }

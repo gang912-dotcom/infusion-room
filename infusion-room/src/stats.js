@@ -192,6 +192,79 @@ export function summary(rows) {
   }
 }
 
+// ─── 처방 집계 ───────────────────────────────────────────────────────
+// 입력 행의 orders는 서버(/history)가 실어 주는 처방 줄이다: { code, label, dose, qty, route, group }.
+// 투여경로(IV/IM/SC 체크)는 약이 아니라 표기라 주사제·그룹·용법 집계에서 뺀다 —
+// server/lib/record.js의 ROUTE_GROUP과 같은 값이다.
+export const ROUTE_GROUP = '투여경로'
+const isDrug = (o) => o.group !== ROUTE_GROUP
+// '처방 있음'은 이용기록의 '처방기록 없는 환자만 보기' 필터와 같은 규칙(줄이 하나라도 있으면)이다.
+// 여기서 규칙이 갈리면 두 화면의 수가 안 맞는다.
+const hasOrders = (r) => (r.orders ?? []).length > 0
+
+// 진료실로 좁힌다. null이면 전체.
+export function filterExamRoom(rows, examRoom) {
+  return examRoom == null ? rows : rows.filter((r) => r.examRoom === examRoom)
+}
+
+const sortDesc = (a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ko')
+
+// 주사제별. 코드로 묶고 이름은 가장 최근 라벨을 쓴다 — 관리자가 이름을 바꿔도 한 줄로 잡힌다.
+// metric: 'sessions' = 그 항목이 들어간 이용 건수(한 건에 두 줄이어도 1), 'qty' = 수량 합(재고 감).
+export function byItem(rows, metric = 'sessions') {
+  const map = new Map()
+  for (const r of [...rows].sort((a, b) => a.endedAt - b.endedAt)) {
+    const seen = new Set()
+    for (const o of r.orders ?? []) {
+      if (!isDrug(o)) continue
+      const key = o.code ?? o.label
+      const cur = map.get(key) ?? { name: o.label, sessions: 0, qty: 0 }
+      cur.name = o.label ?? cur.name   // 종료 순으로 돌아서 마지막 라벨이 남는다
+      if (!seen.has(key)) { cur.sessions++; seen.add(key) }
+      cur.qty += Number(o.qty) || 0
+      map.set(key, cur)
+    }
+  }
+  return [...map.values()]
+    .map((it) => ({ name: it.name, count: it[metric] }))
+    .filter((it) => it.count > 0)
+    .sort(sortDesc)
+}
+
+// 처방 줄의 속성(그룹·용법)으로 이용 건수를 묶는다 — 한 건에 같은 값이 여러 줄이어도 1.
+function sessionsByOrderKey(rows, keyOf) {
+  const counts = new Map()
+  for (const r of rows) {
+    const keys = new Set()
+    for (const o of r.orders ?? []) {
+      if (!isDrug(o)) continue
+      const k = keyOf(o)
+      if (k) keys.add(k)
+    }
+    for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([name, count]) => ({ name, count })).sort(sortDesc)
+}
+export const byGroup = (rows) => sessionsByOrderKey(rows, (o) => o.group)
+export const byRoute = (rows) => sessionsByOrderKey(rows, (o) => o.route)
+
+// 묶음처방별. 묶음 없이 낱개로 넣은 건은 '낱개 처방'으로 묶어 막대의 합이 처방 건수와 맞게 한다.
+export function byBundle(rows) {
+  const counts = new Map()
+  for (const r of rows) {
+    if (!hasOrders(r)) continue
+    const k = r.bundle ?? '낱개 처방'
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([name, count]) => ({ name, count })).sort(sortDesc)
+}
+
+// 처방 없이 끝난 건. 전체 수와 담당자별 — 누락이 어디서 나는지 보는 자리다.
+export function noOrders(rows, field = 'lineStaff') {
+  const none = rows.filter((r) => !hasOrders(r))
+  return { total: none.length, withOrders: rows.length - none.length, byStaff: byStaff(none, field) }
+}
+
 // ─── 기간 프리셋 ─────────────────────────────────────────────────────
 export function presetRange(preset, nowMs) {
   const today = startOfDay(nowMs)

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   inRange, byDay, hourProfile, byRoom, byStaff, topRevisits, summary,
   presetRange, fmtMinutes, dayKey, startOfDay, ROOM_KEYS, byExamRoom,
+  filterExamRoom, byItem, byGroup, byRoute, byBundle, noOrders, ROUTE_GROUP,
 } from './stats.js'
 import { EXAM_ROOMS } from './api.js'
 
@@ -178,5 +179,40 @@ const at = (dayOffset, hour) => row({
 assert.equal(fmtMinutes(45), '45분')
 assert.equal(fmtMinutes(120), '2시간')
 assert.equal(fmtMinutes(150), '2시간 30분')
+
+// ── 처방 ─────────────────────────────────────────────────────────────
+{
+  const ns = (qty) => ({ code: 'ns', label: 'n/s', dose: '110', qty, route: 'IV', group: '기본' })
+  const iv = { code: 'route_iv', label: 'IV', dose: '', qty: null, route: null, group: ROUTE_GROUP }
+  const vitd = { code: 'vitd', label: '비타D', dose: '', qty: 1, route: 'IM', group: 'IM,SC' }
+  const rows = [
+    row({ id: 1, examRoom: '1', endedAt: T0 + 1, orders: [iv, ns(2), vitd], bundle: '기본수액' }),
+    row({ id: 2, examRoom: '1', endedAt: T0 + 2, orders: [iv, ns(1), ns(1)], bundle: null }),  // 같은 항목 두 줄 → 건수 1, 수량 2
+    row({ id: 3, examRoom: '2', endedAt: T0 + 3, orders: [iv], bundle: null }),                 // 경로만 → 약은 없지만 '처방 있음'
+    row({ id: 4, examRoom: '2', endedAt: T0 + 4, orders: [], bundle: null, lineStaff: '김간호' }), // 처방 없음
+    // 라벨이 바뀐 같은 코드 → 한 줄, 이름은 최근 것
+    row({ id: 5, examRoom: '2', endedAt: T0 + 5, orders: [{ ...vitd, label: '비타민D' }], bundle: '기본수액' }),
+  ]
+
+  assert.deepEqual(byItem(rows), [{ name: '비타민D', count: 2 }, { name: 'n/s', count: 2 }])   // 동률은 이름순(한글 먼저)
+  assert.deepEqual(byItem(rows, 'qty'), [{ name: 'n/s', count: 4 }, { name: '비타민D', count: 2 }])
+  assert.ok(!byItem(rows).some((it) => it.name === 'IV'))              // 투여경로는 항목이 아니다
+
+  assert.deepEqual(byGroup(rows), [{ name: '기본', count: 2 }, { name: 'IM,SC', count: 2 }])
+  assert.deepEqual(byRoute(rows), [{ name: 'IM', count: 2 }, { name: 'IV', count: 2 }])
+
+  assert.deepEqual(byBundle(rows), [{ name: '기본수액', count: 2 }, { name: '낱개 처방', count: 2 }])
+  assert.equal(byBundle(rows).reduce((n, b) => n + b.count, 0), 4)   // 처방 있는 4건과 합이 맞는다
+
+  const none = noOrders(rows)
+  assert.equal(none.total, 1)
+  assert.equal(none.withOrders, 4)
+  assert.deepEqual(none.byStaff, [{ name: '김간호', count: 1 }])
+
+  assert.equal(filterExamRoom(rows, null).length, 5)
+  assert.equal(filterExamRoom(rows, '1').length, 2)
+  assert.deepEqual(byItem(filterExamRoom(rows, '2')), [{ name: '비타민D', count: 1 }])
+  assert.equal(noOrders(filterExamRoom(rows, '1')).total, 0)
+}
 
 console.log('stats.js OK')

@@ -556,7 +556,8 @@ router.get('/history', (req, res) => {
            b.room, b.number AS bed_number,
            p.chart_no, p.name AS patient_name,
            ls.name AS line_staff_name, ms.name AS mix_staff_name,
-           es.name AS end_staff_name, s.day_memo
+           es.name AS end_staff_name, s.day_memo,
+           ob.name AS bundle_name
     FROM sessions s
     JOIN beds b ON b.id = s.bed_id
     JOIN patients p ON p.id = s.patient_id
@@ -565,6 +566,8 @@ router.get('/history', (req, res) => {
     -- 라인 제거 담당자는 이 기능 이전 종료분엔 없다.
     -- 당일 메모는 그 방문 값이라 세션 컬럼이다 — 차트로 조인하던 구 환자 메모와 다르다.
     LEFT JOIN staff es ON es.id = s.end_staff_id
+    -- 묶음처방 이름은 통계(묶음처방별)가 쓴다. 지운 묶음도 이름이 풀려야 해서 is_active를 안 본다.
+    LEFT JOIN order_bundles ob ON ob.id = s.order_bundle_id
     WHERE s.ended_at IS NOT NULL
     ORDER BY s.ended_at DESC
   `).all()
@@ -582,11 +585,14 @@ router.get('/history', (req, res) => {
     if (!ordersBySession.has(o.session_id)) ordersBySession.set(o.session_id, [])
     // route까지 싣는다 — CSV·환자 리포트의 처방 표기를 기록지와 같게 맞춘다.
     // 투여경로 그룹은 수량 개념이 없어 null로 보낸다(record.js와 같은 규칙).
+    // code·group은 통계가 쓴다 — 관리자가 라벨을 바꿔도 코드로 묶여야 전후가 한 항목으로 잡힌다.
     ordersBySession.get(o.session_id).push({
+      code: o.item_code,
       label: o.label ?? o.item_code,
       dose: o.dose,
       qty: o.group_key === ROUTE_GROUP ? null : o.qty,
       route: o.route ?? null,
+      group: o.group_key ?? null,
     })
   }
 

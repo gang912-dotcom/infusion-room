@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   inRange, byDay, hourProfile, byRoom, byExamRoom, byStaff, topRevisits, summary,
   presetRange, fmtMinutes, startOfDay,
+  filterExamRoom, byItem, byGroup, byRoute, byBundle, noOrders,
 } from './stats.js'
 import './stats.css'
 
@@ -61,6 +62,20 @@ export default function Stats({ rows, now }) {
 
   const [staffField, setStaffField] = useState('lineStaff')
   const staff = useMemo(() => byStaff(ranged, staffField), [ranged, staffField])
+
+  // 처방 — 진료실 하나를 고르면 아래 카드 전부가 그 진료실 기준이 된다.
+  // 기간을 좁혀 고른 진료실의 건이 사라지면 조용히 전체로 돌아간다(시간대 카드의 요일과 같은 규칙).
+  const [pickedRoom, setPickedRoom] = useState(null)
+  const rxRoomChips = examRooms.filter((r) => r.key && r.count > 0)
+  const rxRoom = rxRoomChips.some((r) => r.key === pickedRoom) ? pickedRoom : null
+  const rxRows = useMemo(() => filterExamRoom(ranged, rxRoom), [ranged, rxRoom])
+  const [itemMetric, setItemMetric] = useState('sessions')
+  const [itemAll, setItemAll] = useState(false)
+  const items = useMemo(() => byItem(rxRows, itemMetric), [rxRows, itemMetric])
+  const groups = useMemo(() => byGroup(rxRows), [rxRows])
+  const routes = useMemo(() => byRoute(rxRows), [rxRows])
+  const bundles = useMemo(() => byBundle(rxRows), [rxRows])
+  const none = useMemo(() => noOrders(rxRows), [rxRows])
 
   function pickPreset(p) {
     setCustom(null)
@@ -166,6 +181,57 @@ export default function Stats({ rows, now }) {
           </div>
 
           <RevisitCard rows={revisits} />
+
+          {/* ─── 처방 ─── 주사제·묶음·그룹·용법은 전부 이용기록에 실려 오는 처방 줄에서 센다.
+              진료실 칩은 이 구역 전체에 걸린다 — 카드마다 따로 두면 서로 다른 진료실을 보게 된다. */}
+          <section className="sv-rx" aria-label="처방">
+            <div className="sv-rx__head">
+              <h3 className="sv-rx__title">처방</h3>
+              <div className="sv-seg-group sv-seg-group--sm" role="group" aria-label="진료실">
+                <button type="button" className={`sv-seg${rxRoom == null ? ' sv-seg--on' : ''}`}
+                  onClick={() => setPickedRoom(null)} aria-pressed={rxRoom == null}>전체</button>
+                {rxRoomChips.map((r) => (
+                  <button key={r.key} type="button" className={`sv-seg${rxRoom === r.key ? ' sv-seg--on' : ''}`}
+                    onClick={() => setPickedRoom(r.key)} aria-pressed={rxRoom === r.key}>{r.label}</button>
+                ))}
+              </div>
+              <span className="sv-vcard__hint">
+                {rxRows.length.toLocaleString()}건 중 처방 {none.withOrders.toLocaleString()}건 · 처방 없음 {none.total.toLocaleString()}건
+              </span>
+            </div>
+            <div className="sv-stats__cols">
+              <BarCard
+                title={itemMetric === 'qty' ? '주사제별 수량' : '주사제별 이용건수'}
+                items={itemAll ? items : items.slice(0, 15)}
+                control={
+                  <>
+                    <div className="sv-seg-group sv-seg-group--sm" role="group" aria-label="집계 기준">
+                      {[['sessions', '건수'], ['qty', '수량']].map(([id, label]) => (
+                        <button key={id} type="button"
+                          className={`sv-seg${itemMetric === id ? ' sv-seg--on' : ''}`}
+                          onClick={() => setItemMetric(id)} aria-pressed={itemMetric === id}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {items.length > 15 && (
+                      <button type="button" className="sv-vcard__toggle" onClick={() => setItemAll((v) => !v)} aria-pressed={itemAll}>
+                        {itemAll ? '상위 15개만' : `전체 ${items.length}개`}
+                      </button>
+                    )}
+                  </>
+                }
+              />
+              <BarCard title="묶음처방별 이용건수" items={bundles} />
+              <BarCard title="처방 그룹별 이용건수" items={groups} />
+              <BarCard title="용법별 이용건수" items={routes} />
+              <BarCard
+                title="처방 없이 종료 · 담당자별"
+                items={none.byStaff}
+                control={<span className="sv-vcard__hint">라인 담당 기준</span>}
+              />
+            </div>
+          </section>
         </>
       )}
     </div>

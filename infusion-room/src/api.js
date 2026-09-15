@@ -434,6 +434,7 @@ function mapHistoryRow(row) {
     endStaff: row.end_staff_name ?? null,
     dayMemo: row.day_memo ?? null,
     orders: row.orders ?? [],
+    bundle: row.bundle_name ?? null,
     deleted: !!row.deleted,
   }
 }
