@@ -209,7 +209,8 @@ router.get('/usage', (req, res) => {
     SELECT date(s.started_at / 1000, 'unixepoch', 'localtime') AS day,
            so.item_code,
            CASE WHEN oi.free_dose = 1 OR oi.free_text = 1 THEN '' ELSE so.dose END AS dose,
-           SUM(so.qty) AS qty, COUNT(DISTINCT s.id) AS sessions
+           SUM(so.qty) AS qty, COUNT(DISTINCT s.id) AS sessions,
+           MAX(oi.label) AS label   -- 이비몰이 품목 이름을 지어내지 않게 원내 표기를 같이 준다
     FROM session_orders so
     JOIN sessions s ON s.id = so.session_id
     LEFT JOIN order_items oi ON oi.code = so.item_code
