@@ -140,6 +140,38 @@ const before = db.prepare('SELECT COUNT(*) c FROM access_logs').get().c
 await get('/internal/patients/search?q=204118')
 assert.equal(db.prepare('SELECT COUNT(*) c FROM access_logs').get().c, before)
 
+// ─── 5-1. 사용량 — 날짜·약별 합계만, 환자는 안 나간다 ─────────────────
+{
+  const day = (ms) => db.prepare("SELECT date(? / 1000, 'unixepoch', 'localtime') d").get(ms).d
+  const live = db.prepare('SELECT id, started_at FROM sessions WHERE ended_at IS NULL').get()
+  const addOrder = db.prepare('INSERT INTO session_orders (session_id, item_code, dose, qty) VALUES (?,?,?,?)')
+  addOrder.run(live.id, 'nac', '', 0.5)
+  addOrder.run(live.id, 'route_iv', '', 1)      // 투여경로 — 약이 아니다
+  addOrder.run(live.id, 'peramiflu', '24mL', 1)  // 자유용량 — mL 은 품목이 아니다
+  addOrder.run(live.id, 'peramiflu', '15mL', 1)
+  // 취소된 방문과 시작 안 한 방문의 처방은 약이 안 나갔다
+  // 활성 방문은 베드·환자마다 하나뿐이라(유니크 인덱스) 대기 방문은 다른 베드·환자로 만든다
+  db.prepare('INSERT INTO beds (code, room, number, sort_order, is_active) VALUES (?,?,?,0,1)').run('r1-2', 'room1', '2')
+  const bed2 = db.prepare("SELECT id FROM beds WHERE code = 'r1-2'").get().id
+  const p2 = db.prepare("SELECT id FROM patients WHERE chart_no = '99'").get().id
+  const mk = (bed, patient, started, ended, cancelled) => db.prepare(`
+    INSERT INTO sessions (bed_id, patient_id, assigned_at, assigned_by, line_staff_id, started_at, ended_at, cancelled)
+    VALUES (?,?,?,?,?,?,?,?)`).run(bed, patient, live.started_at, accountId, staffId, started, ended, cancelled).lastInsertRowid
+  addOrder.run(mk(bedId, patientId, live.started_at, live.started_at + 60e3, 1), 'nac', '', 3)
+  addOrder.run(mk(bed2, p2, null, null, 0), 'nac', '', 5)
+
+  const d = day(live.started_at)
+  const r = await get(`/internal/usage?from=${d}&to=${d}`)
+  assert.equal(r.status, 200)
+  const rows = await r.json()
+  assert.deepEqual(rows.filter((r) => r.item_code === 'nac'), [{ day: d, item_code: 'nac', dose: '', qty: 0.5, sessions: 1 }])
+  assert.deepEqual(rows.filter((r) => r.item_code === 'peramiflu').map((r) => [r.dose, r.qty]), [['', 2]], '자유용량은 mL 이 달라도 한 줄로 합친다')
+  assert.ok(!rows.some((r) => r.item_code === 'route_iv'))
+  assert.ok(!JSON.stringify(rows).includes('204118'), '차트번호가 나가면 안 된다')
+  assert.equal((await get('/internal/usage?from=2026-1-1&to=x')).status, 400)
+  db.prepare("DELETE FROM session_orders WHERE item_code IN ('nac', 'route_iv', 'peramiflu')").run()
+}
+
 // ─── 6. 그 토큰으로 열리는 문은 이 둘뿐이다 ───────────────────────────
 // requireAuth 를 토큰으로 뚫었다면 여기가 200 이 된다 — 그게 이 테스트의 핵심이다.
 assert.equal((await get('/board')).status, 401, '토큰으로 앱 라우트가 열리면 안 된다')

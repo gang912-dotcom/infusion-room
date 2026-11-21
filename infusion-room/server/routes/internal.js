@@ -190,6 +190,38 @@ router.get('/patients/:chartNo', (req, res) => {
   })
 })
 
+// ─── 주사제 사용량 — 이비몰 재고 서버가 1분마다 가져간다 ─────────────
+// 날짜·약·용량별 합계만 준다. 환자도 방문 번호도 내보내지 않는다 — 재고에는 필요 없고,
+// 이비몰은 병원 밖 법인(도매)이라 진료 기록이 그쪽으로 넘어가면 안 된다.
+// 시작한(started_at) 방문만 센다 — 배정만 하고 안 맞은 처방은 약이 안 나갔다.
+// 취소·삭제된 방문은 빠지므로 나중에 취소하면 합계가 줄고, 이비몰이 그 차이를 되돌린다.
+// 투여경로(IV/SC) 체크는 약이 아니라서 뺀다.
+// 자유용량(페라미플루 24mL 식)·자유입력(증류수 mL)의 dose 는 품목이 아니라 투여량이라 비워서 준다 —
+// 안 그러면 체중마다 다른 품목처럼 갈라진다.
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+router.get('/usage', (req, res) => {
+  const from = String(req.query.from ?? '')
+  const to = String(req.query.to ?? '')
+  if (!DAY.test(from) || !DAY.test(to) || from > to) {
+    return res.status(400).json({ error: 'from·to 는 YYYY-MM-DD 입니다' })
+  }
+  const rows = db.prepare(`
+    SELECT date(s.started_at / 1000, 'unixepoch', 'localtime') AS day,
+           so.item_code,
+           CASE WHEN oi.free_dose = 1 OR oi.free_text = 1 THEN '' ELSE so.dose END AS dose,
+           SUM(so.qty) AS qty, COUNT(DISTINCT s.id) AS sessions
+    FROM session_orders so
+    JOIN sessions s ON s.id = so.session_id
+    LEFT JOIN order_items oi ON oi.code = so.item_code
+    WHERE s.started_at IS NOT NULL AND s.cancelled = 0 AND s.deleted = 0
+      AND (oi.group_key IS NULL OR oi.group_key <> ?)
+      AND date(s.started_at / 1000, 'unixepoch', 'localtime') BETWEEN ? AND ?
+    GROUP BY 1, 2, 3
+    ORDER BY 1, 2, 3
+  `).all(ROUTE_GROUP, from, to)
+  res.json(rows)
+})
+
 // 여기서 끊는다 — 안 그러면 /api/internal 의 오타가 아래 requireAuth 까지 흘러가
 // "로그인이 필요합니다"로 답한다. 연동을 붙이는 쪽이 토큰 문제로 오해하기 딱 좋다.
 router.use((req, res) => res.status(404).json({ error: '없는 연동 엔드포인트입니다' }))
